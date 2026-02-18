@@ -42,4 +42,21 @@ Built using the MERN Stack (MongoDB, Express, React, Node.js).
 cd server
 npm install
 npm run dev
+```
 
+### Frontend
+```bash
+cd client
+npm install
+npm run dev
+```
+
+### Backend runs at:
+```bash
+http://localhost:5000
+```
+
+### Frontend runs at:
+```bash
+http://localhost:5173
+```
