@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { nanoid } from "nanoid";
 import User from "../models/User.js";
 import AuditLog from "../models/AuditLog.js";
 import { hashPassword, verifyPassword, hashToken, verifyTokenHash } from "../utils/hash.js";
@@ -58,8 +57,8 @@ export async function login(req, res) {
   const accessToken = signAccessToken(user);
   const refreshToken = signRefreshToken(user);
 
-  // store hashed refresh token
-  user.refreshTokenHash = await hashToken(refreshToken + "::" + nanoid(6));
+  // store hashed refresh token (NO nonce)
+  user.refreshTokenHash = await hashToken(refreshToken);
   await user.save();
 
   res.cookie("refresh_token", refreshToken, refreshCookieOptions());
@@ -83,18 +82,18 @@ export async function refresh(req, res) {
       return res.status(401).json({ message: "Refresh denied" });
     }
 
-    // soft-check: make sure token was issued for the same user
-    // (we hashed token with a nonce, so we can only confirm using bcrypt compare with the raw token + wildcard approach)
-    // Practical approach: rotate token each refresh, and only keep one valid refresh hash at a time.
+    // VERIFY the refresh cookie matches the stored hash
+    const ok = await verifyTokenHash(token, user.refreshTokenHash);
+    if (!ok) return res.status(401).json({ message: "Refresh denied" });
 
+    // ROTATE refresh token
     const accessToken = signAccessToken(user);
     const newRefreshToken = signRefreshToken(user);
 
-    user.refreshTokenHash = await hashToken(newRefreshToken + "::" + nanoid(6));
+    user.refreshTokenHash = await hashToken(newRefreshToken);
     await user.save();
 
     res.cookie("refresh_token", newRefreshToken, refreshCookieOptions());
-
     res.json({ accessToken });
   } catch {
     return res.status(401).json({ message: "Invalid refresh token" });
@@ -102,14 +101,26 @@ export async function refresh(req, res) {
 }
 
 export async function logout(req, res) {
+  let userId = null;
+
+  // 1) Prefer refresh cookie
   const token = req.cookies?.refresh_token;
   if (token) {
     try {
       const payload = verifyRefreshToken(token);
-      await User.findByIdAndUpdate(payload.sub, { refreshTokenHash: null });
+      userId = payload.sub;
     } catch {
-      // ignore
+      // ignore invalid cookie
     }
+  }
+
+  // 2) Fallback: access token (if you have req.user from requireAuth)
+  if (!userId && req.user?._id) {
+    userId = req.user._id.toString();
+  }
+
+  if (userId) {
+    await User.findByIdAndUpdate(userId, { refreshTokenHash: null });
   }
 
   res.clearCookie("refresh_token", { path: "/api/auth/refresh" });

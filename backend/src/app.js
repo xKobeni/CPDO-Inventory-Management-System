@@ -3,6 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
+import mongoSanitize from "express-mongo-sanitize";
 
 import usersRoutes from "./routes/users.routes.js";
 import healthRoutes from "./routes/health.routes.js";
@@ -16,10 +17,16 @@ import importRoutes from "./routes/import.routes.js";
 
 const app = express();
 
+// IMPORTANT when deploying behind proxies (Render/Nginx)
+app.set("trust proxy", 1);
+
 app.use(helmet());
 app.use(morgan("dev"));
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
+
+// Blocks $ operators in req.body, req.query, req.params
+app.use(mongoSanitize());
 
 app.use(
   cors({
