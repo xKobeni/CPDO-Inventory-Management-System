@@ -25,8 +25,16 @@ app.use(morgan("dev"));
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 
-// Blocks $ operators in req.body, req.query, req.params
-app.use(mongoSanitize());
+// Mongo sanitize: remove $ and . in keys to prevent operator injection.
+// Express 5 compat: req.query/params/headers are getter-only; we mutate in place and do not reassign.
+const sanitize = mongoSanitize.sanitize ?? mongoSanitize;
+app.use((req, _res, next) => {
+  if (req.body) sanitize(req.body);
+  if (req.params && Object.keys(req.params).length) sanitize(req.params);
+  if (req.query && Object.keys(req.query).length) sanitize(req.query);
+  if (req.headers && typeof req.headers === "object") sanitize(req.headers);
+  next();
+});
 
 app.use(
   cors({
