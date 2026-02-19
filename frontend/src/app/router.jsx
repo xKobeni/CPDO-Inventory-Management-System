@@ -7,6 +7,8 @@ import Unauthorized from "@/pages/Unauthorized"
 
 import DashboardHome from "@/pages/DashboardHome"
 import ItemsPage from "@/pages/ItemsPage"
+import CategoryItemsPage from "@/pages/CategoryItemsPage"
+import ManageCategoriesPage from "@/pages/ManageCategoriesPage"
 
 // placeholders you’ll create:
 import StockInPage from "@/pages/StockInPage"
@@ -35,6 +37,8 @@ export const router = createBrowserRouter([
           { path: "/dashboard", element: <DashboardHome /> },
 
           { path: "/items", element: <ItemsPage /> },
+          { path: "/items/manage-categories", element: <ManageCategoriesPage /> },
+          { path: "/items/category/:categorySlug", element: <CategoryItemsPage /> },
           { path: "/stock/in", element: <StockInPage /> },
           { path: "/stock/out", element: <StockOutPage /> },
           { path: "/issuance", element: <IssuancePage /> },
