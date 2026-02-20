@@ -64,7 +64,7 @@ export default function ManageCategoriesPage() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [deleteId, setDeleteId] = useState(null)
-  const [form, setForm] = useState({ name: "", slug: "", iconName: "Box" })
+  const [form, setForm] = useState({ name: "", slug: "", iconName: "Box", itemType: "SUPPLY" })
 
   const filtered = categories.filter(
     (c) =>
@@ -73,13 +73,13 @@ export default function ManageCategoriesPage() {
   )
 
   const openAdd = () => {
-    setForm({ name: "", slug: "", iconName: "Box" })
+    setForm({ name: "", slug: "", iconName: "Box", itemType: "SUPPLY" })
     setAddOpen(true)
   }
 
   const openEdit = (cat) => {
     setEditingId(cat.id)
-    setForm({ name: cat.name, slug: cat.slug, iconName: cat.iconName })
+    setForm({ name: cat.name, slug: cat.slug, iconName: cat.iconName, itemType: cat.itemType || "SUPPLY" })
     setEditOpen(true)
   }
 
@@ -94,6 +94,7 @@ export default function ManageCategoriesPage() {
       name: form.name.trim(),
       slug: form.slug.trim() || slugFromName(form.name),
       iconName: form.iconName,
+      itemType: form.itemType || "SUPPLY",
     })
     setAddOpen(false)
   }
@@ -104,6 +105,7 @@ export default function ManageCategoriesPage() {
       name: form.name.trim(),
       slug: form.slug.trim() || slugFromName(form.name),
       iconName: form.iconName,
+      itemType: form.itemType || "SUPPLY",
     })
     setEditOpen(false)
     setEditingId(null)
@@ -175,53 +177,69 @@ export default function ManageCategoriesPage() {
             />
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>#</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Slug</TableHead>
-                <TableHead>Icon</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.length === 0 ? (
+        <div className="overflow-auto px-4 lg:px-6">
+          <div className="overflow-hidden rounded-lg border">
+            <Table className="table-fixed w-full">
+              <colgroup>
+                <col style={{ width: "4rem" }} />
+                <col style={{ width: "auto" }} />
+                <col style={{ width: "auto" }} />
+                <col style={{ width: "7rem" }} />
+                <col style={{ width: "8rem" }} />
+                <col style={{ width: "8rem" }} />
+              </colgroup>
+              <TableHeader className="bg-muted sticky top-0 z-10">
                 <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                    No categories found. Add one to get started.
-                  </TableCell>
+                  <TableHead className="px-3">#</TableHead>
+                  <TableHead className="px-3">Name</TableHead>
+                  <TableHead className="px-3">Slug</TableHead>
+                  <TableHead className="px-3">Type</TableHead>
+                  <TableHead className="px-3">Icon</TableHead>
+                  <TableHead className="px-3 text-right">Actions</TableHead>
                 </TableRow>
-              ) : (
-                filtered.map((cat, idx) => (
-                  <TableRow key={cat.id}>
-                    <TableCell className="font-medium">{idx + 1}</TableCell>
-                    <TableCell>{cat.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{cat.slug}</TableCell>
-                    <TableCell>{cat.iconName}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => openEdit(cat)}>
-                          <Pencil className="size-4" />
-                          Edit
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-600 hover:text-red-700"
-                          onClick={() => openDelete(cat)}
-                        >
-                          <Trash2 className="size-4" />
-                          Delete
-                        </Button>
-                      </div>
+              </TableHeader>
+              <TableBody>
+                {filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                      No categories found. Add one to get started.
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : (
+                  filtered.map((cat, idx) => (
+                    <TableRow key={cat.id}>
+                      <TableCell className="px-3 py-2 font-medium">{idx + 1}</TableCell>
+                      <TableCell className="px-3 py-2">{cat.name}</TableCell>
+                      <TableCell className="px-3 py-2 text-muted-foreground">{cat.slug}</TableCell>
+                      <TableCell className="px-3 py-2">
+                        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-zinc-100 text-zinc-700">
+                          {(cat.itemType || "SUPPLY") === "ASSET" ? "Asset" : "Supply"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="px-3 py-2">{cat.iconName}</TableCell>
+                      <TableCell className="px-3 py-2 text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(cat)}>
+                            <Pencil className="size-4" />
+                            Edit
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600 hover:text-red-700"
+                            onClick={() => openDelete(cat)}
+                          >
+                            <Trash2 className="size-4" />
+                            Delete
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       </section>
 
@@ -251,6 +269,18 @@ export default function ManageCategoriesPage() {
                 onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))}
                 placeholder="e.g. office-supplies"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="add-type">Type</Label>
+              <Select value={form.itemType} onValueChange={(v) => setForm((f) => ({ ...f, itemType: v }))}>
+                <SelectTrigger id="add-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SUPPLY">Supply</SelectItem>
+                  <SelectItem value="ASSET">Asset / Property</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="add-icon">Icon</Label>
@@ -305,6 +335,18 @@ export default function ManageCategoriesPage() {
                 onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))}
                 placeholder="e.g. office-supplies"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-type">Type</Label>
+              <Select value={form.itemType} onValueChange={(v) => setForm((f) => ({ ...f, itemType: v }))}>
+                <SelectTrigger id="edit-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SUPPLY">Supply</SelectItem>
+                  <SelectItem value="ASSET">Asset / Property</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-icon">Icon</Label>

@@ -1,4 +1,5 @@
-import { Search, RefreshCw } from "lucide-react"
+import { useState } from "react"
+import { Search } from "lucide-react"
 import { Link } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
@@ -16,7 +17,26 @@ import { useCategories } from "@/contexts/CategoriesContext"
 
 export default function ItemsPage() {
   const { getCategoriesWithIcons } = useCategories()
-  const categories = getCategoriesWithIcons()
+  const allManagedCategories = getCategoriesWithIcons()
+
+  const [filterType, setFilterType] = useState(null) // null, "SUPPLY", or "ASSET"
+  const [searchQuery, setSearchQuery] = useState("")
+
+  // Show categories from Manage Categories, filtered by type and search
+  const displayedCategories = allManagedCategories
+    .filter((cat) => {
+      if (filterType === "SUPPLY") return (cat.itemType || "SUPPLY") === "SUPPLY"
+      if (filterType === "ASSET") return (cat.itemType || "SUPPLY") === "ASSET"
+      return true
+    })
+    .filter((cat) => {
+      if (!searchQuery.trim()) return true
+      const q = searchQuery.toLowerCase()
+      return (
+        cat.name.toLowerCase().includes(q) ||
+        (cat.slug && cat.slug.toLowerCase().includes(q))
+      )
+    })
 
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-6">
@@ -43,10 +63,6 @@ export default function ItemsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="icon">
-            <RefreshCw className="size-4" />
-            <span className="sr-only">Refresh</span>
-          </Button>
           <Button asChild>
             <Link to="/items/manage-categories">Manage Categories</Link>
           </Button>
@@ -64,31 +80,64 @@ export default function ItemsPage() {
               type="text"
               placeholder="Search categories..."
               className="pl-9"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
             />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant={filterType === null ? "default" : "outline"}
+              onClick={() => setFilterType(null)}
+            >
+              All
+            </Button>
+            <Button
+              variant={filterType === "SUPPLY" ? "default" : "outline"}
+              onClick={() => setFilterType("SUPPLY")}
+            >
+              Supply
+            </Button>
+            <Button
+              variant={filterType === "ASSET" ? "default" : "outline"}
+              onClick={() => setFilterType("ASSET")}
+            >
+              Asset/Property
+            </Button>
           </div>
         </div>
         <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 lg:p-6">
-          {categories.map((category) => {
-            const Icon = category.icon
-            return (
-              <Link
-                key={category.slug}
-                to={`/items/category/${category.slug}`}
-                className="block"
-              >
-                <Card className="cursor-pointer transition-shadow hover:shadow-md">
-                  <CardHeader className="flex flex-col items-center justify-center gap-3">
-                    <div className="grid size-12 place-items-center rounded-lg bg-zinc-100 text-zinc-600">
-                      <Icon className="size-6" />
-                    </div>
-                    <CardTitle className="text-center text-base font-medium">
-                      {category.name}
-                    </CardTitle>
-                  </CardHeader>
-                </Card>
-              </Link>
-            )
-          })}
+          {displayedCategories.length === 0 ? (
+            <div className="col-span-full py-8 text-center text-sm text-muted-foreground">
+              No categories found{filterType ? ` for ${filterType === "SUPPLY" ? "Supply" : "Asset/Property"}` : ""}. Add categories in Manage Categories.
+            </div>
+          ) : (
+            displayedCategories.map((category) => {
+              const Icon = category.icon
+              return (
+                <Link
+                  key={category.slug}
+                  to={`/items/category/${category.slug}`}
+                  className="block"
+                >
+                  <Card className="cursor-pointer transition-shadow hover:shadow-md">
+                    <CardHeader className="flex flex-col items-center justify-center gap-3">
+                      <div className="grid size-12 place-items-center rounded-lg bg-zinc-100 text-zinc-600">
+                        <Icon className="size-6" />
+                      </div>
+                      <CardTitle className="text-center text-base font-medium">
+                        {category.name}
+                      </CardTitle>
+                      {(category.itemType === "SUPPLY" || category.itemType === "ASSET") && (
+                        <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-zinc-100 text-zinc-700">
+                          {category.itemType === "ASSET" ? "Asset" : "Supply"}
+                        </span>
+                      )}
+                    </CardHeader>
+                  </Card>
+                </Link>
+              )
+            })
+          )}
         </div>
       </section>
     </div>

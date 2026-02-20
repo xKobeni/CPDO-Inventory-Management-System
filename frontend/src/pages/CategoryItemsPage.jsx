@@ -1,7 +1,7 @@
-import { useState, useEffect, useId } from "react"
+import React, { useState, useEffect, useId } from "react"
 import { useParams, Link } from "react-router-dom"
 import { Search, RefreshCw, Plus } from "lucide-react"
-import { IconDotsVertical, IconGripVertical, IconCircleCheckFilled, IconAlertCircle } from "@tabler/icons-react"
+import { IconDotsVertical, IconGripVertical, IconCircleCheckFilled, IconAlertCircle, IconLayoutColumns, IconChevronDown } from "@tabler/icons-react"
 import {
   DndContext,
   closestCenter,
@@ -32,6 +32,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuCheckboxItem,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -59,119 +60,424 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerClose,
+} from "@/components/ui/drawer"
+import { Separator } from "@/components/ui/separator"
 
+import { useIsMobile } from "@/hooks/use-mobile"
 import { useCategories } from "@/contexts/CategoriesContext"
 
 const UNIT_OPTIONS = ["pcs", "boxes", "units", "sets"]
 
-function SortableRow({ item, selectedIds, toggleRow, openEdit }) {
+// Column config for Customize Columns (toggleable data columns; drag, actions always shown)
+const SUPPLY_COLUMNS = [
+  { id: "propertyNo", label: "Property No." },
+  { id: "name", label: "Name" },
+  { id: "category", label: "Category" },
+  { id: "serialNo", label: "Serial No." },
+  { id: "status", label: "Status" },
+  { id: "condition", label: "Condition" },
+  { id: "accountablePerson", label: "Accountable Person" },
+  { id: "dateAcquired", label: "Date Acquired" },
+]
+const ASSET_COLUMNS = [
+  { id: "name", label: "Name" },
+  { id: "category", label: "Category" },
+  { id: "propertyNo", label: "Property No." },
+  { id: "serialNo", label: "Serial No." },
+  { id: "details", label: "Details" },
+  { id: "status", label: "Status" },
+  { id: "condition", label: "Condition" },
+  { id: "accountability", label: "Accountability" },
+  { id: "remarks", label: "Remarks" },
+]
+const SUPPLY_COL_ORDER = ["drag", "propertyNo", "name", "category", "serialNo", "status", "condition", "accountablePerson", "dateAcquired", "actions"]
+const ASSET_COL_ORDER = ["drag", "name", "category", "propertyNo", "serialNo", "details", "status", "condition", "accountability", "remarks", "actions"]
+const FIXED_COLUMNS = new Set(["drag", "actions"])
+const isColVisible = (id, visibility) => FIXED_COLUMNS.has(id) || visibility[id] === true
+
+// Column width mappings (in rem or auto).
+const COLUMN_WIDTHS = {
+  drag: "2.5rem",
+  actions: "3rem",
+  propertyNo: "6rem",
+  name: "auto",
+  category: "6rem",
+  serialNo: "6rem",
+  status: "7rem",
+  condition: "6rem",
+  accountablePerson: "8rem",
+  dateAcquired: "6.5rem",
+  details: "12rem",
+  accountability: "12rem",
+  remarks: "7rem",
+}
+
+// Column alignment: "text-left" (default), "text-center", "text-right"
+const COLUMN_ALIGNMENT = {
+  propertyNo: "text-left",
+  name: "text-left",
+  category: "text-left",
+  serialNo: "text-left",
+  status: "text-center",
+  condition: "text-center",
+  accountablePerson: "text-left",
+  dateAcquired: "text-right tabular-nums",
+  details: "text-left",
+  accountability: "text-left",
+  remarks: "text-left",
+}
+const getColAlignment = (id) => COLUMN_ALIGNMENT[id] || "text-left"
+
+const STATUS_LABELS = {
+  IN_STOCK: "In Stock",
+  DEPLOYED: "Deployed",
+  FOR_REPAIR: "For Repair",
+  DISPOSED: "Disposed",
+  LOST: "Lost",
+}
+const CONDITION_LABELS = { NEW: "New", GOOD: "Good", FAIR: "Fair", POOR: "Poor", DAMAGED: "Damaged" }
+
+function StatusBadge({ status }) {
+  const label = STATUS_LABELS[status] ?? status
+  const ok = status === "IN_STOCK" || status === "DEPLOYED"
+  return (
+    <Badge variant="outline" className="text-muted-foreground gap-1 px-1.5">
+      {ok ? (
+        <IconCircleCheckFilled className="size-3.5 fill-green-500 dark:fill-green-400" />
+      ) : (
+        <IconAlertCircle className="size-3.5 text-amber-600" />
+      )}
+      {label}
+    </Badge>
+  )
+}
+
+function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, columnVisibility, onRowClick }) {
   const { attributes, listeners, transform, transition, setNodeRef, isDragging } = useSortable({ id: item.id })
+  const nodeRef = React.useRef(null)
+  React.useLayoutEffect(() => {
+    setNodeRef(nodeRef.current)
+    return () => setNodeRef(null)
+  }, [])
+
+  const renderCell = (id) => {
+    switch (id) {
+      case "drag":
+        return (
+          <TableCell key={id} className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+            <Button
+              {...attributes}
+              {...listeners}
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground size-7 shrink-0 hover:bg-transparent cursor-grab active:cursor-grabbing"
+            >
+              <IconGripVertical className="text-muted-foreground size-3" />
+              <span className="sr-only">Drag to reorder</span>
+            </Button>
+          </TableCell>
+        )
+      case "propertyNo":
+        return (
+          <TableCell key={id} className={`px-3 py-2 font-medium ${getColAlignment(id)}`}>{item.propertyNumber ?? "—"}</TableCell>
+        )
+      case "name":
+        return (
+          <TableCell key={id} className={`px-3 py-2 truncate ${getColAlignment(id)}`}>{item.name}</TableCell>
+        )
+      case "category":
+        return (
+          <TableCell key={id} className={`px-3 py-2 truncate ${getColAlignment(id)}`}>{item.category ?? "—"}</TableCell>
+        )
+      case "serialNo":
+        return (
+          <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>{item.serialNumber ?? "—"}</TableCell>
+        )
+      case "status":
+        return (
+          <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>
+            <StatusBadge status={item.status} />
+          </TableCell>
+        )
+      case "condition":
+        return (
+          <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>
+            <Badge variant="outline" className="text-muted-foreground px-1.5">
+              {CONDITION_LABELS[item.condition] ?? item.condition ?? "—"}
+            </Badge>
+          </TableCell>
+        )
+      case "accountablePerson":
+        return (
+          <TableCell key={id} className={`px-3 py-2 truncate ${getColAlignment(id)}`}>
+            {item.accountablePerson?.name ?? "—"}
+          </TableCell>
+        )
+      case "dateAcquired":
+        return (
+          <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>
+            {item.dateAcquired ? new Date(item.dateAcquired).toLocaleDateString() : "—"}
+          </TableCell>
+        )
+      case "actions":
+        return (
+          <TableCell key={id} className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="text-muted-foreground flex size-8" size="icon">
+                  <IconDotsVertical />
+                  <span className="sr-only">Open menu</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40">
+                <DropdownMenuItem>View</DropdownMenuItem>
+                <DropdownMenuItem>Assign</DropdownMenuItem>
+                <DropdownMenuItem>Transfer</DropdownMenuItem>
+                <DropdownMenuItem>Return</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => openEdit(item)}>Edit</DropdownMenuItem>
+                <DropdownMenuItem variant="destructive">Delete</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </TableCell>
+        )
+      default:
+        return null
+    }
+  }
+
   return (
     <TableRow
-      ref={setNodeRef}
+      ref={nodeRef}
+      role="button"
+      tabIndex={0}
+      onClick={() => onRowClick?.(item)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onRowClick?.(item) } }}
       data-state={selectedIds.has(item.id) ? "selected" : undefined}
       data-dragging={isDragging}
-      className="relative z-0 data-[dragging=true]:z-10 data-[dragging=true]:opacity-80 data-[dragging=true]:bg-muted/50"
+      className="relative z-0 cursor-pointer data-[dragging=true]:z-10 data-[dragging=true]:opacity-80 data-[dragging=true]:bg-muted/50 hover:bg-muted/50"
       style={{ transform: CSS.Transform.toString(transform), transition }}
     >
-      <TableCell className="px-3 py-2">
-        <Button
-          {...attributes}
-          {...listeners}
-          variant="ghost"
-          size="icon"
-          className="text-muted-foreground size-7 shrink-0 hover:bg-transparent cursor-grab active:cursor-grabbing"
-        >
-          <IconGripVertical className="text-muted-foreground size-3" />
-          <span className="sr-only">Drag to reorder</span>
-        </Button>
-      </TableCell>
-      <TableCell className="w-12 px-2 py-1.5">
-        <div className="flex items-center justify-center">
-          <Checkbox
-            checked={selectedIds.has(item.id)}
-            onCheckedChange={() => toggleRow(item.id)}
-            aria-label="Select row"
-          />
-        </div>
-      </TableCell>
-      <TableCell className="px-3 py-2 font-medium">{item.id}</TableCell>
-      <TableCell className="px-3 py-2 truncate">{item.name}</TableCell>
-      <TableCell className="px-3 py-2 text-right tabular-nums">{item.quantity}</TableCell>
-      <TableCell className="px-3 py-2">
-        <Badge variant="outline" className="text-muted-foreground px-1.5">
-          {item.unit}
-        </Badge>
-      </TableCell>
-      <TableCell className="px-3 py-2">
-        <Badge variant="outline" className="text-muted-foreground gap-1 px-1.5">
-          {item.status === "In Stock" ? (
-            <IconCircleCheckFilled className="size-3.5 fill-green-500 dark:fill-green-400" />
-          ) : (
-            <IconAlertCircle className="size-3.5 text-amber-600" />
-          )}
-          {item.status}
-        </Badge>
-      </TableCell>
-      <TableCell className="px-3 py-2 text-right tabular-nums">{item.reorderLevel}</TableCell>
-      <TableCell className="px-3 py-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="text-muted-foreground flex size-8" size="icon">
-              <IconDotsVertical />
-              <span className="sr-only">Open menu</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-32">
-            <DropdownMenuItem onClick={() => openEdit(item)}>Edit</DropdownMenuItem>
-            <DropdownMenuItem>View</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive">Delete</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </TableCell>
+      {SUPPLY_COL_ORDER.filter((id) => isColVisible(id, columnVisibility)).map((id) => renderCell(id))}
     </TableRow>
   )
 }
 
-// Sample items per category (in real app, fetch from API)
+function SortableRowAsset({ item, selectedIds, toggleRow, openEdit, columnVisibility, onRowClick }) {
+  const { attributes, listeners, transform, transition, setNodeRef, isDragging } = useSortable({ id: item.id })
+  const nodeRef = React.useRef(null)
+  React.useLayoutEffect(() => {
+    setNodeRef(nodeRef.current)
+    return () => setNodeRef(null)
+  }, [])
+
+  const acc = item.accountablePerson
+  const accText = acc?.name
+    ? [acc.name, acc.position, acc.office].filter(Boolean).join(" · ")
+    : "—"
+
+  const renderCell = (id) => {
+    switch (id) {
+      case "drag":
+        return (
+          <TableCell key={id} className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+            <Button
+              {...attributes}
+              {...listeners}
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground size-7 shrink-0 hover:bg-transparent cursor-grab active:cursor-grabbing"
+            >
+              <IconGripVertical className="text-muted-foreground size-3" />
+              <span className="sr-only">Drag to reorder</span>
+            </Button>
+          </TableCell>
+        )
+      case "name":
+        return (
+          <TableCell key={id} className={`px-3 py-2 truncate ${getColAlignment(id)}`}>{item.name}</TableCell>
+        )
+      case "category":
+        return (
+          <TableCell key={id} className={`px-3 py-2 truncate ${getColAlignment(id)}`}>{item.category ?? "—"}</TableCell>
+        )
+      case "propertyNo":
+        return (
+          <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>{item.propertyNumber ?? "—"}</TableCell>
+        )
+      case "serialNo":
+        return (
+          <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>{item.serialNumber ?? "—"}</TableCell>
+        )
+      case "details":
+        return (
+          <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>
+            <span className="text-muted-foreground text-sm">
+              {[item.brand, item.model].filter(Boolean).join(" · ") || "—"}
+            </span>
+            <br />
+            <span className="text-xs text-muted-foreground">
+              {item.unitCost != null && item.unitCost > 0 ? `₱${Number(item.unitCost).toLocaleString()}` : ""}
+              {item.dateAcquired ? ` · ${new Date(item.dateAcquired).toLocaleDateString()}` : ""}
+            </span>
+          </TableCell>
+        )
+      case "status":
+        return (
+          <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>
+            <StatusBadge status={item.status} />
+          </TableCell>
+        )
+      case "condition":
+        return (
+          <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>
+            <Badge variant="outline" className="text-muted-foreground px-1.5">
+              {CONDITION_LABELS[item.condition] ?? item.condition ?? "—"}
+            </Badge>
+          </TableCell>
+        )
+      case "accountability":
+        return (
+          <TableCell key={id} className={`px-3 py-2 truncate ${getColAlignment(id)}`} title={acc?.name ?? undefined}>
+            {item.accountablePerson?.name ?? "—"}
+          </TableCell>
+        )
+      case "remarks":
+        return (
+          <TableCell key={id} className={`px-3 py-2 truncate ${getColAlignment(id)}`} title={item.remarks ?? ""}>
+            {item.remarks ?? "—"}
+          </TableCell>
+        )
+      case "actions":
+        return (
+          <TableCell key={id} className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="text-muted-foreground flex size-8" size="icon">
+                  <IconDotsVertical />
+                  <span className="sr-only">Open menu</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40">
+                <DropdownMenuItem>View</DropdownMenuItem>
+                <DropdownMenuItem>Assign</DropdownMenuItem>
+                <DropdownMenuItem>Transfer</DropdownMenuItem>
+                <DropdownMenuItem>Return</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => openEdit(item)}>Edit</DropdownMenuItem>
+                <DropdownMenuItem variant="destructive">Delete</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </TableCell>
+        )
+      default:
+        return null
+    }
+  }
+
+  return (
+    <TableRow
+      ref={nodeRef}
+      role="button"
+      tabIndex={0}
+      onClick={() => onRowClick?.(item)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onRowClick?.(item) } }}
+      data-state={selectedIds.has(item.id) ? "selected" : undefined}
+      data-dragging={isDragging}
+      className="relative z-0 cursor-pointer data-[dragging=true]:z-10 data-[dragging=true]:opacity-80 data-[dragging=true]:bg-muted/50 hover:bg-muted/50"
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+    >
+      {ASSET_COL_ORDER.filter((id) => isColVisible(id, columnVisibility)).map((id) => renderCell(id))}
+    </TableRow>
+  )
+}
+
+// Helper to build supply item (optional propertyNumber as primary id)
+function supplyItem(id, name, category, extra = {}) {
+  return {
+    id,
+    name,
+    category: category ?? "General",
+    propertyNumber: extra.propertyNumber ?? null,
+    serialNumber: extra.serialNumber ?? null,
+    status: extra.status ?? "IN_STOCK",
+    condition: extra.condition ?? "GOOD",
+    location: extra.location ?? "",
+    accountablePerson: extra.accountablePerson ?? {},
+    dateAcquired: extra.dateAcquired ?? null,
+    ...extra,
+  }
+}
+
+// Helper to build asset item (Identification, SKU, Details, Accountability, etc.)
+function assetItem(id, name, category, extra = {}) {
+  return {
+    id,
+    sku: extra.sku ?? id,
+    name,
+    category: category ?? "General",
+    propertyNumber: extra.propertyNumber ?? id,
+    serialNumber: extra.serialNumber ?? null,
+    brand: extra.brand ?? "",
+    model: extra.model ?? "",
+    unitCost: extra.unitCost ?? 0,
+    dateAcquired: extra.dateAcquired ?? null,
+    location: extra.location ?? "",
+    status: extra.status ?? "IN_STOCK",
+    condition: extra.condition ?? "GOOD",
+    accountablePerson: extra.accountablePerson ?? {},
+    remarks: extra.remarks ?? "",
+    ...extra,
+  }
+}
+
+// Build accountablePerson outside object literals to avoid JSX parse ambiguity with { name: "..." }
+const _acc = (name, position, office) => ({ name, position, office: office ?? "CPDC" })
 const SAMPLE_ITEMS = {
   printer: [
-    { id: "P001", name: "HP LaserJet Pro", quantity: 12, unit: "pcs", status: "In Stock", reorderLevel: 5 },
-    { id: "P002", name: "Canon PIXMA Inkjet", quantity: 8, unit: "pcs", status: "In Stock", reorderLevel: 5 },
-    { id: "P003", name: "Epson EcoTank", quantity: 2, unit: "pcs", status: "Low Stock", reorderLevel: 5 },
+    assetItem("P001", "HP LaserJet Pro", "Printer", { sku: "PRN-001", propertyNumber: "PROP-P001", serialNumber: "SN-HP001", brand: "HP", model: "LaserJet Pro", unitCost: 12000, location: "IT Office", accountablePerson: _acc("Juan Dela Cruz", "IT Officer") }),
+    assetItem("P002", "Canon PIXMA Inkjet", "Printer", { sku: "PRN-002", propertyNumber: "PROP-P002", brand: "Canon", model: "PIXMA", unitCost: 8500 }),
+    assetItem("P003", "Epson EcoTank", "Printer", { sku: "PRN-003", propertyNumber: "PROP-P003", status: "FOR_REPAIR", condition: "FAIR" }),
   ],
   drugs: [
-    { id: "D001", name: "Paracetamol 500mg", quantity: 500, unit: "boxes", status: "In Stock", reorderLevel: 100 },
-    { id: "D002", name: "Ibuprofen 200mg", quantity: 85, unit: "boxes", status: "Low Stock", reorderLevel: 100 },
+    supplyItem("D001", "Paracetamol 500mg", "Drugs", { serialNumber: "DRG-001", status: "IN_STOCK", location: "Pharmacy", dateAcquired: "2024-01-15" }),
+    supplyItem("D002", "Ibuprofen 200mg", "Drugs", { serialNumber: "DRG-002", status: "IN_STOCK", location: "Pharmacy", accountablePerson: _acc("Maria Santos") }),
   ],
   "furniture-fixtures": [
-    { id: "F001", name: "Office Chair", quantity: 25, unit: "pcs", status: "In Stock", reorderLevel: 10 },
-    { id: "F002", name: "Conference Table", quantity: 5, unit: "pcs", status: "In Stock", reorderLevel: 2 },
-    { id: "F003", name: "Filing Cabinet", quantity: 3, unit: "pcs", status: "Low Stock", reorderLevel: 5 },
+    assetItem("F001", "Office Chair", "Furniture & Fixtures", { sku: "FUR-001", propertyNumber: "PROP-F001", brand: "Office Pro", unitCost: 4500, location: "Admin" }),
+    assetItem("F002", "Conference Table", "Furniture & Fixtures", { sku: "FUR-002", propertyNumber: "PROP-F002", unitCost: 25000 }),
+    assetItem("F003", "Filing Cabinet", "Furniture & Fixtures", { sku: "FUR-003", propertyNumber: "PROP-F003", condition: "FAIR", remarks: "Needs repair" }),
   ],
   "ict-equipment": [
-    { id: "I001", name: "Dell OptiPlex Desktop", quantity: 15, unit: "pcs", status: "In Stock", reorderLevel: 5 },
-    { id: "I002", name: "Dell Monitor 24\"", quantity: 8, unit: "pcs", status: "In Stock", reorderLevel: 5 },
-    { id: "I003", name: "Laptop - Dell Inspiron", quantity: 6, unit: "pcs", status: "In Stock", reorderLevel: 3 },
+    assetItem("I001", "Dell OptiPlex Desktop", "ICT Equipment", { sku: "ICT-001", propertyNumber: "PROP-I001", serialNumber: "DL-OP001", brand: "Dell", model: "OptiPlex", unitCost: 35000, location: "IT Room" }),
+    assetItem("I002", "Dell Monitor 24\"", "ICT Equipment", { sku: "ICT-002", propertyNumber: "PROP-I002", brand: "Dell", unitCost: 12000 }),
+    assetItem("I003", "Laptop - Dell Inspiron", "ICT Equipment", { sku: "ICT-003", propertyNumber: "PROP-I003", status: "DEPLOYED", accountablePerson: _acc("Ana Reyes", "Staff") }),
   ],
   "laboratory-equipment": [
-    { id: "L001", name: "Centrifuge Machine", quantity: 2, unit: "pcs", status: "In Stock", reorderLevel: 1 },
-    { id: "L002", name: "Microscope", quantity: 4, unit: "pcs", status: "In Stock", reorderLevel: 2 },
+    assetItem("L001", "Centrifuge Machine", "Laboratory Equipment", { sku: "LAB-001", propertyNumber: "PROP-L001", brand: "Eppendorf", unitCost: 180000 }),
+    assetItem("L002", "Microscope", "Laboratory Equipment", { sku: "LAB-002", propertyNumber: "PROP-L002", location: "Lab 1" }),
   ],
   "medical-supplies": [
-    { id: "M001", name: "Surgical Gloves", quantity: 200, unit: "boxes", status: "In Stock", reorderLevel: 50 },
-    { id: "M002", name: "Face Masks", quantity: 150, unit: "boxes", status: "In Stock", reorderLevel: 50 },
-    { id: "M003", name: "Bandages", quantity: 35, unit: "boxes", status: "Low Stock", reorderLevel: 30 },
+    supplyItem("M001", "Surgical Gloves", "Medical Supplies", { propertyNumber: "M-SG-001", status: "IN_STOCK", location: "Storage A", dateAcquired: "2024-06-01" }),
+    supplyItem("M002", "Face Masks", "Medical Supplies", { status: "IN_STOCK", location: "Storage A" }),
+    supplyItem("M003", "Bandages", "Medical Supplies", { status: "IN_STOCK", condition: "GOOD", accountablePerson: _acc("Nurse Cruz") }),
   ],
   "motor-vehicles": [
-    { id: "V001", name: "Toyota Hilux", quantity: 2, unit: "pcs", status: "In Stock", reorderLevel: 1 },
-    { id: "V002", name: "Honda City", quantity: 1, unit: "pcs", status: "In Stock", reorderLevel: 1 },
+    assetItem("V001", "Toyota Hilux", "Motor Vehicles", { sku: "VH-001", propertyNumber: "PROP-V001", serialNumber: "CHASSIS-XXX", brand: "Toyota", model: "Hilux", unitCost: 1200000, status: "DEPLOYED", accountablePerson: _acc("Driver Lopez", "Driver") }),
+    assetItem("V002", "Honda City", "Motor Vehicles", { sku: "VH-002", propertyNumber: "PROP-V002", brand: "Honda", model: "City", unitCost: 850000 }),
   ],
   "office-equipment": [
-    { id: "O001", name: "Laptop Stand", quantity: 20, unit: "pcs", status: "In Stock", reorderLevel: 5 },
-    { id: "O002", name: "Wireless Keyboard", quantity: 12, unit: "pcs", status: "In Stock", reorderLevel: 5 },
-    { id: "O003", name: "Webcam HD", quantity: 1, unit: "pcs", status: "Low Stock", reorderLevel: 3 },
+    assetItem("O001", "Laptop Stand", "Office Equipment", { sku: "OFF-001", propertyNumber: "PROP-O001", unitCost: 1200 }),
+    assetItem("O002", "Wireless Keyboard", "Office Equipment", { sku: "OFF-002", propertyNumber: "PROP-O002", brand: "Logitech", unitCost: 2500 }),
+    assetItem("O003", "Webcam HD", "Office Equipment", { sku: "OFF-003", propertyNumber: "PROP-O003", status: "FOR_REPAIR", remarks: "USB port damaged" }),
   ],
 }
 
@@ -187,16 +493,40 @@ export default function CategoryItemsPage() {
   const [editOpen, setEditOpen] = useState(false)
   const [editingItem, setEditingItem] = useState(null)
   const [form, setForm] = useState(emptyForm)
+  const [supplyColumnVisibility, setSupplyColumnVisibility] = useState(() =>
+    Object.fromEntries(SUPPLY_COLUMNS.map((c) => [c.id, true]))
+  )
+  const [assetColumnVisibility, setAssetColumnVisibility] = useState(() =>
+    Object.fromEntries(ASSET_COLUMNS.map((c) => [c.id, true]))
+  )
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [drawerItem, setDrawerItem] = useState(null)
   const dndId = useId()
+  const isMobile = useIsMobile()
+
+  const openDrawer = (item) => {
+    setDrawerItem(item)
+    setDrawerOpen(true)
+  }
+  const closeDrawer = () => {
+    setDrawerOpen(false)
+    setDrawerItem(null)
+  }
+  const openEditFromDrawer = () => {
+    if (drawerItem) {
+      closeDrawer()
+      openEdit(drawerItem)
+    }
+  }
 
   useEffect(() => {
-    if (category && SAMPLE_ITEMS[categorySlug]) {
+    if (SAMPLE_ITEMS[categorySlug]) {
       setItems(SAMPLE_ITEMS[categorySlug].map((i) => ({ ...i })))
     } else {
       setItems([])
     }
     setSelectedIds(new Set())
-  }, [categorySlug, category])
+  }, [categorySlug])
 
   const toggleRow = (id) => {
     setSelectedIds((prev) => {
@@ -312,11 +642,16 @@ export default function CategoryItemsPage() {
     )
   }
 
-  const inStockCount = items.filter((i) => i.status === "In Stock").length
-  const lowStockCount = items.filter((i) => i.status === "Low Stock").length
+  const isSupply = category.itemType === "SUPPLY"
+  const columnVisibility = isSupply ? supplyColumnVisibility : assetColumnVisibility
+  const setColumnVisibility = isSupply ? setSupplyColumnVisibility : setAssetColumnVisibility
+  const colOrder = isSupply ? SUPPLY_COL_ORDER : ASSET_COL_ORDER
+  const colConfig = isSupply ? SUPPLY_COLUMNS : ASSET_COLUMNS
+  const inStockCount = items.filter((i) => (i.status === "IN_STOCK" || i.status === "In Stock")).length
+  const lowStockCount = items.filter((i) => (i.status === "Low Stock" || (i.status && i.status !== "IN_STOCK" && i.status !== "DEPLOYED"))).length
 
   return (
-    <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-6">
+    <div className="mx-auto flex min-w-0 w-full max-w-[1400px] flex-col gap-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <Breadcrumb>
@@ -381,7 +716,7 @@ export default function CategoryItemsPage() {
         </Card>
       </section>
 
-      <section className="overflow-hidden rounded-xl border bg-white">
+      <section className="min-w-0 overflow-hidden rounded-xl border bg-white">
         <div className="flex flex-col gap-3 border-b px-4 py-3 lg:px-6 md:flex-row md:items-center md:justify-between">
           <div className="relative max-w-sm flex-1">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -391,46 +726,64 @@ export default function CategoryItemsPage() {
               className="pl-9"
             />
           </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <IconLayoutColumns className="size-4" />
+                <span className="hidden lg:inline">Customize Columns</span>
+                <span className="lg:hidden">Columns</span>
+                <IconChevronDown className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              {colConfig.map((col) => (
+                <DropdownMenuCheckboxItem
+                  key={col.id}
+                  checked={columnVisibility[col.id] !== false}
+                  onCheckedChange={(checked) =>
+                    setColumnVisibility((prev) => ({ ...prev, [col.id]: !!checked }))
+                  }
+                >
+                  {col.label}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-        <div className="overflow-auto px-4 lg:px-6">
-          <div className="overflow-hidden rounded-lg border">
-            <Table className="table-fixed w-full">
+        <div className="w-full min-w-0 overflow-x-auto px-4 lg:px-6">
+          <div className="inline-block min-w-full rounded-lg border">
+            <Table className="w-max min-w-full table-auto">
               <colgroup>
-                <col style={{ width: "2.5rem" }} />
-                <col style={{ width: "3rem" }} />
-                <col style={{ width: "5rem" }} />
-                <col style={{ width: "auto" }} />
-                <col style={{ width: "6rem" }} />
-                <col style={{ width: "6rem" }} />
-                <col style={{ width: "7rem" }} />
-                <col style={{ width: "6rem" }} />
-                <col style={{ width: "3rem" }} />
+                {colOrder
+                  .filter((id) => isColVisible(id, columnVisibility))
+                  .map((id) => {
+                    const width = COLUMN_WIDTHS[id] || "auto"
+                    return <col key={id} style={{ width }} />
+                  })}
               </colgroup>
               <TableHeader className="bg-muted sticky top-0 z-10">
                 <TableRow>
-                  <TableHead className="px-3" />
-                  <TableHead className="px-3">
-                    <div className="flex items-center justify-center">
-                      <Checkbox
-                        checked={isAllSelected || (isSomeSelected && "indeterminate")}
-                        onCheckedChange={toggleAll}
-                        aria-label="Select all"
-                      />
-                    </div>
-                  </TableHead>
-                  <TableHead className="px-3">ID</TableHead>
-                  <TableHead className="px-3">Item Name</TableHead>
-                  <TableHead className="px-3 text-right">Quantity</TableHead>
-                  <TableHead className="px-3">Unit</TableHead>
-                  <TableHead className="px-3">Status</TableHead>
-                  <TableHead className="px-3 text-right">Reorder Level</TableHead>
-                  <TableHead className="px-3" />
+                  {colOrder
+                    .filter((id) => isColVisible(id, columnVisibility))
+                    .map((id) => {
+                      if (id === "drag") return <TableHead key={id} className="px-3 w-10" />
+                      if (id === "actions") return <TableHead key={id} className="px-3 w-12" />
+                      const label = colConfig.find((c) => c.id === id)?.label ?? id
+                      return (
+                        <TableHead key={id} className={`px-3 whitespace-nowrap ${getColAlignment(id)}`}>
+                          {label}
+                        </TableHead>
+                      )
+                    })}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {items.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                    <TableCell
+                      colSpan={colOrder.filter((id) => isColVisible(id, columnVisibility)).length}
+                      className="h-24 text-center text-muted-foreground"
+                    >
                       No items in this category yet. Add an item to get started.
                     </TableCell>
                   </TableRow>
@@ -443,15 +796,29 @@ export default function CategoryItemsPage() {
                     onDragEnd={handleDragEnd}
                   >
                     <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-                      {items.map((item) => (
-                        <SortableRow
-                          key={item.id}
-                          item={item}
-                          selectedIds={selectedIds}
-                          toggleRow={toggleRow}
-                          openEdit={openEdit}
-                        />
-                      ))}
+                      {items.map((item) =>
+                        isSupply ? (
+                          <SortableRowSupply
+                            key={item.id}
+                            item={item}
+                            selectedIds={selectedIds}
+                            toggleRow={toggleRow}
+                            openEdit={openEdit}
+                            columnVisibility={columnVisibility}
+                            onRowClick={openDrawer}
+                          />
+                        ) : (
+                          <SortableRowAsset
+                            key={item.id}
+                            item={item}
+                            selectedIds={selectedIds}
+                            toggleRow={toggleRow}
+                            openEdit={openEdit}
+                            columnVisibility={columnVisibility}
+                            onRowClick={openDrawer}
+                          />
+                        )
+                      )}
                     </SortableContext>
                   </DndContext>
                 )}
@@ -595,6 +962,162 @@ export default function CategoryItemsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Item detail drawer (opens on row click) */}
+      <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} direction={isMobile ? "bottom" : "right"}>
+        <DrawerContent className="data-[vaul-drawer-direction=right]:sm:max-w-md">
+          <DrawerHeader className="gap-1 p-4 pb-2">
+            <DrawerTitle className="text-lg font-semibold tracking-tight">
+              {drawerItem?.name ?? "Item details"}
+            </DrawerTitle>
+            <DrawerDescription className="text-sm text-muted-foreground">
+              View item information. Use Edit below to update details.
+            </DrawerDescription>
+          </DrawerHeader>
+          <div className="flex flex-col gap-4 overflow-y-auto px-4 pb-4">
+            {drawerItem && (
+              <>
+                {/* Summary / status block */}
+                <div className="grid gap-2">
+                  <div className="flex items-center gap-2 leading-none font-medium">
+                    <StatusBadge status={drawerItem.status} />
+                    <span className="text-muted-foreground text-sm">
+                      {CONDITION_LABELS[drawerItem.condition] ?? drawerItem.condition ?? "—"} condition
+                    </span>
+                  </div>
+                  <p className="text-muted-foreground text-sm">
+                    {isSupply
+                      ? "Supply item. View and manage this item below. Use Edit to change quantity, reorder level, or other details."
+                      : "Asset item. View and manage this item below. Use Edit to update property details, accountability, or remarks."}
+                  </p>
+                </div>
+                <Separator />
+                {/* Form-style fields: label above value */}
+                <div className="flex flex-col gap-4">
+                  {isSupply ? (
+                    <>
+                      <div className="space-y-2">
+                        <Label className="text-muted-foreground font-medium">Property No.</Label>
+                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.propertyNumber ?? "—"}</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-muted-foreground font-medium">Name</Label>
+                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.name}</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground font-medium">Category</Label>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.category ?? "—"}</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground font-medium">Serial No.</Label>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.serialNumber ?? "—"}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground font-medium">Status</Label>
+                          <div className="rounded-md border bg-muted/30 px-3 py-2">
+                            <StatusBadge status={drawerItem.status} />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground font-medium">Condition</Label>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{CONDITION_LABELS[drawerItem.condition] ?? drawerItem.condition ?? "—"}</p>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-muted-foreground font-medium">Location</Label>
+                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.location ?? "—"}</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-muted-foreground font-medium">Accountable Person</Label>
+                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.accountablePerson?.name ?? "—"}</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-muted-foreground font-medium">Date Acquired</Label>
+                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.dateAcquired ? new Date(drawerItem.dateAcquired).toLocaleDateString() : "—"}</p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="space-y-2">
+                        <Label className="text-muted-foreground font-medium">Name</Label>
+                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.name}</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground font-medium">Category</Label>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.category ?? "—"}</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground font-medium">Property No.</Label>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.propertyNumber ?? "—"}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground font-medium">Serial No.</Label>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.serialNumber ?? "—"}</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground font-medium">Unit Cost</Label>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.unitCost != null && drawerItem.unitCost > 0 ? `₱${Number(drawerItem.unitCost).toLocaleString()}` : "—"}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground font-medium">Brand</Label>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.brand ?? "—"}</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground font-medium">Model</Label>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.model ?? "—"}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground font-medium">Status</Label>
+                          <div className="rounded-md border bg-muted/30 px-3 py-2">
+                            <StatusBadge status={drawerItem.status} />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground font-medium">Condition</Label>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{CONDITION_LABELS[drawerItem.condition] ?? drawerItem.condition ?? "—"}</p>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-muted-foreground font-medium">Date Acquired</Label>
+                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.dateAcquired ? new Date(drawerItem.dateAcquired).toLocaleDateString() : "—"}</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-muted-foreground font-medium">Accountability</Label>
+                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                          {drawerItem.accountablePerson?.name
+                            ? [drawerItem.accountablePerson.name, drawerItem.accountablePerson.position, drawerItem.accountablePerson.office].filter(Boolean).join(" · ")
+                            : "—"}
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-muted-foreground font-medium">Remarks</Label>
+                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.remarks ?? "—"}</p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+          <Separator />
+          <DrawerFooter className="flex flex-col gap-2 p-4">
+            <Button onClick={openEditFromDrawer} className="w-full">Edit</Button>
+            <DrawerClose asChild>
+              <Button variant="outline" className="w-full">Done</Button>
+            </DrawerClose>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
     </div>
   )
 }

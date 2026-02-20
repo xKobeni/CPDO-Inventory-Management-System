@@ -43,7 +43,7 @@ function AppShellInner({ children }) {
     <SidebarCollapsedContext.Provider value={{ collapsed, setCollapsed: setCollapsedWithStorage }}>
       <div className="flex min-h-screen w-full">
         <aside
-          className={`hidden md:fixed md:inset-y-0 md:left-0 md:z-10 md:block md:transition-[width] md:duration-200 ${sidebarWidth}`}
+          className={`hidden md:fixed md:inset-y-0 md:left-0 md:z-50 md:block md:transition-[width] md:duration-200 ${sidebarWidth}`}
         >
           <Sidebar collapsed={collapsed} />
         </aside>
@@ -52,7 +52,7 @@ function AppShellInner({ children }) {
 
         <div className={`flex min-h-screen w-full flex-1 flex-col ${mainMargin} md:transition-[margin] md:duration-200`}>
           <Topbar />
-          <main className="flex-1 overflow-auto bg-zinc-50 p-4 md:p-6">{children}</main>
+          <main className="min-w-0 flex-1 overflow-auto bg-zinc-50 p-4 md:p-6">{children}</main>
         </div>
       </div>
     </SidebarCollapsedContext.Provider>

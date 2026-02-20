@@ -12,14 +12,14 @@ const ICON_MAP = {
 }
 
 const INITIAL_CATEGORIES = [
-  { id: "1", name: "Printer", slug: "printer", iconName: "Laptop" },
-  { id: "2", name: "Drugs", slug: "drugs", iconName: "Pill" },
-  { id: "3", name: "Furniture & Fixtures", slug: "furniture-fixtures", iconName: "Box" },
-  { id: "4", name: "ICT Equipment", slug: "ict-equipment", iconName: "Monitor" },
-  { id: "5", name: "Laboratory Equipment", slug: "laboratory-equipment", iconName: "FlaskConical" },
-  { id: "6", name: "Medical Supplies", slug: "medical-supplies", iconName: "Stethoscope" },
-  { id: "7", name: "Motor Vehicles", slug: "motor-vehicles", iconName: "Car" },
-  { id: "8", name: "Office Equipment", slug: "office-equipment", iconName: "Laptop" },
+  { id: "1", name: "Printer", slug: "printer", iconName: "Laptop", itemType: "ASSET" },
+  { id: "2", name: "Drugs", slug: "drugs", iconName: "Pill", itemType: "SUPPLY" },
+  { id: "3", name: "Furniture & Fixtures", slug: "furniture-fixtures", iconName: "Box", itemType: "ASSET" },
+  { id: "4", name: "ICT Equipment", slug: "ict-equipment", iconName: "Monitor", itemType: "ASSET" },
+  { id: "5", name: "Laboratory Equipment", slug: "laboratory-equipment", iconName: "FlaskConical", itemType: "ASSET" },
+  { id: "6", name: "Medical Supplies", slug: "medical-supplies", iconName: "Stethoscope", itemType: "SUPPLY" },
+  { id: "7", name: "Motor Vehicles", slug: "motor-vehicles", iconName: "Car", itemType: "ASSET" },
+  { id: "8", name: "Office Equipment", slug: "office-equipment", iconName: "Laptop", itemType: "ASSET" },
 ]
 
 const CategoriesContext = createContext(null)
@@ -27,15 +27,26 @@ const CategoriesContext = createContext(null)
 export function CategoriesProvider({ children }) {
   const [categories, setCategories] = useState(INITIAL_CATEGORIES)
 
-  const addCategory = useCallback(({ name, slug, iconName = "Box" }) => {
+  const addCategory = useCallback(({ name, slug, iconName = "Box", itemType = "SUPPLY" }) => {
     const id = String(Date.now())
-    setCategories((prev) => [...prev, { id, name, slug: slug || name.toLowerCase().replace(/\s+/g, "-"), iconName }])
+    setCategories((prev) => [
+      ...prev,
+      { id, name, slug: slug || name.toLowerCase().replace(/\s+/g, "-"), iconName, itemType: itemType || "SUPPLY" },
+    ])
   }, [])
 
-  const updateCategory = useCallback((id, { name, slug, iconName }) => {
+  const updateCategory = useCallback((id, { name, slug, iconName, itemType }) => {
     setCategories((prev) =>
       prev.map((c) =>
-        c.id === id ? { ...c, ...(name && { name }), ...(slug && { slug }), ...(iconName && { iconName }) } : c
+        c.id === id
+          ? {
+              ...c,
+              ...(name != null && name !== "" && { name }),
+              ...(slug != null && { slug }),
+              ...(iconName && { iconName }),
+              ...(itemType && { itemType }),
+            }
+          : c
       )
     )
   }, [])

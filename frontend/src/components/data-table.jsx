@@ -296,12 +296,19 @@ function DraggableRow({
   const { transform, transition, setNodeRef, isDragging } = useSortable({
     id: row.original.id,
   })
+  const nodeRef = React.useRef(null)
+
+  React.useLayoutEffect(() => {
+    setNodeRef(nodeRef.current)
+    return () => setNodeRef(null)
+    // Sync ref only on mount/unmount to avoid dnd-kit setState update loop
+  }, [])
 
   return (
     <TableRow
       data-state={row.getIsSelected() && "selected"}
       data-dragging={isDragging}
-      ref={setNodeRef}
+      ref={nodeRef}
       className="relative z-0 data-[dragging=true]:z-10 data-[dragging=true]:opacity-80"
       style={{
         transform: CSS.Transform.toString(transform),
