@@ -22,8 +22,9 @@ const accountableSchema = z.object({
   office: z.string().max(200).optional().default("CPDC"),
 });
 
-const itemSchema = z.object({
-  itemType: z.enum(["SUPPLY", "ASSET"]).optional().default("SUPPLY"),
+// Base shape without refinements so we can use .partial() for updates (Zod v4 disallows .partial() on refined schemas)
+const itemSchemaShape = z.object({
+  itemType: z.enum(["SUPPLY", "ASSET"]),
 
   sku: z.string().min(2).max(40).transform(s => s.toUpperCase().trim()),
   name: z.string().min(2).max(200),
@@ -35,23 +36,55 @@ const itemSchema = z.object({
 
   remarks: z.string().max(1000).optional().default(""),
 
-  // Supply fields
-  reorderLevel: z.number().int().min(0).optional().default(0),
+  // SUPPLY fields
   quantityOnHand: z.number().int().min(0).optional().default(0),
+  reorderLevel: z.number().int().min(0).optional().default(0),
 
-  // Asset fields
+  // ASSET fields
   propertyNumber: z.string().max(80).optional().nullable().default(null),
   serialNumber: z.string().max(120).optional().nullable().default(null),
   brand: z.string().max(120).optional().default(""),
   model: z.string().max(120).optional().default(""),
   location: z.string().max(200).optional().default(""),
 
-  accountablePerson: accountableSchema.optional().default({}),
-  status: z.enum(["IN_STOCK", "DEPLOYED", "FOR_REPAIR", "DISPOSED", "LOST"]).optional().default("IN_STOCK"),
-  condition: z.enum(["NEW", "GOOD", "FAIR", "POOR", "DAMAGED"]).optional().default("GOOD"),
+  accountablePerson: z.object({
+    name: z.string().max(200).optional().default(""),
+    position: z.string().max(200).optional().default(""),
+    office: z.string().max(200).optional().default("CPDC"),
+  }).optional().default({}),
+
+  status: z.enum(["IN_STOCK", "DEPLOYED", "FOR_REPAIR", "DISPOSED", "LOST"])
+    .optional()
+    .default("IN_STOCK"),
+
+  condition: z.enum(["NEW", "GOOD", "FAIR", "POOR", "DAMAGED"])
+    .optional()
+    .default("GOOD"),
 });
 
-const itemUpdateSchema = itemSchema.partial();
+const itemSchema = itemSchemaShape.superRefine((data, ctx) => {
+  if (data.itemType === "ASSET") {
+    if (!data.propertyNumber) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "propertyNumber is required for ASSET items",
+        path: ["propertyNumber"],
+      });
+    }
+  }
+
+  if (data.itemType === "SUPPLY") {
+    if (data.propertyNumber) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "propertyNumber must be empty for SUPPLY items",
+        path: ["propertyNumber"],
+      });
+    }
+  }
+});
+
+const itemUpdateSchema = itemSchemaShape.partial();
 
 const assignSchema = z.object({
   accountablePerson: accountableSchema,

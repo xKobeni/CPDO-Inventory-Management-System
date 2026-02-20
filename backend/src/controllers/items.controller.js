@@ -54,12 +54,13 @@ export async function createItem(req, res) {
   // Normalize dates
   body.dateAcquired = toDateOrNull(body.dateAcquired);
 
-  // Enforce ASSET rules: quantity=1, reorderLevel=0 (optional)
   if (body.itemType === "ASSET") {
     body.quantityOnHand = 1;
     body.reorderLevel = 0;
-    // status default makes sense for assets
-    body.status = body.status || "IN_STOCK";
+  }
+
+  if (body.itemType === "SUPPLY") {
+    body.propertyNumber = null;
   }
 
   const item = await Item.create(body);
@@ -95,10 +96,13 @@ export async function updateItem(req, res) {
     item[k] = patch[k];
   });
 
-  // Enforce ASSET constraints always
   if (item.itemType === "ASSET") {
     item.quantityOnHand = 1;
     item.reorderLevel = 0;
+  }
+
+  if (item.itemType === "SUPPLY") {
+    item.propertyNumber = null;
   }
 
   await item.save();
