@@ -8,6 +8,15 @@ const TxItemSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const AccountablePersonSchema = new mongoose.Schema(
+  {
+    name: { type: String, trim: true, default: "" },
+    position: { type: String, trim: true, default: "" },
+    office: { type: String, trim: true, default: "CPDC" },
+  },
+  { _id: false }
+);
+
 const TransactionSchema = new mongoose.Schema(
   {
     type: {
@@ -19,7 +28,10 @@ const TransactionSchema = new mongoose.Schema(
 
     items: { type: [TxItemSchema], required: true },
 
-    // for ISSUANCE
+    // Single source of truth for "who" – item picks this up
+    accountablePerson: { type: AccountablePersonSchema, default: () => ({}) },
+
+    // for ISSUANCE (kept for backward compatibility; mirrored in accountablePerson)
     issuedToOffice: { type: String, trim: true },
     issuedToPerson: { type: String, trim: true },
     purpose: { type: String, trim: true },

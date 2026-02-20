@@ -20,7 +20,6 @@ const ItemSchema = new mongoose.Schema(
     },
 
     // Identification
-    sku: { type: String, required: true, unique: true, uppercase: true, trim: true },
     name: { type: String, required: true, trim: true },
     category: { type: String, default: "General", trim: true, index: true },
 
@@ -42,9 +41,10 @@ const ItemSchema = new mongoose.Schema(
     brand: { type: String, trim: true, default: "" },
     model: { type: String, trim: true, default: "" },
 
-    location: { type: String, trim: true, default: "" },
+    division: { type: String, trim: true, default: "" },
 
     accountablePerson: { type: AccountablePersonSchema, default: () => ({}) },
+    transferredTo: { type: String, trim: true, default: "" },
     assignedDate: { type: Date, default: null },
     returnedDate: { type: Date, default: null },
 

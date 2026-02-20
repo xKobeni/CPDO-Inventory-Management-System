@@ -5,7 +5,6 @@ import AuditLog from "../models/AuditLog.js";
 
 const rowSchema = z.object({
   itemType: z.enum(["SUPPLY", "ASSET"]).optional().default("SUPPLY"),
-  sku: z.string().min(2).max(40).transform(s => s.toUpperCase().trim()),
   name: z.string().min(2).max(200),
   category: z.string().max(120).optional().default("General"),
   unit: z.string().max(30).optional().default("pc"),
@@ -18,7 +17,7 @@ const rowSchema = z.object({
   brand: z.string().max(120).optional().default(""),
   model: z.string().max(120).optional().default(""),
 
-  location: z.string().max(200).optional().default(""),
+  division: z.string().max(200).optional().default(""),
 
   dateAcquired: z.string().optional().nullable().default(null),
   unitCost: z.coerce.number().min(0).optional().default(0),
@@ -66,7 +65,6 @@ export async function importItems(req, res) {
       // If user uses "Accountable Name", map it too.
       const normalized = {
         itemType: r.itemType || r["Item Type"] || r["item type"] || "SUPPLY",
-        sku: r.sku || r["SKU"],
         name: r.name || r["Name"],
         category: r.category || r["Category"],
         unit: r.unit || r["Unit"],
@@ -79,7 +77,7 @@ export async function importItems(req, res) {
         brand: r.brand ?? r["Brand"],
         model: r.model ?? r["Model"],
 
-        location: r.location ?? r["Location"],
+        division: r.division ?? r["Division"] ?? r.location ?? r["Location"] ?? "",
 
         dateAcquired: r.dateAcquired ?? r["Date Acquired"],
         unitCost: r.unitCost ?? r["Unit Cost"] ?? r["Amount"],
@@ -97,14 +95,13 @@ export async function importItems(req, res) {
 
       const patch = {
         itemType: parsed.itemType,
-        sku: parsed.sku,
         name: parsed.name,
         category: parsed.category,
         unit: parsed.unit,
         dateAcquired: parseDateOrNull(parsed.dateAcquired),
         unitCost: parsed.unitCost,
         remarks: parsed.remarks,
-        location: parsed.location,
+        division: parsed.division,
         status: parsed.status,
         condition: parsed.condition,
 
@@ -130,10 +127,10 @@ export async function importItems(req, res) {
         patch.reorderLevel = 0;
       }
 
-      // Determine matching key
+      // Determine matching key: ASSET by propertyNumber, SUPPLY by name+category
       const match = parsed.itemType === "ASSET" && parsed.propertyNumber
-        ? { propertyNumber: parsed.propertyNumber }
-        : { sku: parsed.sku };
+        ? { itemType: "ASSET", propertyNumber: parsed.propertyNumber }
+        : { itemType: "SUPPLY", name: parsed.name.trim(), category: parsed.category?.trim() || "General" };
 
       const existing = await Item.findOne(match);
 

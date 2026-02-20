@@ -21,12 +21,11 @@ export async function listItems(req, res) {
   if (q) {
     filter.$or = [
       { name: new RegExp(q, "i") },
-      { sku: new RegExp(q, "i") },
       { category: new RegExp(q, "i") },
       { propertyNumber: new RegExp(q, "i") },
       { serialNumber: new RegExp(q, "i") },
       { "accountablePerson.name": new RegExp(q, "i") },
-      { location: new RegExp(q, "i") },
+      { division: new RegExp(q, "i") },
     ];
   }
 
@@ -70,7 +69,7 @@ export async function createItem(req, res) {
     action: "ITEM_CREATE",
     targetType: "Item",
     targetId: item._id.toString(),
-    meta: { sku: item.sku, name: item.name, itemType: item.itemType },
+    meta: { name: item.name, itemType: item.itemType },
   });
 
   res.status(201).json(item);
@@ -141,31 +140,39 @@ export async function assignAsset(req, res) {
   if (!item) return res.status(404).json({ message: "Item not found" });
   if (item.itemType !== "ASSET") return res.status(400).json({ message: "Assign is for ASSET items only" });
 
-  item.accountablePerson = req.body.accountablePerson;
-  item.location = req.body.location ?? item.location;
+  const acc = req.body.accountablePerson || {};
+  const accountablePerson = {
+    name: (acc.name || "").trim() || "",
+    position: (acc.position || "").trim() || "",
+    office: (acc.office || "CPDC").trim(),
+  };
+
+  // Transaction is the source of truth; create it first
+  const tx = await Transaction.create({
+    type: "ASSET_ASSIGN",
+    items: [{ itemId: item._id, qty: 1 }],
+    accountablePerson,
+    issuedToOffice: accountablePerson.office,
+    issuedToPerson: accountablePerson.name,
+    purpose: req.body.purpose || "Asset assignment",
+    createdBy: req.user._id,
+  });
+
+  // Item picks up from the transaction
+  item.accountablePerson = { ...accountablePerson };
+  item.division = req.body.division ?? item.division;
   item.remarks = req.body.remarks ?? item.remarks;
   item.status = "DEPLOYED";
   item.assignedDate = toDateOrNull(req.body.assignedDate) || new Date();
   item.returnedDate = null;
-
   await item.save();
-
-  // log as transaction (optional but useful)
-  const tx = await Transaction.create({
-    type: "ASSET_ASSIGN",
-    items: [{ itemId: item._id, qty: 1 }],
-    createdBy: req.user._id,
-    issuedToOffice: item.accountablePerson?.office || "CPDC",
-    issuedToPerson: item.accountablePerson?.name || "",
-    purpose: "Asset assignment",
-  });
 
   await AuditLog.create({
     actorId: req.user._id,
     action: "ASSET_ASSIGN",
     targetType: "Item",
     targetId: item._id.toString(),
-    meta: { to: item.accountablePerson, location: item.location, txId: tx._id.toString() },
+    meta: { to: accountablePerson, txId: tx._id.toString() },
   });
 
   res.json(item);
@@ -213,31 +220,39 @@ export async function transferAsset(req, res) {
   if (item.itemType !== "ASSET") return res.status(400).json({ message: "Transfer is for ASSET items only" });
 
   const before = item.accountablePerson;
+  const acc = req.body.accountablePerson || {};
+  const accountablePerson = {
+    name: (acc.name || "").trim() || "",
+    position: (acc.position || "").trim() || "",
+    office: (acc.office || "CPDC").trim(),
+  };
 
-  item.accountablePerson = req.body.accountablePerson;
-  item.location = req.body.location ?? item.location;
+  // Transaction is the source of truth; create it first
+  const tx = await Transaction.create({
+    type: "ASSET_TRANSFER",
+    items: [{ itemId: item._id, qty: 1 }],
+    accountablePerson,
+    issuedToOffice: accountablePerson.office,
+    issuedToPerson: accountablePerson.name,
+    purpose: req.body.purpose || "Asset transfer",
+    createdBy: req.user._id,
+  });
+
+  // Item picks up from the transaction
+  item.accountablePerson = { ...accountablePerson };
+  item.division = req.body.division ?? item.division;
   item.remarks = req.body.remarks ?? item.remarks;
   item.status = "DEPLOYED";
   item.assignedDate = new Date();
   item.returnedDate = null;
-
   await item.save();
-
-  const tx = await Transaction.create({
-    type: "ASSET_TRANSFER",
-    items: [{ itemId: item._id, qty: 1 }],
-    createdBy: req.user._id,
-    issuedToOffice: item.accountablePerson?.office || "CPDC",
-    issuedToPerson: item.accountablePerson?.name || "",
-    purpose: "Asset transfer",
-  });
 
   await AuditLog.create({
     actorId: req.user._id,
     action: "ASSET_TRANSFER",
     targetType: "Item",
     targetId: item._id.toString(),
-    meta: { before, after: item.accountablePerson, location: item.location, txId: tx._id.toString() },
+    meta: { before, after: accountablePerson, txId: tx._id.toString() },
   });
 
   res.json(item);

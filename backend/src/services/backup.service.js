@@ -22,7 +22,6 @@ async function writeBackupXlsx(filepath) {
   const ws1 = wb.addWorksheet("Items");
   ws1.columns = [
     { header: "itemType", key: "itemType", width: 10 },
-    { header: "sku", key: "sku", width: 14 },
     { header: "name", key: "name", width: 28 },
     { header: "category", key: "category", width: 18 },
     { header: "unit", key: "unit", width: 10 },
@@ -30,7 +29,7 @@ async function writeBackupXlsx(filepath) {
     { header: "reorderLevel", key: "reorderLevel", width: 12 },
     { header: "propertyNumber", key: "propertyNumber", width: 18 },
     { header: "serialNumber", key: "serialNumber", width: 18 },
-    { header: "location", key: "location", width: 22 },
+    { header: "division", key: "division", width: 22 },
     { header: "status", key: "status", width: 12 },
     { header: "condition", key: "condition", width: 12 },
     { header: "dateAcquired", key: "dateAcquired", width: 14 },
@@ -41,7 +40,6 @@ async function writeBackupXlsx(filepath) {
   ];
   items.forEach((it) => ws1.addRow({
     itemType: it.itemType,
-    sku: it.sku,
     name: it.name,
     category: it.category,
     unit: it.unit,
@@ -49,7 +47,7 @@ async function writeBackupXlsx(filepath) {
     reorderLevel: it.reorderLevel,
     propertyNumber: it.propertyNumber || "",
     serialNumber: it.serialNumber || "",
-    location: it.location || "",
+    division: it.division || "",
     status: it.status || "",
     condition: it.condition || "",
     dateAcquired: it.dateAcquired ? it.dateAcquired.toISOString().slice(0,10) : "",

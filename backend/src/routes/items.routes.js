@@ -26,7 +26,6 @@ const accountableSchema = z.object({
 const itemSchemaShape = z.object({
   itemType: z.enum(["SUPPLY", "ASSET"]),
 
-  sku: z.string().min(2).max(40).transform(s => s.toUpperCase().trim()),
   name: z.string().min(2).max(200),
   category: z.string().max(120).optional().default("General"),
   unit: z.string().max(30).optional().default("pc"),
@@ -45,13 +44,15 @@ const itemSchemaShape = z.object({
   serialNumber: z.string().max(120).optional().nullable().default(null),
   brand: z.string().max(120).optional().default(""),
   model: z.string().max(120).optional().default(""),
-  location: z.string().max(200).optional().default(""),
+  division: z.string().max(200).optional().default(""),
 
   accountablePerson: z.object({
     name: z.string().max(200).optional().default(""),
     position: z.string().max(200).optional().default(""),
     office: z.string().max(200).optional().default("CPDC"),
   }).optional().default({}),
+
+  transferredTo: z.string().max(200).optional().default(""),
 
   status: z.enum(["IN_STOCK", "DEPLOYED", "FOR_REPAIR", "DISPOSED", "LOST"])
     .optional()
@@ -88,7 +89,7 @@ const itemUpdateSchema = itemSchemaShape.partial();
 
 const assignSchema = z.object({
   accountablePerson: accountableSchema,
-  location: z.string().max(200).optional().default(""),
+  division: z.string().max(200).optional().default(""),
   remarks: z.string().max(1000).optional().default(""),
   assignedDate: z.string().datetime().optional().nullable().default(null),
 });
@@ -100,7 +101,7 @@ const returnSchema = z.object({
 
 const transferSchema = z.object({
   accountablePerson: accountableSchema,
-  location: z.string().max(200).optional().default(""),
+  division: z.string().max(200).optional().default(""),
   remarks: z.string().max(1000).optional().default(""),
 });
 

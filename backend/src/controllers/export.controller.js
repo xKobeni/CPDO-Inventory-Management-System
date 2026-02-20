@@ -19,7 +19,6 @@ export async function exportItemsXlsx(req, res) {
 
   ws.columns = [
     { header: "Item Type", key: "itemType", width: 10 },
-    { header: "SKU", key: "sku", width: 14 },
     { header: "Name", key: "name", width: 28 },
     { header: "Category", key: "category", width: 18 },
     { header: "Unit", key: "unit", width: 10 },
@@ -35,7 +34,7 @@ export async function exportItemsXlsx(req, res) {
     { header: "Date Acquired", key: "dateAcquired", width: 14 },
     { header: "Unit Cost", key: "unitCost", width: 12 },
 
-    { header: "Location", key: "location", width: 22 },
+    { header: "Division", key: "division", width: 22 },
     { header: "Accountable Name", key: "accName", width: 18 },
     { header: "Accountable Position", key: "accPos", width: 18 },
     { header: "Accountable Office", key: "accOffice", width: 14 },
@@ -51,7 +50,6 @@ export async function exportItemsXlsx(req, res) {
   items.forEach((it) => {
     ws.addRow({
       itemType: it.itemType,
-      sku: it.sku,
       name: it.name,
       category: it.category,
       unit: it.unit,
@@ -67,7 +65,7 @@ export async function exportItemsXlsx(req, res) {
       dateAcquired: dateOnly(it.dateAcquired),
       unitCost: it.unitCost ?? 0,
 
-      location: it.location || "",
+      division: it.division || "",
       accName: it.accountablePerson?.name || "",
       accPos: it.accountablePerson?.position || "",
       accOffice: it.accountablePerson?.office || "",
@@ -93,7 +91,6 @@ export async function exportItemsCsv(req, res) {
 
   const rows = items.map((it) => ({
     itemType: it.itemType,
-    sku: it.sku,
     name: it.name,
     category: it.category,
     unit: it.unit,
@@ -105,7 +102,7 @@ export async function exportItemsCsv(req, res) {
     model: it.model || "",
     dateAcquired: dateOnly(it.dateAcquired),
     unitCost: it.unitCost ?? 0,
-    location: it.location || "",
+    division: it.division || "",
     accountableName: it.accountablePerson?.name || "",
     accountablePosition: it.accountablePerson?.position || "",
     accountableOffice: it.accountablePerson?.office || "",
@@ -116,7 +113,7 @@ export async function exportItemsCsv(req, res) {
     updatedAt: it.updatedAt?.toISOString?.() || "",
   }));
 
-  const fields = Object.keys(rows[0] || { sku: "" });
+  const fields = Object.keys(rows[0] || { name: "" });
   const parser = new Json2CsvParser({ fields });
   const csv = parser.parse(rows);
 
@@ -138,7 +135,7 @@ export async function exportTransactionsXlsx(req, res) {
 
   const txs = await Transaction.find(filter)
     .populate("createdBy", "name role")
-    .populate("items.itemId", "sku name unit category itemType propertyNumber")
+    .populate("items.itemId", "name unit category itemType propertyNumber")
     .sort({ createdAt: -1 })
     .limit(5000);
 
@@ -163,7 +160,7 @@ export async function exportTransactionsXlsx(req, res) {
         const it = x.itemId;
         if (!it) return "";
         const tag = it.itemType === "ASSET" ? (it.propertyNumber ? `(${it.propertyNumber})` : "") : "";
-        return `${it.sku} ${tag} - ${it.name} x${x.qty}`;
+        return `${tag ? tag + " " : ""}${it.name} x${x.qty}`;
       })
       .filter(Boolean)
       .join(" | ");

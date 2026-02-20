@@ -38,7 +38,7 @@ export async function getDashboardSummary(req, res) {
       reorderLevel: { $gt: 0 },
       $expr: { $lte: ["$quantityOnHand", "$reorderLevel"] },
     })
-      .select("sku name category unit quantityOnHand reorderLevel updatedAt")
+      .select("name category unit quantityOnHand reorderLevel updatedAt")
       .sort({ quantityOnHand: 1, updatedAt: -1 })
       .limit(8),
   ]);
@@ -73,7 +73,7 @@ export async function getDashboardSummary(req, res) {
     Transaction.countDocuments({ createdAt: { $gte: startOfMonth } }),
     Transaction.find({})
       .populate("createdBy", "name role")
-      .populate("items.itemId", "sku name unit category itemType propertyNumber")
+      .populate("items.itemId", "name unit category itemType propertyNumber")
       .sort({ createdAt: -1 })
       .limit(10),
   ]);
@@ -178,14 +178,14 @@ export async function getItemHistory(req, res) {
   }
 
   const item = await Item.findById(id).select(
-    "sku name itemType category unit propertyNumber serialNumber location status condition accountablePerson dateAcquired unitCost isArchived"
+    "name itemType category unit propertyNumber serialNumber division status condition accountablePerson dateAcquired unitCost isArchived"
   );
   if (!item) return res.status(404).json({ message: "Item not found" });
 
   // Transactions that include this item
   const txs = await Transaction.find({ "items.itemId": id })
     .populate("createdBy", "name role")
-    .populate("items.itemId", "sku name unit category itemType propertyNumber")
+    .populate("items.itemId", "name unit category itemType propertyNumber")
     .sort({ createdAt: -1 })
     .limit(200);
 
@@ -210,7 +210,6 @@ export async function getItemHistory(req, res) {
           .filter((x) => x.itemId && x.itemId._id.toString() === id)
           .map((x) => ({
             itemId: x.itemId._id,
-            sku: x.itemId.sku,
             name: x.itemId.name,
             qty: x.qty,
             unit: x.itemId.unit,
