@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useCallback } from "react"
+import { createContext, useContext, useState, useCallback, useEffect } from "react"
 import { Pill, Box, Monitor, FlaskConical, Stethoscope, Car, Laptop } from "lucide-react"
+import { dashboardService } from "@/services"
 
 const ICON_MAP = {
   Pill,
@@ -11,48 +12,75 @@ const ICON_MAP = {
   Laptop,
 }
 
-const INITIAL_CATEGORIES = [
-  { id: "1", name: "Printer", slug: "printer", iconName: "Laptop", itemType: "ASSET" },
-  { id: "2", name: "Drugs", slug: "drugs", iconName: "Pill", itemType: "SUPPLY" },
-  { id: "3", name: "Furniture & Fixtures", slug: "furniture-fixtures", iconName: "Box", itemType: "ASSET" },
-  { id: "4", name: "ICT Equipment", slug: "ict-equipment", iconName: "Monitor", itemType: "ASSET" },
-  { id: "5", name: "Laboratory Equipment", slug: "laboratory-equipment", iconName: "FlaskConical", itemType: "ASSET" },
-  { id: "6", name: "Medical Supplies", slug: "medical-supplies", iconName: "Stethoscope", itemType: "SUPPLY" },
-  { id: "7", name: "Motor Vehicles", slug: "motor-vehicles", iconName: "Car", itemType: "ASSET" },
-  { id: "8", name: "Office Equipment", slug: "office-equipment", iconName: "Laptop", itemType: "ASSET" },
-]
+/** URL-friendly slug from category name (must match backend item category strings). */
+export function slugFromName(name) {
+  if (!name || typeof name !== "string") return ""
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+}
+
+/** Optional: map known category slugs to icon names for nicer UI. */
+const SLUG_TO_ICON = {
+  printer: "Laptop",
+  drugs: "Pill",
+  "furniture-fixtures": "Box",
+  "ict-equipment": "Monitor",
+  "laboratory-equipment": "FlaskConical",
+  "medical-supplies": "Stethoscope",
+  "motor-vehicles": "Car",
+  "office-equipment": "Laptop",
+  general: "Box",
+}
 
 const CategoriesContext = createContext(null)
 
 export function CategoriesProvider({ children }) {
-  const [categories, setCategories] = useState(INITIAL_CATEGORIES)
+  const [categories, setCategories] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
-  const addCategory = useCallback(({ name, slug, iconName = "Box", itemType = "SUPPLY" }) => {
-    const id = String(Date.now())
-    setCategories((prev) => [
-      ...prev,
-      { id, name, slug: slug || name.toLowerCase().replace(/\s+/g, "-"), iconName, itemType: itemType || "SUPPLY" },
-    ])
-  }, [])
-
-  const updateCategory = useCallback((id, { name, slug, iconName, itemType }) => {
-    setCategories((prev) =>
-      prev.map((c) =>
-        c.id === id
-          ? {
-              ...c,
-              ...(name != null && name !== "" && { name }),
-              ...(slug != null && { slug }),
-              ...(iconName && { iconName }),
-              ...(itemType && { itemType }),
-            }
-          : c
-      )
-    )
-  }, [])
-
-  const deleteCategory = useCallback((id) => {
-    setCategories((prev) => prev.filter((c) => c.id !== id))
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    dashboardService
+      .getCategories()
+      .then((data) => {
+        if (cancelled) return
+        const all = data?.all ?? []
+        const list = all.map((entry) => {
+          const name = entry.category ?? "General"
+          const slug = slugFromName(name)
+          const types = entry.types ?? []
+          const itemType = types.includes("ASSET") && types.includes("SUPPLY")
+            ? "ASSET"
+            : types[0] === "ASSET"
+              ? "ASSET"
+              : "SUPPLY"
+          const iconName = SLUG_TO_ICON[slug] ?? "Box"
+          return {
+            id: slug,
+            name,
+            slug,
+            iconName,
+            itemType,
+            count: entry.count ?? 0,
+          }
+        })
+        setCategories(list)
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err?.response?.data?.message ?? err?.message ?? "Failed to load categories")
+          setCategories([])
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
   }, [])
 
   const getCategoriesWithIcons = useCallback(() => {
@@ -70,13 +98,48 @@ export function CategoriesProvider({ children }) {
     [categories]
   )
 
+  const refreshCategories = useCallback(() => {
+    setLoading(true)
+    setError(null)
+    dashboardService
+      .getCategories()
+      .then((data) => {
+        const all = data?.all ?? []
+        const list = all.map((entry) => {
+          const name = entry.category ?? "General"
+          const slug = slugFromName(name)
+          const types = entry.types ?? []
+          const itemType = types.includes("ASSET") && types.includes("SUPPLY")
+            ? "ASSET"
+            : types[0] === "ASSET"
+              ? "ASSET"
+              : "SUPPLY"
+          const iconName = SLUG_TO_ICON[slug] ?? "Box"
+          return {
+            id: slug,
+            name,
+            slug,
+            iconName,
+            itemType,
+            count: entry.count ?? 0,
+          }
+        })
+        setCategories(list)
+      })
+      .catch((err) => {
+        setError(err?.response?.data?.message ?? err?.message ?? "Failed to load categories")
+        setCategories([])
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
   return (
     <CategoriesContext.Provider
       value={{
         categories,
-        addCategory,
-        updateCategory,
-        deleteCategory,
+        loading,
+        error,
+        refreshCategories,
         getCategoriesWithIcons,
         getCategoryBySlug,
         ICON_MAP,

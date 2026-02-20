@@ -1,12 +1,21 @@
+import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
 import { Package, ArrowDownToLine, ArrowUpFromLine, ClipboardList } from "lucide-react"
 
 import { SectionCards } from "@/components/section-cards"
 import { ChartAreaInteractive } from "@/components/chart-area-interactive"
-import { DataTable } from "@/components/data-table"
-import dashboardData from "@/app/dashboard/data.json"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { dashboardService } from "@/services"
+import { getErrorMessage } from "@/utils/api"
 
 function QuickAction({ to, title, description, icon }) {
   const Icon = icon
@@ -31,6 +40,30 @@ function QuickAction({ to, title, description, icon }) {
 }
 
 export default function DashboardHome() {
+  const [summary, setSummary] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    dashboardService
+      .getSummary()
+      .then((data) => {
+        if (!cancelled) setSummary(data)
+      })
+      .catch((err) => {
+        if (!cancelled) setError(getErrorMessage(err))
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [])
+
+  const recentTransactions = summary?.previews?.recentTransactions ?? []
+
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -51,8 +84,14 @@ export default function DashboardHome() {
         </div>
       </div>
 
+      {error && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          {error}
+        </div>
+      )}
+
       <section className="@container/main rounded-xl border bg-white py-2">
-        <SectionCards />
+        <SectionCards kpis={summary?.kpis} />
       </section>
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-12">
@@ -75,8 +114,8 @@ export default function DashboardHome() {
           />
           <QuickAction
             to="/issuance"
-            title="Issuance"
-            description="Issue items to personnel"
+            title="Asset Assignment"
+            description="Assign assets to personnel"
             icon={ClipboardList}
           />
           <QuickAction
@@ -91,9 +130,44 @@ export default function DashboardHome() {
       <section className="overflow-hidden rounded-xl border bg-white">
         <div className="border-b px-4 py-3 lg:px-6">
           <h2 className="text-sm font-semibold text-zinc-900">Recent activity</h2>
-          <p className="text-xs text-muted-foreground">Latest updates and entries (sample data for now).</p>
+          <p className="text-xs text-muted-foreground">
+            Latest transactions from the API{loading ? " (loading…)" : ""}.
+          </p>
         </div>
-        <DataTable data={dashboardData} />
+        {loading ? (
+          <div className="px-4 py-8 text-center text-sm text-muted-foreground">Loading…</div>
+        ) : recentTransactions.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-muted-foreground">No recent transactions.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>By</TableHead>
+                  <TableHead>Details</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recentTransactions.map((tx) => (
+                  <TableRow key={tx._id}>
+                    <TableCell className="font-medium">{tx.type}</TableCell>
+                    <TableCell className="tabular-nums">
+                      {tx.createdAt ? new Date(tx.createdAt).toLocaleString() : "—"}
+                    </TableCell>
+                    <TableCell>{tx.createdBy?.name ?? "—"}</TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      {tx.items?.length
+                        ? tx.items.map((i) => `${i.qty}× ${i.itemId?.name ?? i.itemId ?? "—"}`).join(", ")
+                        : "—"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </section>
     </div>
   )

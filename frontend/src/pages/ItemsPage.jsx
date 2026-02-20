@@ -16,13 +16,12 @@ import {
 import { useCategories } from "@/contexts/CategoriesContext"
 
 export default function ItemsPage() {
-  const { getCategoriesWithIcons } = useCategories()
+  const { getCategoriesWithIcons, loading, error } = useCategories()
   const allManagedCategories = getCategoriesWithIcons()
 
   const [filterType, setFilterType] = useState(null) // null, "SUPPLY", or "ASSET"
   const [searchQuery, setSearchQuery] = useState("")
 
-  // Show categories from Manage Categories, filtered by type and search
   const displayedCategories = allManagedCategories
     .filter((cat) => {
       if (filterType === "SUPPLY") return (cat.itemType || "SUPPLY") === "SUPPLY"
@@ -72,6 +71,12 @@ export default function ItemsPage() {
         </div>
       </div>
 
+      {error && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          {error}
+        </div>
+      )}
+
       <section className="overflow-hidden rounded-xl border bg-white">
         <div className="flex flex-col gap-4 border-b px-4 py-3 lg:px-6 md:flex-row md:items-center md:justify-between">
           <div className="relative max-w-sm flex-1">
@@ -106,9 +111,18 @@ export default function ItemsPage() {
           </div>
         </div>
         <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 lg:p-6">
-          {displayedCategories.length === 0 ? (
+          {loading ? (
             <div className="col-span-full py-8 text-center text-sm text-muted-foreground">
-              No categories found{filterType ? ` for ${filterType === "SUPPLY" ? "Supply" : "Asset/Property"}` : ""}. Add categories in Manage Categories.
+              Loading categories…
+            </div>
+          ) : displayedCategories.length === 0 ? (
+            <div className="col-span-full flex flex-col items-center justify-center gap-4 py-12">
+              <p className="text-center text-sm text-muted-foreground">
+                No categories yet{filterType ? ` for ${filterType === "SUPPLY" ? "Supply" : "Asset/Property"}` : ""}. Categories are created when you add items.
+              </p>
+              <Button asChild>
+                <Link to="/items/category/general">Add your first item</Link>
+              </Button>
             </div>
           ) : (
             displayedCategories.map((category) => {

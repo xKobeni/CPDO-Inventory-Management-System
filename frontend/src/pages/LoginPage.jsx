@@ -1,8 +1,9 @@
 import { useState } from "react"
 import { useNavigate, useLocation, Navigate } from "react-router-dom"
 import { LoginForm } from "@/components/login-form"
-import { getToken, setAuth } from "@/lib/auth"
-import { http } from "@/lib/http"
+import { getToken } from "@/lib/auth"
+import { authService } from "@/services"
+import { getErrorMessage } from "@/utils/api"
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -20,13 +21,10 @@ export default function LoginPage() {
     setError(null)
     setIsLoading(true)
     try {
-      const { data } = await http.post("/auth/login", { email, password })
-      const user = data.user ? { ...data.user, role: (data.user.role || "").toLowerCase() } : data.user
-      setAuth({ token: data.accessToken, user })
+      await authService.login({ email, password })
       navigate(from, { replace: true })
     } catch (err) {
-      const message = err?.response?.data?.message || err?.message || "Login failed."
-      setError(message)
+      setError(getErrorMessage(err))
     } finally {
       setIsLoading(false)
     }

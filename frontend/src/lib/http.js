@@ -54,7 +54,7 @@ http.interceptors.response.use(
       try {
         // Attempt to refresh the token
         const { data } = await axios.post(
-          `${import.meta.env.VITE_API_BASE_URL}/api/auth/refresh`,
+          `${import.meta.env.VITE_API_BASE_URL}/auth/refresh`,
           {},
           { withCredentials: true }
         )

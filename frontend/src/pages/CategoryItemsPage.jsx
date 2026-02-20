@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useId } from "react"
+import React, { useState, useEffect, useId, useCallback, useMemo } from "react"
 import { useParams, Link } from "react-router-dom"
-import { Search, RefreshCw, Plus } from "lucide-react"
+import { Search, RefreshCw, Plus, ChevronLeft, ChevronRight } from "lucide-react"
 import { IconDotsVertical, IconGripVertical, IconCircleCheckFilled, IconAlertCircle, IconLayoutColumns, IconChevronDown } from "@tabler/icons-react"
 import {
   DndContext,
@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import {
@@ -73,14 +74,158 @@ import { Separator } from "@/components/ui/separator"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useCategories } from "@/contexts/CategoriesContext"
+import { itemsService } from "@/services"
+import { getErrorMessage } from "@/utils/api"
+import { toast } from "sonner"
 
 const UNIT_OPTIONS = ["pcs", "boxes", "units", "sets"]
+
+const STATUS_OPTIONS = [
+  { value: "IN_STOCK", label: "In Stock" },
+  { value: "DEPLOYED", label: "Deployed" },
+  { value: "FOR_REPAIR", label: "For Repair" },
+  { value: "DISPOSED", label: "Disposed" },
+  { value: "LOST", label: "Lost" },
+]
+const STATUS_FILTER_OPTIONS = [
+  { value: "", label: "All statuses" },
+  ...STATUS_OPTIONS,
+  { value: "LOW_STOCK", label: "Low stock" },
+]
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
+const CONDITION_OPTIONS = [
+  { value: "NEW", label: "New" },
+  { value: "GOOD", label: "Good" },
+  { value: "FAIR", label: "Fair" },
+  { value: "POOR", label: "Poor" },
+  { value: "DAMAGED", label: "Damaged" },
+]
+
+const defaultAccountablePerson = () => ({ name: "", position: "", office: "CPDC" })
+
+function getEmptyForm(isSupply, categoryName = "General") {
+  const base = {
+    itemType: isSupply ? "SUPPLY" : "ASSET",
+    name: "",
+    category: categoryName,
+    unit: "pc",
+    dateAcquired: "",
+    unitCost: "",
+    remarks: "",
+    accountablePerson: defaultAccountablePerson(),
+    transferredTo: "",
+  }
+  if (isSupply) {
+    return {
+      ...base,
+      quantityOnHand: "",
+      reorderLevel: "",
+      serialNumber: "",
+    }
+  }
+  return {
+    ...base,
+    propertyNumber: "",
+    serialNumber: "",
+    brand: "",
+    model: "",
+    division: "",
+    status: "IN_STOCK",
+    condition: "GOOD",
+  }
+}
+
+function formToItem(form, isSupply, newId) {
+  const acc = form.accountablePerson || defaultAccountablePerson()
+  const dateAcquired = form.dateAcquired ? new Date(form.dateAcquired).toISOString() : null
+  const unitCost = Number(form.unitCost) || 0
+  if (isSupply) {
+    const qty = parseInt(form.quantityOnHand, 10) || 0
+    const reorder = parseInt(form.reorderLevel, 10) || 0
+    return {
+      id: newId,
+      itemType: "SUPPLY",
+      name: form.name.trim(),
+      category: form.category?.trim() || "General",
+      unit: form.unit || "pc",
+      dateAcquired,
+      unitCost,
+      remarks: (form.remarks || "").trim(),
+      quantityOnHand: qty,
+      reorderLevel: reorder,
+      status: qty <= reorder && reorder > 0 ? "Low Stock" : "IN_STOCK",
+      condition: "GOOD",
+      accountablePerson: { ...acc },
+      division: "",
+      propertyNumber: null,
+      serialNumber: form.serialNumber?.trim() || null,
+    }
+  }
+  return {
+    id: newId,
+    itemType: "ASSET",
+    name: form.name.trim(),
+    category: form.category?.trim() || "General",
+    unit: form.unit || "pc",
+    dateAcquired,
+    unitCost,
+    remarks: (form.remarks || "").trim(),
+    propertyNumber: (form.propertyNumber || "").trim() || null,
+    serialNumber: (form.serialNumber || "").trim() || null,
+    brand: (form.brand || "").trim(),
+    model: (form.model || "").trim(),
+    division: (form.division || "").trim(),
+    status: form.status || "IN_STOCK",
+    condition: form.condition || "GOOD",
+    accountablePerson: { ...acc },
+    quantityOnHand: 1,
+    reorderLevel: 0,
+  }
+}
+
+function itemToForm(item, isSupply) {
+  const acc = item.accountablePerson || defaultAccountablePerson()
+  const dateAcquired = item.dateAcquired
+    ? (typeof item.dateAcquired === "string" ? item.dateAcquired : new Date(item.dateAcquired).toISOString()).slice(0, 10)
+    : ""
+  const base = {
+    itemType: item.itemType || (isSupply ? "SUPPLY" : "ASSET"),
+    name: item.name ?? "",
+    category: item.category ?? "General",
+    unit: item.unit ?? "pc",
+    dateAcquired,
+    unitCost: item.unitCost != null ? String(item.unitCost) : "",
+    remarks: item.remarks ?? "",
+    accountablePerson: { ...acc },
+    transferredTo: item.transferredTo ?? "",
+  }
+  if (isSupply) {
+    return {
+      ...base,
+      quantityOnHand: item.quantityOnHand != null && item.quantityOnHand !== "" ? String(item.quantityOnHand) : "0",
+      reorderLevel: item.reorderLevel != null && item.reorderLevel !== "" ? String(item.reorderLevel) : "0",
+      serialNumber: item.serialNumber ?? "",
+    }
+  }
+  return {
+    ...base,
+    propertyNumber: item.propertyNumber ?? "",
+    serialNumber: item.serialNumber ?? "",
+    brand: item.brand ?? "",
+    model: item.model ?? "",
+    division: item.division ?? "",
+    status: item.status ?? "IN_STOCK",
+    condition: item.condition ?? "GOOD",
+  }
+}
 
 // Column config for Customize Columns (toggleable data columns; drag, actions always shown)
 const SUPPLY_COLUMNS = [
   { id: "propertyNo", label: "Property No." },
   { id: "name", label: "Name" },
   { id: "category", label: "Category" },
+  { id: "quantity", label: "Quantity" },
+  { id: "unit", label: "Unit" },
   { id: "serialNo", label: "Serial No." },
   { id: "status", label: "Status" },
   { id: "condition", label: "Condition" },
@@ -98,7 +243,7 @@ const ASSET_COLUMNS = [
   { id: "accountability", label: "Accountability" },
   { id: "remarks", label: "Remarks" },
 ]
-const SUPPLY_COL_ORDER = ["drag", "propertyNo", "name", "category", "serialNo", "status", "condition", "accountablePerson", "dateAcquired", "actions"]
+const SUPPLY_COL_ORDER = ["drag", "propertyNo", "name", "category", "quantity", "unit", "serialNo", "status", "condition", "accountablePerson", "dateAcquired", "actions"]
 const ASSET_COL_ORDER = ["drag", "name", "category", "propertyNo", "serialNo", "details", "status", "condition", "accountability", "remarks", "actions"]
 const FIXED_COLUMNS = new Set(["drag", "actions"])
 const isColVisible = (id, visibility) => FIXED_COLUMNS.has(id) || visibility[id] === true
@@ -110,6 +255,8 @@ const COLUMN_WIDTHS = {
   propertyNo: "6rem",
   name: "auto",
   category: "6rem",
+  quantity: "5rem",
+  unit: "4rem",
   serialNo: "6rem",
   status: "7rem",
   condition: "6rem",
@@ -125,6 +272,8 @@ const COLUMN_ALIGNMENT = {
   propertyNo: "text-left",
   name: "text-left",
   category: "text-left",
+  quantity: "text-right tabular-nums",
+  unit: "text-left",
   serialNo: "text-left",
   status: "text-center",
   condition: "text-center",
@@ -160,7 +309,7 @@ function StatusBadge({ status }) {
   )
 }
 
-function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, columnVisibility, onRowClick }) {
+function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, onArchive, columnVisibility, onRowClick }) {
   const { attributes, listeners, transform, transition, setNodeRef, isDragging } = useSortable({ id: item.id })
   const nodeRef = React.useRef(null)
   React.useLayoutEffect(() => {
@@ -196,6 +345,18 @@ function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, columnVisib
       case "category":
         return (
           <TableCell key={id} className={`px-3 py-2 truncate ${getColAlignment(id)}`}>{item.category ?? "—"}</TableCell>
+        )
+      case "quantity":
+        return (
+          <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>
+            {item.itemType === "SUPPLY"
+              ? (Number(item.quantityOnHand) || 0).toLocaleString()
+              : "1"}
+          </TableCell>
+        )
+      case "unit":
+        return (
+          <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>{item.unit?.trim() || "pc"}</TableCell>
         )
       case "serialNo":
         return (
@@ -244,7 +405,7 @@ function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, columnVisib
                 <DropdownMenuItem>Return</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => openEdit(item)}>Edit</DropdownMenuItem>
-                <DropdownMenuItem variant="destructive">Delete</DropdownMenuItem>
+                <DropdownMenuItem variant="destructive" onClick={() => onArchive?.(item)}>Archive</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </TableCell>
@@ -271,7 +432,7 @@ function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, columnVisib
   )
 }
 
-function SortableRowAsset({ item, selectedIds, toggleRow, openEdit, columnVisibility, onRowClick }) {
+function SortableRowAsset({ item, selectedIds, toggleRow, openEdit, onArchive, columnVisibility, onRowClick }) {
   const { attributes, listeners, transform, transition, setNodeRef, isDragging } = useSortable({ id: item.id })
   const nodeRef = React.useRef(null)
   React.useLayoutEffect(() => {
@@ -373,7 +534,7 @@ function SortableRowAsset({ item, selectedIds, toggleRow, openEdit, columnVisibi
                 <DropdownMenuItem>Return</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => openEdit(item)}>Edit</DropdownMenuItem>
-                <DropdownMenuItem variant="destructive">Delete</DropdownMenuItem>
+                <DropdownMenuItem variant="destructive" onClick={() => onArchive?.(item)}>Archive</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </TableCell>
@@ -410,18 +571,17 @@ function supplyItem(id, name, category, extra = {}) {
     serialNumber: extra.serialNumber ?? null,
     status: extra.status ?? "IN_STOCK",
     condition: extra.condition ?? "GOOD",
-    location: extra.location ?? "",
+    division: extra.division ?? "",
     accountablePerson: extra.accountablePerson ?? {},
     dateAcquired: extra.dateAcquired ?? null,
     ...extra,
   }
 }
 
-// Helper to build asset item (Identification, SKU, Details, Accountability, etc.)
+// Helper to build asset item (Identification, Details, Accountability, etc.)
 function assetItem(id, name, category, extra = {}) {
   return {
     id,
-    sku: extra.sku ?? id,
     name,
     category: category ?? "General",
     propertyNumber: extra.propertyNumber ?? id,
@@ -430,7 +590,7 @@ function assetItem(id, name, category, extra = {}) {
     model: extra.model ?? "",
     unitCost: extra.unitCost ?? 0,
     dateAcquired: extra.dateAcquired ?? null,
-    location: extra.location ?? "",
+    division: extra.division ?? "",
     status: extra.status ?? "IN_STOCK",
     condition: extra.condition ?? "GOOD",
     accountablePerson: extra.accountablePerson ?? {},
@@ -443,64 +603,113 @@ function assetItem(id, name, category, extra = {}) {
 const _acc = (name, position, office) => ({ name, position, office: office ?? "CPDC" })
 const SAMPLE_ITEMS = {
   printer: [
-    assetItem("P001", "HP LaserJet Pro", "Printer", { sku: "PRN-001", propertyNumber: "PROP-P001", serialNumber: "SN-HP001", brand: "HP", model: "LaserJet Pro", unitCost: 12000, location: "IT Office", accountablePerson: _acc("Juan Dela Cruz", "IT Officer") }),
-    assetItem("P002", "Canon PIXMA Inkjet", "Printer", { sku: "PRN-002", propertyNumber: "PROP-P002", brand: "Canon", model: "PIXMA", unitCost: 8500 }),
-    assetItem("P003", "Epson EcoTank", "Printer", { sku: "PRN-003", propertyNumber: "PROP-P003", status: "FOR_REPAIR", condition: "FAIR" }),
+    assetItem("P001", "HP LaserJet Pro", "Printer", { propertyNumber: "PROP-P001", serialNumber: "SN-HP001", brand: "HP", model: "LaserJet Pro", unitCost: 12000, division: "IT Office", accountablePerson: _acc("Juan Dela Cruz", "IT Officer") }),
+    assetItem("P002", "Canon PIXMA Inkjet", "Printer", { propertyNumber: "PROP-P002", brand: "Canon", model: "PIXMA", unitCost: 8500 }),
+    assetItem("P003", "Epson EcoTank", "Printer", { propertyNumber: "PROP-P003", status: "FOR_REPAIR", condition: "FAIR" }),
   ],
   drugs: [
-    supplyItem("D001", "Paracetamol 500mg", "Drugs", { serialNumber: "DRG-001", status: "IN_STOCK", location: "Pharmacy", dateAcquired: "2024-01-15" }),
-    supplyItem("D002", "Ibuprofen 200mg", "Drugs", { serialNumber: "DRG-002", status: "IN_STOCK", location: "Pharmacy", accountablePerson: _acc("Maria Santos") }),
+    supplyItem("D001", "Paracetamol 500mg", "Drugs", { serialNumber: "DRG-001", status: "IN_STOCK", division: "Pharmacy", dateAcquired: "2024-01-15" }),
+    supplyItem("D002", "Ibuprofen 200mg", "Drugs", { serialNumber: "DRG-002", status: "IN_STOCK", division: "Pharmacy", accountablePerson: _acc("Maria Santos") }),
   ],
   "furniture-fixtures": [
-    assetItem("F001", "Office Chair", "Furniture & Fixtures", { sku: "FUR-001", propertyNumber: "PROP-F001", brand: "Office Pro", unitCost: 4500, location: "Admin" }),
-    assetItem("F002", "Conference Table", "Furniture & Fixtures", { sku: "FUR-002", propertyNumber: "PROP-F002", unitCost: 25000 }),
-    assetItem("F003", "Filing Cabinet", "Furniture & Fixtures", { sku: "FUR-003", propertyNumber: "PROP-F003", condition: "FAIR", remarks: "Needs repair" }),
+    assetItem("F001", "Office Chair", "Furniture & Fixtures", { propertyNumber: "PROP-F001", brand: "Office Pro", unitCost: 4500, division: "Admin" }),
+    assetItem("F002", "Conference Table", "Furniture & Fixtures", { propertyNumber: "PROP-F002", unitCost: 25000 }),
+    assetItem("F003", "Filing Cabinet", "Furniture & Fixtures", { propertyNumber: "PROP-F003", condition: "FAIR", remarks: "Needs repair" }),
   ],
   "ict-equipment": [
-    assetItem("I001", "Dell OptiPlex Desktop", "ICT Equipment", { sku: "ICT-001", propertyNumber: "PROP-I001", serialNumber: "DL-OP001", brand: "Dell", model: "OptiPlex", unitCost: 35000, location: "IT Room" }),
-    assetItem("I002", "Dell Monitor 24\"", "ICT Equipment", { sku: "ICT-002", propertyNumber: "PROP-I002", brand: "Dell", unitCost: 12000 }),
-    assetItem("I003", "Laptop - Dell Inspiron", "ICT Equipment", { sku: "ICT-003", propertyNumber: "PROP-I003", status: "DEPLOYED", accountablePerson: _acc("Ana Reyes", "Staff") }),
+    assetItem("I001", "Dell OptiPlex Desktop", "ICT Equipment", { propertyNumber: "PROP-I001", serialNumber: "DL-OP001", brand: "Dell", model: "OptiPlex", unitCost: 35000, division: "IT Room" }),
+    assetItem("I002", "Dell Monitor 24\"", "ICT Equipment", { propertyNumber: "PROP-I002", brand: "Dell", unitCost: 12000 }),
+    assetItem("I003", "Laptop - Dell Inspiron", "ICT Equipment", { propertyNumber: "PROP-I003", status: "DEPLOYED", accountablePerson: _acc("Ana Reyes", "Staff") }),
   ],
   "laboratory-equipment": [
-    assetItem("L001", "Centrifuge Machine", "Laboratory Equipment", { sku: "LAB-001", propertyNumber: "PROP-L001", brand: "Eppendorf", unitCost: 180000 }),
-    assetItem("L002", "Microscope", "Laboratory Equipment", { sku: "LAB-002", propertyNumber: "PROP-L002", location: "Lab 1" }),
+    assetItem("L001", "Centrifuge Machine", "Laboratory Equipment", { propertyNumber: "PROP-L001", brand: "Eppendorf", unitCost: 180000 }),
+    assetItem("L002", "Microscope", "Laboratory Equipment", { propertyNumber: "PROP-L002", division: "Lab 1" }),
   ],
   "medical-supplies": [
-    supplyItem("M001", "Surgical Gloves", "Medical Supplies", { propertyNumber: "M-SG-001", status: "IN_STOCK", location: "Storage A", dateAcquired: "2024-06-01" }),
-    supplyItem("M002", "Face Masks", "Medical Supplies", { status: "IN_STOCK", location: "Storage A" }),
+    supplyItem("M001", "Surgical Gloves", "Medical Supplies", { propertyNumber: "M-SG-001", status: "IN_STOCK", division: "Storage A", dateAcquired: "2024-06-01" }),
+    supplyItem("M002", "Face Masks", "Medical Supplies", { status: "IN_STOCK", division: "Storage A" }),
     supplyItem("M003", "Bandages", "Medical Supplies", { status: "IN_STOCK", condition: "GOOD", accountablePerson: _acc("Nurse Cruz") }),
   ],
   "motor-vehicles": [
-    assetItem("V001", "Toyota Hilux", "Motor Vehicles", { sku: "VH-001", propertyNumber: "PROP-V001", serialNumber: "CHASSIS-XXX", brand: "Toyota", model: "Hilux", unitCost: 1200000, status: "DEPLOYED", accountablePerson: _acc("Driver Lopez", "Driver") }),
-    assetItem("V002", "Honda City", "Motor Vehicles", { sku: "VH-002", propertyNumber: "PROP-V002", brand: "Honda", model: "City", unitCost: 850000 }),
+    assetItem("V001", "Toyota Hilux", "Motor Vehicles", { propertyNumber: "PROP-V001", serialNumber: "CHASSIS-XXX", brand: "Toyota", model: "Hilux", unitCost: 1200000, status: "DEPLOYED", accountablePerson: _acc("Driver Lopez", "Driver") }),
+    assetItem("V002", "Honda City", "Motor Vehicles", { propertyNumber: "PROP-V002", brand: "Honda", model: "City", unitCost: 850000 }),
   ],
   "office-equipment": [
-    assetItem("O001", "Laptop Stand", "Office Equipment", { sku: "OFF-001", propertyNumber: "PROP-O001", unitCost: 1200 }),
-    assetItem("O002", "Wireless Keyboard", "Office Equipment", { sku: "OFF-002", propertyNumber: "PROP-O002", brand: "Logitech", unitCost: 2500 }),
-    assetItem("O003", "Webcam HD", "Office Equipment", { sku: "OFF-003", propertyNumber: "PROP-O003", status: "FOR_REPAIR", remarks: "USB port damaged" }),
+    assetItem("O001", "Laptop Stand", "Office Equipment", { propertyNumber: "PROP-O001", unitCost: 1200 }),
+    assetItem("O002", "Wireless Keyboard", "Office Equipment", { propertyNumber: "PROP-O002", brand: "Logitech", unitCost: 2500 }),
+    assetItem("O003", "Webcam HD", "Office Equipment", { propertyNumber: "PROP-O003", status: "FOR_REPAIR", remarks: "USB port damaged" }),
   ],
 }
 
-const emptyForm = { id: "", name: "", quantity: "", unit: "pcs", reorderLevel: "", status: "In Stock" }
+function formToApiPayload(form, isSupply) {
+  const acc = form.accountablePerson || defaultAccountablePerson()
+  const dateAcquired = form.dateAcquired ? new Date(form.dateAcquired).toISOString() : null
+  const unitCost = Number(form.unitCost) || 0
+  const base = {
+    itemType: isSupply ? "SUPPLY" : "ASSET",
+    name: (form.name || "").trim(),
+    category: (form.category || "General").trim(),
+    unit: form.unit || "pc",
+    dateAcquired,
+    unitCost,
+    remarks: (form.remarks || "").trim(),
+    accountablePerson: { ...acc },
+    transferredTo: (form.transferredTo || "").trim(),
+  }
+  if (isSupply) {
+    return {
+      ...base,
+      quantityOnHand: parseInt(form.quantityOnHand, 10) || 0,
+      reorderLevel: parseInt(form.reorderLevel, 10) || 0,
+      serialNumber: (form.serialNumber || "").trim() || null,
+    }
+  }
+  return {
+    ...base,
+    propertyNumber: (form.propertyNumber || "").trim() || null,
+    serialNumber: (form.serialNumber || "").trim() || null,
+    brand: (form.brand || "").trim(),
+    model: (form.model || "").trim(),
+    division: (form.division || "").trim(),
+    status: form.status || "IN_STOCK",
+    condition: form.condition || "GOOD",
+  }
+}
 
 export default function CategoryItemsPage() {
   const { categorySlug } = useParams()
-  const { getCategoryBySlug } = useCategories()
-  const category = getCategoryBySlug(categorySlug)
+  const { getCategoryBySlug, refreshCategories } = useCategories()
+  const categoryFromApi = getCategoryBySlug(categorySlug)
+  const category = categoryFromApi ?? (categorySlug ? {
+    name: (categorySlug || "").replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    slug: categorySlug,
+    itemType: "SUPPLY",
+    icon: null,
+  } : null)
   const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [addOpen, setAddOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [editingItem, setEditingItem] = useState(null)
-  const [form, setForm] = useState(emptyForm)
+  const [form, setForm] = useState(() => getEmptyForm(true, "General"))
+  const [submitting, setSubmitting] = useState(false)
   const [supplyColumnVisibility, setSupplyColumnVisibility] = useState(() =>
     Object.fromEntries(SUPPLY_COLUMNS.map((c) => [c.id, true]))
   )
-  const [assetColumnVisibility, setAssetColumnVisibility] = useState(() =>
-    Object.fromEntries(ASSET_COLUMNS.map((c) => [c.id, true]))
-  )
+  const [assetColumnVisibility, setAssetColumnVisibility] = useState(() => {
+    const defaultHidden = new Set(["serialNo", "accountability"])
+    return Object.fromEntries(
+      ASSET_COLUMNS.map((c) => [c.id, !defaultHidden.has(c.id)])
+    )
+  })
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerItem, setDrawerItem] = useState(null)
+  const [tableSearch, setTableSearch] = useState("")
+  const [statusFilter, setStatusFilter] = useState("")
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const dndId = useId()
   const isMobile = useIsMobile()
 
@@ -519,14 +728,67 @@ export default function CategoryItemsPage() {
     }
   }
 
-  useEffect(() => {
-    if (SAMPLE_ITEMS[categorySlug]) {
-      setItems(SAMPLE_ITEMS[categorySlug].map((i) => ({ ...i })))
-    } else {
+  const loadItems = useCallback(async () => {
+    if (!category?.name) {
       setItems([])
+      return
     }
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await itemsService.listItems({
+        category: category.name,
+        archived: "false",
+      })
+      setItems(data.map((i) => ({ ...i, id: i._id?.toString() ?? i.id ?? i._id })))
+    } catch (err) {
+      setError(getErrorMessage(err))
+      setItems([])
+    } finally {
+      setLoading(false)
+    }
+  }, [category?.name])
+
+  useEffect(() => {
+    loadItems()
     setSelectedIds(new Set())
-  }, [categorySlug])
+  }, [loadItems])
+
+  const filteredItems = useMemo(() => {
+    let list = items
+    const q = (tableSearch || "").trim().toLowerCase()
+    if (q) {
+      list = list.filter(
+        (i) =>
+          (i.name && i.name.toLowerCase().includes(q)) ||
+          (i.propertyNumber && i.propertyNumber.toString().toLowerCase().includes(q)) ||
+          (i.serialNumber && i.serialNumber.toString().toLowerCase().includes(q)) ||
+          (i.category && i.category.toLowerCase().includes(q)) ||
+          (i.division && i.division.toLowerCase().includes(q))
+      )
+    }
+    if (statusFilter === "LOW_STOCK") {
+      list = list.filter(
+        (i) => i.itemType === "SUPPLY" && Number(i.reorderLevel) > 0 && Number(i.quantityOnHand) <= Number(i.reorderLevel)
+      )
+    } else if (statusFilter) {
+      list = list.filter((i) => i.status === statusFilter)
+    }
+    return list
+  }, [items, tableSearch, statusFilter])
+
+  const totalFiltered = filteredItems.length
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize))
+  const paginatedItems = useMemo(
+    () => filteredItems.slice((page - 1) * pageSize, page * pageSize),
+    [filteredItems, page, pageSize]
+  )
+  const startRow = totalFiltered === 0 ? 0 : (page - 1) * pageSize + 1
+  const endRow = Math.min(page * pageSize, totalFiltered)
+
+  useEffect(() => {
+    setPage(1)
+  }, [tableSearch, statusFilter])
 
   const toggleRow = (id) => {
     setSelectedIds((prev) => {
@@ -537,10 +799,11 @@ export default function CategoryItemsPage() {
     })
   }
   const toggleAll = () => {
-    if (selectedIds.size === items.length) setSelectedIds(new Set())
-    else setSelectedIds(new Set(items.map((i) => i.id)))
+    const allFilteredSelected = filteredItems.length > 0 && filteredItems.every((i) => selectedIds.has(i.id))
+    if (allFilteredSelected) setSelectedIds(new Set())
+    else setSelectedIds(new Set(filteredItems.map((i) => i.id)))
   }
-  const isAllSelected = items.length > 0 && selectedIds.size === items.length
+  const isAllSelected = filteredItems.length > 0 && filteredItems.every((i) => selectedIds.has(i.id))
   const isSomeSelected = selectedIds.size > 0
 
   const sensors = useSensors(
@@ -553,79 +816,78 @@ export default function CategoryItemsPage() {
     const { active, over } = event
     if (active && over && active.id !== over.id) {
       setItems((prev) => {
-        const ids = prev.map((i) => i.id)
-        const oldIndex = ids.indexOf(active.id)
-        const newIndex = ids.indexOf(over.id)
+        const oldIndex = prev.findIndex((i) => String(i.id) === String(active.id))
+        const newIndex = prev.findIndex((i) => String(i.id) === String(over.id))
+        if (oldIndex === -1 || newIndex === -1) return prev
         return arrayMove(prev, oldIndex, newIndex)
       })
     }
   }
 
   const openAdd = () => {
-    setForm(emptyForm)
+    if (category) setForm(getEmptyForm(category.itemType === "SUPPLY", category.name))
     setAddOpen(true)
   }
 
   const openEdit = (item) => {
     setEditingItem(item)
-    setForm({
-      id: item.id,
-      name: item.name,
-      quantity: String(item.quantity),
-      unit: item.unit,
-      reorderLevel: String(item.reorderLevel),
-      status: item.status,
-    })
+    setForm(itemToForm(item, item.itemType === "SUPPLY"))
     setEditOpen(true)
   }
 
-  const handleAdd = () => {
-    const prefix = items[0]?.id?.charAt(0) ?? "I"
-    const maxNum = items.reduce((m, i) => {
-      const n = parseInt(String(i.id).replace(/\D/g, ""), 10)
-      return isNaN(n) ? m : Math.max(m, n)
-    }, 0)
-    const newId = `${prefix}${String(maxNum + 1).padStart(3, "0")}`
-    const qty = parseInt(form.quantity, 10)
-    const reorder = parseInt(form.reorderLevel, 10)
-    const status = qty <= reorder ? "Low Stock" : "In Stock"
-    setItems((prev) => [
-      ...prev,
-      {
-        id: newId,
-        name: form.name.trim(),
-        quantity: isNaN(qty) ? 0 : qty,
-        unit: form.unit,
-        status,
-        reorderLevel: isNaN(reorder) ? 0 : reorder,
-      },
-    ])
-    setAddOpen(false)
-    setForm(emptyForm)
+  const handleAdd = async () => {
+    if (!category) return
+    const isSupply = category.itemType === "SUPPLY"
+    const payload = formToApiPayload(form, isSupply)
+    setSubmitting(true)
+    try {
+      const created = await itemsService.createItem(payload)
+      setItems((prev) => [...prev, { ...created, id: created._id?.toString() ?? created._id }])
+      setAddOpen(false)
+      setForm(getEmptyForm(isSupply, category.name))
+      refreshCategories?.()
+      toast.success("Item added.")
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
-  const handleEdit = () => {
-    if (!editingItem) return
-    const qty = parseInt(form.quantity, 10)
-    const reorder = parseInt(form.reorderLevel, 10)
-    const status = qty <= reorder ? "Low Stock" : "In Stock"
-    setItems((prev) =>
-      prev.map((i) =>
-        i.id === editingItem.id
-          ? {
-              ...i,
-              name: form.name.trim(),
-              quantity: isNaN(qty) ? i.quantity : qty,
-              unit: form.unit,
-              reorderLevel: isNaN(reorder) ? i.reorderLevel : reorder,
-              status,
-            }
-          : i
+  const handleEdit = async () => {
+    if (!editingItem || !category) return
+    const isSupply = category.itemType === "SUPPLY"
+    const payload = formToApiPayload(form, isSupply)
+    const id = editingItem.id ?? editingItem._id
+    setSubmitting(true)
+    try {
+      const updated = await itemsService.updateItem(id, payload)
+      setItems((prev) =>
+        prev.map((i) => (String(i.id) === String(id) ? { ...updated, id: updated._id?.toString() ?? updated._id } : i))
       )
-    )
-    setEditOpen(false)
-    setEditingItem(null)
-    setForm(emptyForm)
+      setEditOpen(false)
+      setEditingItem(null)
+      setForm(getEmptyForm(isSupply, category.name))
+      toast.success("Item updated.")
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleArchive = async (item) => {
+    const id = item.id ?? item._id
+    setSubmitting(true)
+    try {
+      await itemsService.archiveItem(id)
+      setItems((prev) => prev.filter((i) => String(i.id) !== String(id)))
+      toast.success("Item archived.")
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   if (!category) {
@@ -681,7 +943,7 @@ export default function CategoryItemsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="icon">
+          <Button variant="outline" size="icon" onClick={loadItems} disabled={loading}>
             <RefreshCw className="size-4" />
             <span className="sr-only">Refresh</span>
           </Button>
@@ -694,6 +956,12 @@ export default function CategoryItemsPage() {
           </Button>
         </div>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          {error}
+        </div>
+      )}
 
       <section className="@container/main grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
@@ -718,13 +986,29 @@ export default function CategoryItemsPage() {
 
       <section className="min-w-0 overflow-hidden rounded-xl border bg-white">
         <div className="flex flex-col gap-3 border-b px-4 py-3 lg:px-6 md:flex-row md:items-center md:justify-between">
-          <div className="relative max-w-sm flex-1">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Search items..."
-              className="pl-9"
-            />
+          <div className="flex flex-1 flex-wrap items-center gap-3">
+            <div className="relative max-w-sm flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search by name, property no., serial no., division…"
+                className="pl-9"
+                value={tableSearch}
+                onChange={(e) => setTableSearch(e.target.value)}
+              />
+            </div>
+            <Select value={statusFilter || "_"} onValueChange={(v) => setStatusFilter(v === "_" ? "" : v)}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                {(isSupply ? STATUS_FILTER_OPTIONS : STATUS_FILTER_OPTIONS.filter((o) => o.value !== "LOW_STOCK")).map((o) => (
+                  <SelectItem key={o.value || "all"} value={o.value || "_"}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -751,52 +1035,63 @@ export default function CategoryItemsPage() {
           </DropdownMenu>
         </div>
         <div className="w-full min-w-0 overflow-x-auto px-4 lg:px-6">
-          <div className="inline-block min-w-full rounded-lg border">
-            <Table className="w-max min-w-full table-auto">
-              <colgroup>
-                {colOrder
-                  .filter((id) => isColVisible(id, columnVisibility))
-                  .map((id) => {
-                    const width = COLUMN_WIDTHS[id] || "auto"
-                    return <col key={id} style={{ width }} />
-                  })}
-              </colgroup>
-              <TableHeader className="bg-muted sticky top-0 z-10">
-                <TableRow>
+          <DndContext
+            id={dndId}
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            modifiers={[restrictToVerticalAxis]}
+            onDragEnd={handleDragEnd}
+          >
+            <div className="inline-block min-w-full rounded-lg border">
+              <Table className="w-max min-w-full table-auto">
+                <colgroup>
                   {colOrder
                     .filter((id) => isColVisible(id, columnVisibility))
                     .map((id) => {
-                      if (id === "drag") return <TableHead key={id} className="px-3 w-10" />
-                      if (id === "actions") return <TableHead key={id} className="px-3 w-12" />
-                      const label = colConfig.find((c) => c.id === id)?.label ?? id
-                      return (
-                        <TableHead key={id} className={`px-3 whitespace-nowrap ${getColAlignment(id)}`}>
-                          {label}
-                        </TableHead>
-                      )
+                      const width = COLUMN_WIDTHS[id] || "auto"
+                      return <col key={id} style={{ width }} />
                     })}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.length === 0 ? (
+                </colgroup>
+                <TableHeader className="bg-muted sticky top-0 z-10">
                   <TableRow>
-                    <TableCell
-                      colSpan={colOrder.filter((id) => isColVisible(id, columnVisibility)).length}
-                      className="h-24 text-center text-muted-foreground"
-                    >
-                      No items in this category yet. Add an item to get started.
-                    </TableCell>
+                    {colOrder
+                      .filter((id) => isColVisible(id, columnVisibility))
+                      .map((id) => {
+                        if (id === "drag") return <TableHead key={id} className="px-3 w-10" />
+                        if (id === "actions") return <TableHead key={id} className="px-3 w-12" />
+                        const label = colConfig.find((c) => c.id === id)?.label ?? id
+                        return (
+                          <TableHead key={id} className={`px-3 whitespace-nowrap ${getColAlignment(id)}`}>
+                            {label}
+                          </TableHead>
+                        )
+                      })}
                   </TableRow>
-                ) : (
-                  <DndContext
-                    id={dndId}
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    modifiers={[restrictToVerticalAxis]}
-                    onDragEnd={handleDragEnd}
-                  >
-                    <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-                      {items.map((item) =>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={colOrder.filter((id) => isColVisible(id, columnVisibility)).length}
+                        className="h-24 text-center text-muted-foreground"
+                      >
+                        Loading…
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredItems.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={colOrder.filter((id) => isColVisible(id, columnVisibility)).length}
+                        className="h-24 text-center text-muted-foreground"
+                      >
+                        {items.length === 0
+                          ? "No items in this category yet. Add an item to get started."
+                          : "No items match your filters. Try changing search or status."}
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    <SortableContext items={paginatedItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+                      {paginatedItems.map((item) =>
                         isSupply ? (
                           <SortableRowSupply
                             key={item.id}
@@ -804,6 +1099,7 @@ export default function CategoryItemsPage() {
                             selectedIds={selectedIds}
                             toggleRow={toggleRow}
                             openEdit={openEdit}
+                            onArchive={handleArchive}
                             columnVisibility={columnVisibility}
                             onRowClick={openDrawer}
                           />
@@ -814,21 +1110,67 @@ export default function CategoryItemsPage() {
                             selectedIds={selectedIds}
                             toggleRow={toggleRow}
                             openEdit={openEdit}
+                            onArchive={handleArchive}
                             columnVisibility={columnVisibility}
                             onRowClick={openDrawer}
                           />
                         )
                       )}
                     </SortableContext>
-                  </DndContext>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-          {items.length > 0 && (
-            <div className="flex items-center justify-between px-4 py-3">
-              <div className="text-muted-foreground hidden flex-1 text-sm lg:flex">
-                {selectedIds.size} of {items.length} row(s) selected.
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </DndContext>
+          {(items.length > 0 || totalFiltered > 0) && (
+            <div className="flex flex-col gap-3 border-t px-4 py-3 lg:px-6 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-4 text-sm">
+                <span className="text-muted-foreground">
+                  {selectedIds.size > 0 && (
+                    <span className="mr-2">{selectedIds.size} of {totalFiltered} selected</span>
+                  )}
+                  Showing {startRow}–{endRow} of {totalFiltered}
+                </span>
+                <Select
+                  value={String(pageSize)}
+                  onValueChange={(v) => {
+                    setPageSize(Number(v))
+                    setPage(1)
+                  }}
+                >
+                  <SelectTrigger className="h-8 w-[70px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAGE_SIZE_OPTIONS.map((n) => (
+                      <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-muted-foreground">per page</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                >
+                  <ChevronLeft className="size-4" />
+                  Previous
+                </Button>
+                <span className="min-w-[100px] text-center text-sm text-muted-foreground">
+                  Page {page} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                >
+                  Next
+                  <ChevronRight className="size-4" />
+                </Button>
               </div>
             </div>
           )}
@@ -837,128 +1179,460 @@ export default function CategoryItemsPage() {
 
       {/* Add Item Dialog */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col p-0 sm:max-w-2xl">
+          <DialogHeader className="shrink-0 border-b px-6 py-4">
             <DialogTitle>Add Item</DialogTitle>
-            <DialogDescription>Add a new item to this category.</DialogDescription>
+            <DialogDescription>Add a new {isSupply ? "supply" : "asset"} item to {category?.name}.</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="add-name">Item Name</Label>
-              <Input
-                id="add-name"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="e.g. HP LaserJet Pro"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="add-quantity">Quantity</Label>
-                <Input
-                  id="add-quantity"
-                  type="number"
-                  min={0}
-                  value={form.quantity}
-                  onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
-                  placeholder="0"
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+            <div className="space-y-6">
+              {/* Ledger-style: Date acquired, Item, Amount, Property number */}
+              <div>
+                <h4 className="mb-3 text-sm font-medium text-zinc-900">Inventory record</h4>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="add-dateAcquired">Date acquired</Label>
+                    <Input
+                      id="add-dateAcquired"
+                      type="date"
+                      value={form.dateAcquired}
+                      onChange={(e) => setForm((f) => ({ ...f, dateAcquired: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="add-unitCost">Amount (₱)</Label>
+                    <Input
+                      id="add-unitCost"
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={form.unitCost}
+                      onChange={(e) => setForm((f) => ({ ...f, unitCost: e.target.value }))}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="add-name">Item</Label>
+                    <Input
+                      id="add-name"
+                      value={form.name}
+                      onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                      placeholder="e.g. Paper Shredder, Printer 3-in-1, Desktop Computer"
+                    />
+                  </div>
+                  {!isSupply && (
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="add-propertyNo">Property number</Label>
+                      <Input
+                        id="add-propertyNo"
+                        value={form.propertyNumber}
+                        onChange={(e) => setForm((f) => ({ ...f, propertyNumber: e.target.value }))}
+                        placeholder="e.g. 2025-26-014 or CPDC-001 to 004"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Accountable person & Transferred to */}
+              <Separator />
+              <div>
+                <h4 className="mb-3 text-sm font-medium text-zinc-900">Accountability</h4>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="add-acc-name">Accountable person</Label>
+                    <Input
+                      id="add-acc-name"
+                      value={form.accountablePerson?.name ?? ""}
+                      onChange={(e) => setForm((f) => ({
+                        ...f,
+                        accountablePerson: { ...(f.accountablePerson || defaultAccountablePerson()), name: e.target.value },
+                      }))}
+                      placeholder="e.g. Jella Mae Dimaculangan"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="add-transferredTo">Transferred to (optional)</Label>
+                    <Input
+                      id="add-transferredTo"
+                      value={form.transferredTo ?? ""}
+                      onChange={(e) => setForm((f) => ({ ...f, transferredTo: e.target.value }))}
+                      placeholder="Leave blank if none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Details: category, unit, serial + type-specific */}
+              <Separator />
+              <div>
+                <h4 className="mb-3 text-sm font-medium text-zinc-900">Details</h4>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="add-category">Category</Label>
+                    <Input
+                      id="add-category"
+                      value={form.category}
+                      onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                      placeholder="General"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="add-unit">Unit</Label>
+                    <Select value={form.unit} onValueChange={(v) => setForm((f) => ({ ...f, unit: v }))}>
+                      <SelectTrigger id="add-unit">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {UNIT_OPTIONS.map((u) => (
+                          <SelectItem key={u} value={u}>{u}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="add-serial">Serial no. (optional)</Label>
+                    <Input
+                      id="add-serial"
+                      value={form.serialNumber ?? ""}
+                      onChange={(e) => setForm((f) => ({ ...f, serialNumber: e.target.value }))}
+                      placeholder="Optional"
+                    />
+                  </div>
+                  {isSupply ? (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="add-quantity">Quantity on hand</Label>
+                        <Input
+                          id="add-quantity"
+                          type="number"
+                          min={0}
+                          value={form.quantityOnHand}
+                          onChange={(e) => setForm((f) => ({ ...f, quantityOnHand: e.target.value }))}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="add-reorder">Reorder level</Label>
+                        <Input
+                          id="add-reorder"
+                          type="number"
+                          min={0}
+                          value={form.reorderLevel}
+                          onChange={(e) => setForm((f) => ({ ...f, reorderLevel: e.target.value }))}
+                          placeholder="0"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="add-brand">Brand</Label>
+                        <Input
+                          id="add-brand"
+                          value={form.brand}
+                          onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
+                          placeholder="e.g. HP"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="add-model">Model</Label>
+                        <Input
+                          id="add-model"
+                          value={form.model}
+                          onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
+                          placeholder="e.g. LaserJet Pro"
+                        />
+                      </div>
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="add-division">Division</Label>
+                        <Input
+                          id="add-division"
+                          value={form.division}
+                          onChange={(e) => setForm((f) => ({ ...f, division: e.target.value }))}
+                          placeholder="e.g. Admin, IT, Finance"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="add-status">Status</Label>
+                        <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}>
+                          <SelectTrigger id="add-status">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {STATUS_OPTIONS.map((o) => (
+                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="add-condition">Condition</Label>
+                        <Select value={form.condition} onValueChange={(v) => setForm((f) => ({ ...f, condition: v }))}>
+                          <SelectTrigger id="add-condition">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {CONDITION_OPTIONS.map((o) => (
+                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <Separator />
+              <div>
+                <h4 className="mb-3 text-sm font-medium text-zinc-900">Remarks</h4>
+                <Textarea
+                  id="add-remarks"
+                  value={form.remarks}
+                  onChange={(e) => setForm((f) => ({ ...f, remarks: e.target.value }))}
+                  placeholder="e.g. place in New City Hall Bldg., Admin Use, -do- 12 pcs."
+                  rows={3}
+                  className="resize-none"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="add-unit">Unit</Label>
-                <Select value={form.unit} onValueChange={(v) => setForm((f) => ({ ...f, unit: v }))}>
-                  <SelectTrigger id="add-unit">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {UNIT_OPTIONS.map((u) => (
-                      <SelectItem key={u} value={u}>{u}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="add-reorder">Reorder Level</Label>
-              <Input
-                id="add-reorder"
-                type="number"
-                min={0}
-                value={form.reorderLevel}
-                onChange={(e) => setForm((f) => ({ ...f, reorderLevel: e.target.value }))}
-                placeholder="Min quantity before low stock"
-              />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-            <Button onClick={handleAdd} disabled={!form.name.trim()}>Add Item</Button>
+          <DialogFooter className="shrink-0 border-t bg-muted/30 px-6 py-4">
+            <Button variant="outline" onClick={() => setAddOpen(false)} disabled={submitting}>Cancel</Button>
+            <Button onClick={handleAdd} disabled={submitting || !form.name.trim() || (!isSupply && !form.propertyNumber?.trim())}>
+              {submitting ? "Adding…" : "Add Item"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Edit Item Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col p-0 sm:max-w-2xl">
+          <DialogHeader className="shrink-0 border-b px-6 py-4">
             <DialogTitle>Edit Item</DialogTitle>
-            <DialogDescription>Update the item details.</DialogDescription>
+            <DialogDescription>Update the item details for {form.name || "this item"}.</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-id">ID</Label>
-              <Input id="edit-id" value={form.id} disabled className="bg-muted" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-name">Item Name</Label>
-              <Input
-                id="edit-name"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="e.g. HP LaserJet Pro"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-quantity">Quantity</Label>
-                <Input
-                  id="edit-quantity"
-                  type="number"
-                  min={0}
-                  value={form.quantity}
-                  onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
-                  placeholder="0"
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+            <div className="space-y-6">
+              {/* Ledger-style: Date acquired, Item, Amount, Property number */}
+              <div>
+                <h4 className="mb-3 text-sm font-medium text-zinc-900">Inventory record</h4>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-dateAcquired">Date acquired</Label>
+                    <Input
+                      id="edit-dateAcquired"
+                      type="date"
+                      value={form.dateAcquired}
+                      onChange={(e) => setForm((f) => ({ ...f, dateAcquired: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-unitCost">Amount (₱)</Label>
+                    <Input
+                      id="edit-unitCost"
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={form.unitCost}
+                      onChange={(e) => setForm((f) => ({ ...f, unitCost: e.target.value }))}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="edit-name">Item</Label>
+                    <Input
+                      id="edit-name"
+                      value={form.name}
+                      onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                      placeholder="e.g. Paper Shredder, Printer 3-in-1, Desktop Computer"
+                    />
+                  </div>
+                  {!isSupply && (
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="edit-propertyNo">Property number</Label>
+                      <Input
+                        id="edit-propertyNo"
+                        value={form.propertyNumber}
+                        onChange={(e) => setForm((f) => ({ ...f, propertyNumber: e.target.value }))}
+                        placeholder="e.g. 2025-26-014 or CPDC-001 to 004"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Accountable person & Transferred to */}
+              <Separator />
+              <div>
+                <h4 className="mb-3 text-sm font-medium text-zinc-900">Accountability</h4>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-acc-name">Accountable person</Label>
+                    <Input
+                      id="edit-acc-name"
+                      value={form.accountablePerson?.name ?? ""}
+                      onChange={(e) => setForm((f) => ({
+                        ...f,
+                        accountablePerson: { ...(f.accountablePerson || defaultAccountablePerson()), name: e.target.value },
+                      }))}
+                      placeholder="e.g. Jella Mae Dimaculangan"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-transferredTo">Transferred to (optional)</Label>
+                    <Input
+                      id="edit-transferredTo"
+                      value={form.transferredTo ?? ""}
+                      onChange={(e) => setForm((f) => ({ ...f, transferredTo: e.target.value }))}
+                      placeholder="Leave blank if none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Details */}
+              <Separator />
+              <div>
+                <h4 className="mb-3 text-sm font-medium text-zinc-900">Details</h4>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-category">Category</Label>
+                    <Input
+                      id="edit-category"
+                      value={form.category}
+                      onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                      placeholder="General"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-unit">Unit</Label>
+                    <Select value={form.unit} onValueChange={(v) => setForm((f) => ({ ...f, unit: v }))}>
+                      <SelectTrigger id="edit-unit">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {UNIT_OPTIONS.map((u) => (
+                          <SelectItem key={u} value={u}>{u}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-serial">Serial no. (optional)</Label>
+                    <Input
+                      id="edit-serial"
+                      value={form.serialNumber ?? ""}
+                      onChange={(e) => setForm((f) => ({ ...f, serialNumber: e.target.value }))}
+                      placeholder="Optional"
+                    />
+                  </div>
+                  {isSupply ? (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-quantity">Quantity on hand</Label>
+                        <Input
+                          id="edit-quantity"
+                          type="number"
+                          min={0}
+                          value={form.quantityOnHand}
+                          onChange={(e) => setForm((f) => ({ ...f, quantityOnHand: e.target.value }))}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-reorder">Reorder level</Label>
+                        <Input
+                          id="edit-reorder"
+                          type="number"
+                          min={0}
+                          value={form.reorderLevel}
+                          onChange={(e) => setForm((f) => ({ ...f, reorderLevel: e.target.value }))}
+                          placeholder="0"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-brand">Brand</Label>
+                        <Input
+                          id="edit-brand"
+                          value={form.brand}
+                          onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
+                          placeholder="e.g. HP"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-model">Model</Label>
+                        <Input
+                          id="edit-model"
+                          value={form.model}
+                          onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
+                          placeholder="e.g. LaserJet Pro"
+                        />
+                      </div>
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="edit-division">Division</Label>
+                        <Input
+                          id="edit-division"
+                          value={form.division}
+                          onChange={(e) => setForm((f) => ({ ...f, division: e.target.value }))}
+                          placeholder="e.g. Admin, IT, Finance"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-status">Status</Label>
+                        <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}>
+                          <SelectTrigger id="edit-status">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {STATUS_OPTIONS.map((o) => (
+                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-condition">Condition</Label>
+                        <Select value={form.condition} onValueChange={(v) => setForm((f) => ({ ...f, condition: v }))}>
+                          <SelectTrigger id="edit-condition">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {CONDITION_OPTIONS.map((o) => (
+                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <Separator />
+              <div>
+                <h4 className="mb-3 text-sm font-medium text-zinc-900">Remarks</h4>
+                <Textarea
+                  id="edit-remarks"
+                  value={form.remarks}
+                  onChange={(e) => setForm((f) => ({ ...f, remarks: e.target.value }))}
+                  placeholder="e.g. place in New City Hall Bldg., Admin Use, -do- 12 pcs."
+                  rows={3}
+                  className="resize-none"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-unit">Unit</Label>
-                <Select value={form.unit} onValueChange={(v) => setForm((f) => ({ ...f, unit: v }))}>
-                  <SelectTrigger id="edit-unit">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {UNIT_OPTIONS.map((u) => (
-                      <SelectItem key={u} value={u}>{u}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-reorder">Reorder Level</Label>
-              <Input
-                id="edit-reorder"
-                type="number"
-                min={0}
-                value={form.reorderLevel}
-                onChange={(e) => setForm((f) => ({ ...f, reorderLevel: e.target.value }))}
-                placeholder="Min quantity before low stock"
-              />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button onClick={handleEdit} disabled={!form.name.trim()}>Save Changes</Button>
+          <DialogFooter className="shrink-0 border-t bg-muted/30 px-6 py-4">
+            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={submitting}>Cancel</Button>
+            <Button onClick={handleEdit} disabled={submitting || !form.name.trim() || (!isSupply && !form.propertyNumber?.trim())}>
+              {submitting ? "Saving…" : "Save Changes"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1006,6 +1680,16 @@ export default function CategoryItemsPage() {
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
+                          <Label className="text-muted-foreground font-medium">Quantity on hand</Label>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm tabular-nums">{(Number(drawerItem.quantityOnHand) || 0).toLocaleString()}</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground font-medium">Unit</Label>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.unit?.trim() || "pc"}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
                           <Label className="text-muted-foreground font-medium">Category</Label>
                           <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.category ?? "—"}</p>
                         </div>
@@ -1027,13 +1711,19 @@ export default function CategoryItemsPage() {
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-muted-foreground font-medium">Location</Label>
-                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.location ?? "—"}</p>
+                        <Label className="text-muted-foreground font-medium">Division</Label>
+                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.division ?? "—"}</p>
                       </div>
                       <div className="space-y-2">
                         <Label className="text-muted-foreground font-medium">Accountable Person</Label>
                         <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.accountablePerson?.name ?? "—"}</p>
                       </div>
+                      {drawerItem.transferredTo ? (
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground font-medium">Transferred to</Label>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.transferredTo}</p>
+                        </div>
+                      ) : null}
                       <div className="space-y-2">
                         <Label className="text-muted-foreground font-medium">Date Acquired</Label>
                         <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.dateAcquired ? new Date(drawerItem.dateAcquired).toLocaleDateString() : "—"}</p>
@@ -1099,6 +1789,12 @@ export default function CategoryItemsPage() {
                             : "—"}
                         </p>
                       </div>
+                      {drawerItem.transferredTo ? (
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground font-medium">Transferred to</Label>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.transferredTo}</p>
+                        </div>
+                      ) : null}
                       <div className="space-y-2">
                         <Label className="text-muted-foreground font-medium">Remarks</Label>
                         <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.remarks ?? "—"}</p>

@@ -1,6 +1,7 @@
 import { useState } from "react"
-import { BarChart3, RefreshCw, Download, FileSpreadsheet, FileText, FileDown } from "lucide-react"
+import { BarChart3, RefreshCw, Download, FileSpreadsheet, FileDown } from "lucide-react"
 import { Link } from "react-router-dom"
+import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -35,6 +36,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { itemsService, transactionsService, exportService } from "@/services"
+import { getErrorMessage } from "@/utils/api"
 
 const REPORT_TYPES = [
   { value: "inventory", label: "Inventory Summary" },
@@ -44,30 +47,17 @@ const REPORT_TYPES = [
 ]
 
 const EXPORT_FORMATS = [
-  { value: "pdf", label: "PDF", icon: FileText },
   { value: "excel", label: "Excel", icon: FileSpreadsheet },
   { value: "csv", label: "CSV", icon: FileDown },
 ]
 
-// Sample report results (would come from API in real app)
-const SAMPLE_RESULTS = {
-  inventory: [
-    { id: "I001", name: "Dell OptiPlex Desktop", category: "ICT Equipment", qty: 15, unit: "pcs", status: "In Stock" },
-    { id: "I002", name: "Office Chair", category: "Furniture & Fixtures", qty: 25, unit: "pcs", status: "In Stock" },
-    { id: "I003", name: "Paracetamol 500mg", category: "Drugs", qty: 500, unit: "boxes", status: "In Stock" },
-  ],
-  "stock-in": [
-    { id: "SI-101", item: "Dell Monitor", qty: 10, supplier: "Tech Supplies Co.", date: "Feb 18, 2026" },
-    { id: "SI-102", item: "Office Chair", qty: 5, supplier: "Furniture Hub", date: "Feb 17, 2026" },
-  ],
-  "stock-out": [
-    { id: "SO-201", item: "Dell Monitor", qty: 2, department: "Planning", date: "Feb 18, 2026" },
-    { id: "SO-202", item: "Printer Ink", qty: 5, department: "Admin Office", date: "Feb 16, 2026" },
-  ],
-  issuance: [
-    { id: "ISS-301", item: "Laptop Dell Inspiron", issuedTo: "Louis Marco Toque", dept: "Planning", date: "Feb 16, 2026", status: "Active" },
-    { id: "ISS-302", item: "Office Chair", issuedTo: "Adrian Perce", dept: "IT", date: "Feb 18, 2026", status: "Pending Return" },
-  ],
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 export default function ReportsPage() {
@@ -75,17 +65,53 @@ export default function ReportsPage() {
   const [dateFrom, setDateFrom] = useState("2026-01-01")
   const [dateTo, setDateTo] = useState("2026-02-19")
   const [hasResults, setHasResults] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [inventoryResults, setInventoryResults] = useState([])
+  const [txResults, setTxResults] = useState([])
 
-  const results = SAMPLE_RESULTS[reportType] ?? []
-  const resultCount = results.length
+  const isInventory = reportType === "inventory"
+  const results = isInventory ? inventoryResults : txResults
+  const resultCount = Array.isArray(results) ? results.length : 0
 
-  const handleGenerate = () => {
-    setHasResults(true)
+  const handleGenerate = async () => {
+    setLoading(true)
+    setHasResults(false)
+    try {
+      if (reportType === "inventory") {
+        const data = await itemsService.listItems({ archived: "false" })
+        setInventoryResults(data)
+      } else {
+        const type = reportType === "stock-in" ? "STOCK_IN" : "ISSUANCE"
+        const data = await transactionsService.listTransactions({ type })
+        setTxResults(data)
+      }
+      setHasResults(true)
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleExport = (format) => {
-    // In real app: trigger download
-    console.log(`Export as ${format}`, { reportType, dateFrom, dateTo })
+  const handleExport = async (format) => {
+    setExporting(true)
+    try {
+      if (reportType === "inventory") {
+        const blob = format === "csv"
+          ? await exportService.downloadItemsCsv()
+          : await exportService.downloadItemsXlsx()
+        downloadBlob(blob, `inventory_${new Date().toISOString().slice(0, 10)}.${format === "csv" ? "csv" : "xlsx"}`)
+      } else {
+        const blob = await exportService.downloadTransactionsXlsx()
+        downloadBlob(blob, `transactions_${new Date().toISOString().slice(0, 10)}.xlsx`)
+      }
+      toast.success("Download started.")
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setExporting(false)
+    }
   }
 
   return (
@@ -168,9 +194,9 @@ export default function ReportsPage() {
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button onClick={handleGenerate}>
+              <Button onClick={handleGenerate} disabled={loading}>
                 <BarChart3 className="size-4" />
-                Generate Report
+                {loading ? "Loading…" : "Generate Report"}
               </Button>
               {hasResults && (
                 <DropdownMenu>
@@ -181,10 +207,10 @@ export default function ReportsPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
-                    {EXPORT_FORMATS.map((f) => {
+                    {EXPORT_FORMATS.filter((f) => reportType !== "inventory" ? f.value !== "csv" : true).map((f) => {
                       const Icon = f.icon
                       return (
-                        <DropdownMenuItem key={f.value} onClick={() => handleExport(f.value)}>
+                        <DropdownMenuItem key={f.value} onClick={() => handleExport(f.value)} disabled={exporting}>
                           <Icon className="size-4" />
                           {f.label}
                         </DropdownMenuItem>
@@ -227,97 +253,51 @@ export default function ReportsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>ID</TableHead>
                     <TableHead>Item Name</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Quantity</TableHead>
                     <TableHead>Unit</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>Type</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {results.map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell className="font-medium">{r.id}</TableCell>
-                      <TableCell>{r.name}</TableCell>
+                    <TableRow key={r._id}>
+                      <TableCell className="font-medium">{r.name}</TableCell>
                       <TableCell>{r.category}</TableCell>
-                      <TableCell>{r.qty}</TableCell>
+                      <TableCell>{r.itemType === "SUPPLY" ? r.quantityOnHand : "1"}</TableCell>
                       <TableCell>{r.unit}</TableCell>
-                      <TableCell>{r.status}</TableCell>
+                      <TableCell>{r.itemType}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             )}
-            {reportType === "stock-in" && (
+            {(reportType === "stock-in" || reportType === "stock-out" || reportType === "issuance") && (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Item</TableHead>
-                    <TableHead>Quantity</TableHead>
-                    <TableHead>Supplier</TableHead>
                     <TableHead>Date</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Items</TableHead>
+                    <TableHead>Details</TableHead>
+                    <TableHead>By</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {results.map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell className="font-medium">{r.id}</TableCell>
-                      <TableCell>{r.item}</TableCell>
-                      <TableCell>{r.qty}</TableCell>
-                      <TableCell>{r.supplier}</TableCell>
-                      <TableCell>{r.date}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-            {reportType === "stock-out" && (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Item</TableHead>
-                    <TableHead>Quantity</TableHead>
-                    <TableHead>Department</TableHead>
-                    <TableHead>Date</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {results.map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell className="font-medium">{r.id}</TableCell>
-                      <TableCell>{r.item}</TableCell>
-                      <TableCell>{r.qty}</TableCell>
-                      <TableCell>{r.department}</TableCell>
-                      <TableCell>{r.date}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-            {reportType === "issuance" && (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Item</TableHead>
-                    <TableHead>Issued To</TableHead>
-                    <TableHead>Department</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {results.map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell className="font-medium">{r.id}</TableCell>
-                      <TableCell>{r.item}</TableCell>
-                      <TableCell>{r.issuedTo}</TableCell>
-                      <TableCell>{r.dept}</TableCell>
-                      <TableCell>{r.date}</TableCell>
-                      <TableCell>{r.status}</TableCell>
+                  {results.map((tx) => (
+                    <TableRow key={tx._id}>
+                      <TableCell className="tabular-nums">
+                        {tx.createdAt ? new Date(tx.createdAt).toLocaleString() : "—"}
+                      </TableCell>
+                      <TableCell>{tx.type}</TableCell>
+                      <TableCell className="text-sm">
+                        {(tx.items ?? []).map((i) => `${i.qty}× ${i.itemId?.name ?? "—"}`).join(", ")}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {tx.supplier ? `Supplier: ${tx.supplier}` : tx.issuedToOffice ? `${tx.issuedToOffice}${tx.issuedToPerson ? ` · ${tx.issuedToPerson}` : ""}` : "—"}
+                      </TableCell>
+                      <TableCell>{tx.createdBy?.name ?? "—"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
