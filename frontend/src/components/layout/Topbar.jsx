@@ -1,4 +1,6 @@
+import { useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { toast } from "sonner"
 import { PanelLeft, PanelLeftClose, LogOut, User } from "lucide-react"
 import { clearAuth, getUser } from "@/lib/auth"
 import { SidebarTrigger } from "@/components/ui/sidebar"
@@ -12,6 +14,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 
@@ -29,9 +41,12 @@ export default function Topbar() {
   const user = getUser()
   const navigate = useNavigate()
   const { collapsed, setCollapsed } = useSidebarCollapsed()
+  const [logoutOpen, setLogoutOpen] = useState(false)
 
   function handleSignOut() {
     clearAuth()
+    setLogoutOpen(false)
+    toast.success("Successfully signed out")
     navigate("/login", { replace: true })
   }
 
@@ -86,7 +101,10 @@ export default function Topbar() {
                 Account
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="gap-2 cursor-pointer text-zinc-600 focus:text-red-600" onClick={handleSignOut}>
+              <DropdownMenuItem
+                className="gap-2 cursor-pointer text-zinc-600 focus:text-red-600"
+                onClick={() => setLogoutOpen(true)}
+              >
                 <LogOut className="h-4 w-4" />
                 Sign out
               </DropdownMenuItem>
@@ -94,6 +112,26 @@ export default function Topbar() {
           </DropdownMenu>
         </div>
       </div>
+
+      <AlertDialog open={logoutOpen} onOpenChange={setLogoutOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign out?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to sign out? You will need to log in again to access your account.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleSignOut}
+              className="bg-zinc-900 text-white hover:bg-zinc-800 focus:ring-zinc-900"
+            >
+              Sign out
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </header>
   )
 }

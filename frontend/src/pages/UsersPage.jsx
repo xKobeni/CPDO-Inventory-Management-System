@@ -121,7 +121,7 @@ export default function UsersPage() {
         password: addForm.password,
         role: addForm.role,
       })
-      toast.success("User created.")
+      toast.success("User created. A verification email was sent—they must verify before signing in.")
       setAddOpen(false)
       setAddForm({ name: "", email: "", password: "", role: "STAFF" })
       fetchUsers()
@@ -553,16 +553,23 @@ function UserRow({ user, onEdit, onResetPassword, onDeactivate, onActivate }) {
         </Badge>
       </TableCell>
       <TableCell>
-        <Badge
-          variant="outline"
-          className={
-            status === "Active"
-              ? "border-green-200 bg-green-50 text-green-700"
-              : "border-red-200 bg-red-50 text-red-700"
-          }
-        >
-          {status}
-        </Badge>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge
+            variant="outline"
+            className={
+              status === "Active"
+                ? "border-green-200 bg-green-50 text-green-700"
+                : "border-red-200 bg-red-50 text-red-700"
+            }
+          >
+            {status}
+          </Badge>
+          {user.isVerified === false && (
+            <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
+              Unverified
+            </Badge>
+          )}
+        </div>
       </TableCell>
       <TableCell>{created}</TableCell>
       <TableCell className="text-right">

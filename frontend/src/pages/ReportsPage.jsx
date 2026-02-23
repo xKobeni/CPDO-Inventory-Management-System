@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { BarChart3, RefreshCw, Download, FileSpreadsheet, FileDown } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { itemsService, transactionsService, exportService } from "@/services"
 import { getErrorMessage } from "@/utils/api"
+import { useCategories } from "@/contexts/CategoriesContext"
 
 const REPORT_TYPES = [
   { value: "inventory", label: "Inventory Summary" },
@@ -60,10 +61,36 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url)
 }
 
+/** Ensure API response is an array (handles { items }, { transactions }, or raw array). */
+function toArray(data) {
+  if (Array.isArray(data)) return data
+  if (data?.items && Array.isArray(data.items)) return data.items
+  if (data?.transactions && Array.isArray(data.transactions)) return data.transactions
+  if (data?.data && Array.isArray(data.data)) return data.data
+  return []
+}
+
+/** Transaction type sent to API. Issuance page uses "ISSUANCE,ASSET_ASSIGN" to get both supply issuances and asset assignments. */
+const TRANSACTION_TYPE_MAP = {
+  "stock-in": "STOCK_IN",
+  "stock-out": "STOCK_OUT",
+  issuance: "ISSUANCE,ASSET_ASSIGN",
+}
+
+function todayYYYYMMDD() {
+  const d = new Date()
+  return d.toISOString().slice(0, 10)
+}
+
 export default function ReportsPage() {
+  const { categories } = useCategories()
   const [reportType, setReportType] = useState("inventory")
+  const [dateRangePreset, setDateRangePreset] = useState("range")
   const [dateFrom, setDateFrom] = useState("2026-01-01")
-  const [dateTo, setDateTo] = useState("2026-02-19")
+  const [dateTo, setDateTo] = useState(() => todayYYYYMMDD())
+  const [filterCategory, setFilterCategory] = useState("")
+  const [filterAccountablePerson, setFilterAccountablePerson] = useState("")
+  const [accountablePersonOptions, setAccountablePersonOptions] = useState([])
   const [hasResults, setHasResults] = useState(false)
   const [loading, setLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -74,17 +101,98 @@ export default function ReportsPage() {
   const results = isInventory ? inventoryResults : txResults
   const resultCount = Array.isArray(results) ? results.length : 0
 
+  useEffect(() => {
+    if (!reportType) return
+    let cancelled = false
+    itemsService
+      .listItems({ archived: "false" })
+      .then((data) => {
+        if (cancelled) return
+        const names = new Set()
+        ;(data || []).forEach((item) => {
+          const name = item.accountablePerson?.name?.trim()
+          if (name) names.add(name)
+        })
+        setAccountablePersonOptions(Array.from(names).sort())
+      })
+      .catch(() => {
+        if (!cancelled) setAccountablePersonOptions([])
+      })
+    return () => { cancelled = true }
+  }, [reportType])
+
+  const applyFilters = (data, isInv) => {
+    if (!data || !Array.isArray(data)) return data
+    let out = data
+    if (filterCategory) {
+      if (isInv) {
+        out = out.filter((r) => (r.category || "").trim() === filterCategory)
+      } else {
+        out = out.filter((tx) => {
+          const items = tx.items ?? []
+          return items.some((line) => (line.itemId?.category || "").trim() === filterCategory)
+        })
+      }
+    }
+    if (filterAccountablePerson) {
+      if (isInv) {
+        out = out.filter(
+          (r) => (r.accountablePerson?.name || "").trim() === filterAccountablePerson
+        )
+      } else {
+        out = out.filter((tx) => {
+          const items = tx.items ?? []
+          const acc = tx.accountablePerson?.name?.trim() || tx.issuedToPerson?.trim()
+          if (acc === filterAccountablePerson) return true
+          return items.some(
+            (line) => (line.itemId?.accountablePerson?.name || "").trim() === filterAccountablePerson
+          )
+        })
+      }
+    }
+    return out
+  }
+
+  const handleReportTypeChange = (value) => {
+    setReportType(value)
+    setFilterCategory("")
+    setFilterAccountablePerson("")
+    setHasResults(false)
+  }
+
   const handleGenerate = async () => {
     setLoading(true)
     setHasResults(false)
     try {
       if (reportType === "inventory") {
-        const data = await itemsService.listItems({ archived: "false" })
-        setInventoryResults(data)
+        const params = { archived: "false" }
+        if (filterCategory) params.category = filterCategory
+        const raw = await itemsService.listItems(params)
+        const data = toArray(raw)
+        const filtered = applyFilters(data, true)
+        setInventoryResults(Array.isArray(filtered) ? filtered : [])
       } else {
-        const type = reportType === "stock-in" ? "STOCK_IN" : "ISSUANCE"
-        const data = await transactionsService.listTransactions({ type })
-        setTxResults(data)
+        const type = TRANSACTION_TYPE_MAP[reportType] ?? "ISSUANCE"
+        let raw = await transactionsService.listTransactions({ type })
+        let list = toArray(raw)
+        if (list.length === 0 && reportType === "stock-out") {
+          raw = await transactionsService.listTransactions({ type: "ISSUANCE" })
+          list = toArray(raw)
+        }
+        const byDate =
+          dateRangePreset === "all"
+            ? list
+            : list.filter((tx) => {
+                const dateVal = tx.createdAt ?? tx.date ?? tx.transactionDate ?? tx.updatedAt
+                if (!dateVal) return true
+                const txDate = new Date(dateVal)
+                if (Number.isNaN(txDate.getTime())) return true
+                const fromStart = new Date(dateFrom + "T00:00:00.000Z")
+                const toEnd = new Date(dateTo + "T23:59:59.999Z")
+                return txDate >= fromStart && txDate <= toEnd
+              })
+        const filtered = applyFilters(byDate, false)
+        setTxResults(Array.isArray(filtered) ? filtered : [])
       }
       setHasResults(true)
     } catch (err) {
@@ -156,13 +264,13 @@ export default function ReportsPage() {
               <BarChart3 className="size-4" />
               Generate Report
             </CardTitle>
-            <CardDescription>Select report type, date range, and generate results.</CardDescription>
+            <CardDescription>Select report type, date range, and generate results. Use &quot;Issuance&quot; to see data from the Item Issuance page (issued/assigned items).</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="report-type">Report Type</Label>
-                <Select value={reportType} onValueChange={setReportType}>
+                <Select value={reportType} onValueChange={handleReportTypeChange}>
                   <SelectTrigger id="report-type">
                     <SelectValue placeholder="Select report" />
                   </SelectTrigger>
@@ -177,22 +285,77 @@ export default function ReportsPage() {
               </div>
               <div className="space-y-2">
                 <Label>Date Range</Label>
-                <div className="flex gap-2">
-                  <Input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                    className="flex-1"
-                  />
-                  <Input
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                    className="flex-1"
-                  />
-                </div>
+                <Select
+                  value={dateRangePreset}
+                  onValueChange={(v) => setDateRangePreset(v)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All time</SelectItem>
+                    <SelectItem value="range">Custom range</SelectItem>
+                  </SelectContent>
+                </Select>
+                {dateRangePreset === "range" && (
+                  <div className="flex gap-2 mt-2">
+                    <Input
+                      type="date"
+                      value={dateFrom}
+                      onChange={(e) => setDateFrom(e.target.value)}
+                      className="flex-1"
+                    />
+                    <Input
+                      type="date"
+                      value={dateTo}
+                      onChange={(e) => setDateTo(e.target.value)}
+                      className="flex-1"
+                    />
+                  </div>
+                )}
               </div>
             </div>
+
+            {reportType && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="filter-category">Category</Label>
+                  <Select value={filterCategory || "_all"} onValueChange={(v) => setFilterCategory(v === "_all" ? "" : v)}>
+                    <SelectTrigger id="filter-category">
+                      <SelectValue placeholder="All categories" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_all">All categories</SelectItem>
+                      {(categories || []).map((c) => (
+                        <SelectItem key={c.id || c.slug} value={c.name}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="filter-accountable">Accountable Person</Label>
+                  <Select
+                    value={filterAccountablePerson || "_all"}
+                    onValueChange={(v) => setFilterAccountablePerson(v === "_all" ? "" : v)}
+                  >
+                    <SelectTrigger id="filter-accountable">
+                      <SelectValue placeholder="All" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_all">All</SelectItem>
+                      {accountablePersonOptions.map((name) => (
+                        <SelectItem key={name} value={name}>
+                          {name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-2">
               <Button onClick={handleGenerate} disabled={loading}>
                 <BarChart3 className="size-4" />
@@ -245,7 +408,10 @@ export default function ReportsPage() {
           <div className="border-b px-4 py-3 lg:px-6">
             <h2 className="text-sm font-semibold text-zinc-900">Report Results</h2>
             <p className="text-xs text-muted-foreground">
-              {REPORT_TYPES.find((r) => r.value === reportType)?.label} — {dateFrom} to {dateTo}
+              {REPORT_TYPES.find((r) => r.value === reportType)?.label}
+              {dateRangePreset === "all"
+                ? " — All time"
+                : ` — ${dateFrom} to ${dateTo}`}
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -261,19 +427,31 @@ export default function ReportsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {results.map((r) => (
-                    <TableRow key={r._id}>
-                      <TableCell className="font-medium">{r.name}</TableCell>
-                      <TableCell>{r.category}</TableCell>
-                      <TableCell>{r.itemType === "SUPPLY" ? r.quantityOnHand : "1"}</TableCell>
-                      <TableCell>{r.unit}</TableCell>
-                      <TableCell>{r.itemType}</TableCell>
+                  {results.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                        No inventory items match the selected filters.
+                      </TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    results.map((r, i) => (
+                      <TableRow key={r._id ?? r.id ?? i}>
+                        <TableCell className="font-medium">{r.name ?? "—"}</TableCell>
+                        <TableCell>{r.category ?? "—"}</TableCell>
+                        <TableCell>
+                          {r.itemType === "SUPPLY"
+                            ? (r.quantityOnHand ?? r.quantity ?? 0)
+                            : "1"}
+                        </TableCell>
+                        <TableCell>{r.unit ?? "—"}</TableCell>
+                        <TableCell>{r.itemType ?? "—"}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             )}
-            {(reportType === "stock-in" || reportType === "stock-out" || reportType === "issuance") && (
+            {reportType === "stock-in" && (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -285,21 +463,159 @@ export default function ReportsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {results.map((tx) => (
-                    <TableRow key={tx._id}>
-                      <TableCell className="tabular-nums">
-                        {tx.createdAt ? new Date(tx.createdAt).toLocaleString() : "—"}
+                  {results.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                        <p>No stock-in transactions in the selected date range.</p>
+                        <p className="mt-1 text-xs">Stock In = receiving inventory from suppliers. To see issued/assigned items (from the Issuance page), choose report type &quot;Issuance&quot;.</p>
                       </TableCell>
-                      <TableCell>{tx.type}</TableCell>
-                      <TableCell className="text-sm">
-                        {(tx.items ?? []).map((i) => `${i.qty}× ${i.itemId?.name ?? "—"}`).join(", ")}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {tx.supplier ? `Supplier: ${tx.supplier}` : tx.issuedToOffice ? `${tx.issuedToOffice}${tx.issuedToPerson ? ` · ${tx.issuedToPerson}` : ""}` : "—"}
-                      </TableCell>
-                      <TableCell>{tx.createdBy?.name ?? "—"}</TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    results.map((tx, i) => {
+                      const itemLines = (tx.items ?? []).map((line) => {
+                        const name =
+                          typeof line.itemId === "object" && line.itemId != null
+                            ? line.itemId.name
+                            : null
+                        const qty = line.qty ?? line.quantity ?? 1
+                        return `${qty}× ${name ?? "—"}`
+                      })
+                      return (
+                        <TableRow key={tx._id ?? tx.id ?? i}>
+                          <TableCell className="tabular-nums">
+                            {(tx.createdAt ?? tx.date) ? new Date(tx.createdAt ?? tx.date).toLocaleDateString() : "—"}
+                          </TableCell>
+                          <TableCell>{tx.type ?? "—"}</TableCell>
+                          <TableCell className="text-sm">{itemLines.join(", ") || "—"}</TableCell>
+                          <TableCell className="text-sm">
+                            {tx.supplier ? `Supplier: ${tx.supplier}` : tx.referenceNo ?? "—"}
+                          </TableCell>
+                          <TableCell>
+                            {typeof tx.createdBy === "object" && tx.createdBy?.name
+                              ? tx.createdBy.name
+                              : tx.createdBy ?? "—"}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            )}
+            {reportType === "stock-out" && (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Items</TableHead>
+                    <TableHead>Details</TableHead>
+                    <TableHead>By</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {results.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                        <p>No stock-out transactions in the selected date range.</p>
+                        <p className="mt-1 text-xs">To see items issued or assigned to divisions/personnel (from the Issuance page), choose report type &quot;Issuance&quot;.</p>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    results.map((tx, i) => {
+                      const itemLines = (tx.items ?? []).map((line) => {
+                        const name =
+                          typeof line.itemId === "object" && line.itemId != null
+                            ? line.itemId.name
+                            : null
+                        const qty = line.qty ?? line.quantity ?? 1
+                        return `${qty}× ${name ?? "—"}`
+                      })
+                      return (
+                        <TableRow key={tx._id ?? tx.id ?? i}>
+                          <TableCell className="tabular-nums">
+                            {(tx.createdAt ?? tx.date) ? new Date(tx.createdAt ?? tx.date).toLocaleDateString() : "—"}
+                          </TableCell>
+                          <TableCell>{tx.type ?? "—"}</TableCell>
+                          <TableCell className="text-sm">{itemLines.join(", ") || "—"}</TableCell>
+                          <TableCell className="text-sm">
+                            {tx.issuedToOffice
+                              ? `${tx.issuedToOffice}${tx.issuedToPerson ? ` · ${tx.issuedToPerson}` : ""}`
+                              : tx.purpose ?? "—"}
+                          </TableCell>
+                          <TableCell>
+                            {typeof tx.createdBy === "object" && tx.createdBy?.name
+                              ? tx.createdBy.name
+                              : tx.createdBy ?? "—"}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            )}
+            {reportType === "issuance" && (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Acquired Date</TableHead>
+                    <TableHead>Item Name</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Property</TableHead>
+                    <TableHead>Accountable Person</TableHead>
+                    <TableHead>Transferred To</TableHead>
+                    <TableHead>Remarks</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(() => {
+                    const rows = results.flatMap((tx, txIdx) =>
+                      (tx.items ?? []).map((line, idx) => {
+                        const item = typeof line.itemId === "object" ? line.itemId : null
+                        const acc = item?.accountablePerson ?? tx.accountablePerson ?? {}
+                        const accName =
+                          (typeof acc === "object" ? acc.name : null) ?? tx.issuedToPerson ?? ""
+                        const txDate = tx.createdAt ?? tx.date
+                        return (
+                          <TableRow
+                            key={`${tx._id ?? tx.id ?? txIdx}-${idx}-${item?._id ?? item?.id ?? line.itemId ?? idx}`}
+                          >
+                            <TableCell className="tabular-nums">
+                              {txDate ? new Date(txDate).toLocaleDateString() : "—"}
+                            </TableCell>
+                            <TableCell className="font-medium">{item?.name ?? "—"}</TableCell>
+                            <TableCell className="tabular-nums">
+                              {item?.unitCost != null && Number(item.unitCost) > 0
+                                ? `₱${Number(item.unitCost).toLocaleString()}`
+                                : "—"}
+                            </TableCell>
+                            <TableCell>{item?.propertyNumber ?? "—"}</TableCell>
+                            <TableCell>
+                              {accName
+                                ? [accName, typeof acc === "object" ? acc.position : null, typeof acc === "object" ? acc.office : null]
+                                    .filter(Boolean)
+                                    .join(" · ") || accName
+                                : "—"}
+                            </TableCell>
+                            <TableCell>{item?.transferredTo ?? "—"}</TableCell>
+                            <TableCell className="text-sm">{tx.purpose ?? "—"}</TableCell>
+                          </TableRow>
+                        )
+                      })
+                    )
+                    if (rows.length === 0) {
+                      return (
+                        <TableRow>
+                          <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                            <p>No issuance records in the selected date range.</p>
+                            <p className="mt-1 text-xs">Records are filtered by transaction created date. Try extending the end date to today if you recently added issuances.</p>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    }
+                    return rows
+                  })()}
                 </TableBody>
               </Table>
             )}

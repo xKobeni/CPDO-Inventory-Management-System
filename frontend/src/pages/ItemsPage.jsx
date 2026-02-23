@@ -62,6 +62,12 @@ export default function ItemsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <Link to="/items/low-stock">Low stock</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/items/out-of-stock">Out of stock</Link>
+          </Button>
           <Button asChild>
             <Link to="/items/manage-categories">Manage Categories</Link>
           </Button>

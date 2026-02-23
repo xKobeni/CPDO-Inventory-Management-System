@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -9,16 +9,26 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Eye, EyeOff } from "lucide-react"
+import { getRememberedEmail } from "@/lib/auth"
 
 export function LoginForm({
   className,
   onSubmit,
   isLoading,
   error,
+  onForgotPassword,
   ...props
 }) {
   const [showPassword, setShowPassword] = useState(false)
+  const [rememberMe, setRememberMe] = useState(false)
+  const [defaultEmail, setDefaultEmail] = useState("")
+
+  useEffect(() => {
+    setDefaultEmail(getRememberedEmail() || "")
+    setRememberMe(!!getRememberedEmail())
+  }, [])
 
   return (
     <div className={cn("flex flex-col gap-8", className)} {...props}>
@@ -31,7 +41,7 @@ export function LoginForm({
               const form = e.target
               const email = form.querySelector('input[name="email"]')?.value
               const password = form.querySelector('input[name="password"]')?.value
-              onSubmit?.({ email, password })
+              onSubmit?.({ email, password, rememberMe })
             }}
           >
             <FieldGroup className="gap-6">
@@ -46,10 +56,21 @@ export function LoginForm({
               )}
               <Field>
                 <FieldLabel htmlFor="email">Email</FieldLabel>
-                <Input id="email" name="email" type="email" placeholder="m@example.com" required disabled={isLoading} />
+                <Input id="email" name="email" type="email" placeholder="m@example.com" required disabled={isLoading} defaultValue={defaultEmail} />
               </Field>
               <Field>
-                <FieldLabel htmlFor="password">Password</FieldLabel>
+                <div className="flex items-center justify-between">
+                  <FieldLabel htmlFor="password">Password</FieldLabel>
+                  {onForgotPassword && (
+                    <button
+                      type="button"
+                      onClick={onForgotPassword}
+                      className="text-sm text-zinc-500 hover:text-zinc-700 underline-offset-2 hover:underline"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
                 <div className="relative">
                   <Input
                     id="password"
@@ -71,6 +92,22 @@ export function LoginForm({
                   </button>
                 </div>
               </Field>
+              <div className="flex w-full min-w-0 items-center gap-2">
+                <Checkbox
+                  id="rememberMe"
+                  checked={rememberMe}
+                  onCheckedChange={(checked) => setRememberMe(!!checked)}
+                  disabled={isLoading}
+                  aria-describedby="rememberMe-description"
+                />
+                <label
+                  htmlFor="rememberMe"
+                  id="rememberMe-description"
+                  className="min-w-0 flex-1 cursor-pointer select-none text-sm font-medium leading-none text-zinc-700 hover:text-zinc-900 peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Remember me
+                </label>
+              </div>
               <Field>
                 <Button type="submit" disabled={isLoading}>
                   {isLoading ? "Signing in…" : "Login"}

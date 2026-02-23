@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useId, useCallback, useMemo } from "react"
-import { useParams, Link } from "react-router-dom"
+import { useParams, useLocation, useBlocker, Link } from "react-router-dom"
 import { Search, RefreshCw, Plus, ChevronLeft, ChevronRight } from "lucide-react"
 import { IconDotsVertical, IconGripVertical, IconCircleCheckFilled, IconAlertCircle, IconLayoutColumns, IconChevronDown } from "@tabler/icons-react"
 import {
@@ -30,6 +30,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -678,12 +688,16 @@ function formToApiPayload(form, isSupply) {
 
 export default function CategoryItemsPage() {
   const { categorySlug } = useParams()
+  const location = useLocation()
   const { getCategoryBySlug, refreshCategories } = useCategories()
   const categoryFromApi = getCategoryBySlug(categorySlug)
+  const navState = location.state
   const category = categoryFromApi ?? (categorySlug ? {
-    name: (categorySlug || "").replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    name: (navState?.newCategory && typeof navState.newCategory === "string")
+      ? navState.newCategory.trim()
+      : (categorySlug || "").replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
     slug: categorySlug,
-    itemType: "SUPPLY",
+    itemType: (navState?.itemType === "ASSET" || navState?.itemType === "SUPPLY") ? navState.itemType : "SUPPLY",
     icon: null,
   } : null)
   const [items, setItems] = useState([])
@@ -712,6 +726,18 @@ export default function CategoryItemsPage() {
   const [pageSize, setPageSize] = useState(10)
   const dndId = useId()
   const isMobile = useIsMobile()
+
+  const isEmptyNewCategory = !!(category && items.length === 0 && navState?.newCategory)
+  const blocker = useBlocker(isEmptyNewCategory)
+
+  useEffect(() => {
+    if (!isEmptyNewCategory) return
+    const handleBeforeUnload = (e) => {
+      e.preventDefault()
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload)
+  }, [isEmptyNewCategory])
 
   const openDrawer = (item) => {
     setDrawerItem(item)
@@ -837,6 +863,11 @@ export default function CategoryItemsPage() {
 
   const handleAdd = async () => {
     if (!category) return
+    const itemName = (form.name || "").trim()
+    if (!itemName) {
+      toast.error("Item name is required. Enter a name to save the item and create the category.")
+      return
+    }
     const isSupply = category.itemType === "SUPPLY"
     const payload = formToApiPayload(form, isSupply)
     setSubmitting(true)
@@ -846,7 +877,7 @@ export default function CategoryItemsPage() {
       setAddOpen(false)
       setForm(getEmptyForm(isSupply, category.name))
       refreshCategories?.()
-      toast.success("Item added.")
+      toast.success("Item added. Category is now saved.")
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
@@ -913,6 +944,7 @@ export default function CategoryItemsPage() {
   const lowStockCount = items.filter((i) => (i.status === "Low Stock" || (i.status && i.status !== "IN_STOCK" && i.status !== "DEPLOYED"))).length
 
   return (
+    <>
     <div className="mx-auto flex min-w-0 w-full max-w-[1400px] flex-col gap-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
@@ -1182,7 +1214,11 @@ export default function CategoryItemsPage() {
         <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col p-0 sm:max-w-2xl">
           <DialogHeader className="shrink-0 border-b px-6 py-4">
             <DialogTitle>Add Item</DialogTitle>
-            <DialogDescription>Add a new {isSupply ? "supply" : "asset"} item to {category?.name}.</DialogDescription>
+            <DialogDescription>
+              {items.length === 0 && navState?.newCategory
+                ? `This category will be saved to the database when you add the first item. Add a new ${isSupply ? "supply" : "asset"} item below (item name is required).`
+                : `Add a new ${isSupply ? "supply" : "asset"} item to ${category?.name}.`}
+            </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
             <div className="space-y-6">
@@ -1212,12 +1248,13 @@ export default function CategoryItemsPage() {
                     />
                   </div>
                   <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="add-name">Item</Label>
+                    <Label htmlFor="add-name">Item <span className="text-destructive">*</span></Label>
                     <Input
                       id="add-name"
                       value={form.name}
                       onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                       placeholder="e.g. Paper Shredder, Printer 3-in-1, Desktop Computer"
+                      required
                     />
                   </div>
                   {!isSupply && (
@@ -1815,5 +1852,28 @@ export default function CategoryItemsPage() {
         </DrawerContent>
       </Drawer>
     </div>
+
+      {blocker.state === "blocked" ? (
+        <AlertDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) blocker.reset()
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Leave without saving category?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This category has no items yet. If you leave now, the category will not be saved to the database. You can add an item first to create the category, or leave anyway.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => blocker.reset()}>Stay</AlertDialogCancel>
+              <AlertDialogAction onClick={() => blocker.proceed()}>Leave anyway</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : null}
+    </>
   )
 }

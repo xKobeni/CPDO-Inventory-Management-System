@@ -1,10 +1,10 @@
 import { useState } from "react"
-import { Link } from "react-router-dom"
-import { Search, RefreshCw } from "lucide-react"
+import { Link, useNavigate } from "react-router-dom"
+import { Search, RefreshCw, Plus, Pencil } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -21,17 +21,71 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { useCategories } from "@/contexts/CategoriesContext"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { useCategories, slugFromName } from "@/contexts/CategoriesContext"
+import { toast } from "sonner"
 
 export default function ManageCategoriesPage() {
-  const { categories, loading, error, refreshCategories } = useCategories()
+  const { categories, loading, error, refreshCategories, setIconOverride, ICON_MAP, ICON_OPTIONS } = useCategories()
   const [search, setSearch] = useState("")
+  const navigate = useNavigate()
+
+  const [addOpen, setAddOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [editingCategory, setEditingCategory] = useState(null)
+  const [addForm, setAddForm] = useState({ name: "", itemType: "SUPPLY", iconName: "Box" })
+  const [editIcon, setEditIcon] = useState("Box")
 
   const filtered = categories.filter(
     (c) =>
       c.name.toLowerCase().includes(search.toLowerCase()) ||
       (c.slug && c.slug.toLowerCase().includes(search.toLowerCase()))
   )
+
+  const openAdd = () => {
+    setAddForm({ name: "", itemType: "SUPPLY", iconName: "Box" })
+    setAddOpen(true)
+  }
+
+  const handleAddSubmit = () => {
+    const name = (addForm.name || "").trim()
+    if (!name) {
+      toast.error("Please enter a category name.")
+      return
+    }
+    const slug = slugFromName(name) || "general"
+    setAddOpen(false)
+    navigate(`/items/category/${slug}`, { state: { newCategory: name, itemType: addForm.itemType } })
+    toast.success("Add an item with this category to create it.")
+  }
+
+  const openEdit = (cat) => {
+    setEditingCategory(cat)
+    setEditIcon(cat.iconName || "Box")
+    setEditOpen(true)
+  }
+
+  const handleEditSubmit = () => {
+    if (!editingCategory) return
+    setIconOverride(editingCategory.slug, editIcon)
+    setEditOpen(false)
+    setEditingCategory(null)
+    toast.success("Category icon updated.")
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-6">
@@ -60,10 +114,14 @@ export default function ManageCategoriesPage() {
             Manage Categories
           </h1>
           <p className="text-sm text-muted-foreground">
-            Categories are derived from your inventory. To add a category, add an item and set its category name on any category page.
+            Categories are derived from your inventory. Add a category below, then add an item in that category to create it.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button onClick={openAdd}>
+            <Plus className="size-4" />
+            Add Category
+          </Button>
           <Button variant="outline" size="icon" onClick={refreshCategories} disabled={loading}>
             <RefreshCw className="size-4" />
             <span className="sr-only">Refresh</span>
@@ -80,7 +138,7 @@ export default function ManageCategoriesPage() {
         </div>
       )}
 
-      <section className="overflow-hidden rounded-xl border bg-white">
+      <section className="min-w-0 overflow-hidden rounded-xl border bg-white">
         <div className="flex flex-col gap-3 border-b px-4 py-3 lg:px-6 md:flex-row md:items-center md:justify-between">
           <div className="relative max-w-sm flex-1">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -93,45 +151,48 @@ export default function ManageCategoriesPage() {
             />
           </div>
         </div>
-        <div className="overflow-auto px-4 lg:px-6">
-          <div className="overflow-hidden rounded-lg border">
-            <Table className="table-fixed w-full">
-              <colgroup>
-                <col style={{ width: "4rem" }} />
-                <col style={{ width: "auto" }} />
-                <col style={{ width: "auto" }} />
-                <col style={{ width: "7rem" }} />
-                <col style={{ width: "8rem" }} />
-                <col style={{ width: "8rem" }} />
-              </colgroup>
+        <div className="w-full min-w-0 overflow-x-auto px-4 lg:px-6">
+          <div className="inline-block min-w-full rounded-lg border">
+            <Table className="w-full table-auto">
               <TableHeader className="bg-muted sticky top-0 z-10">
                 <TableRow>
-                  <TableHead className="px-3">#</TableHead>
-                  <TableHead className="px-3">Name</TableHead>
-                  <TableHead className="px-3">Slug</TableHead>
-                  <TableHead className="px-3">Type</TableHead>
-                  <TableHead className="px-3">Icon</TableHead>
-                  <TableHead className="px-3 text-right">Items</TableHead>
+                  <TableHead className="px-3 whitespace-nowrap">#</TableHead>
+                  <TableHead className="px-3 whitespace-nowrap">Name</TableHead>
+                  <TableHead className="px-3 whitespace-nowrap">Slug</TableHead>
+                  <TableHead className="px-3 whitespace-nowrap">Type</TableHead>
+                  <TableHead className="px-3 whitespace-nowrap">Icon</TableHead>
+                  <TableHead className="px-3 text-right whitespace-nowrap">Items</TableHead>
+                  <TableHead className="px-3 w-12 whitespace-nowrap">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                       Loading…
                     </TableCell>
                   </TableRow>
                 ) : filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                      No categories yet. Add an item with a category name to create one.
+                    <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                      No categories yet. Add a category above, then add an item in that category to create it.
                     </TableCell>
                   </TableRow>
                 ) : (
                   filtered.map((cat, idx) => (
-                    <TableRow key={cat.id}>
+                    <TableRow
+                      key={cat.id}
+                      className="cursor-default transition-colors hover:bg-muted/50"
+                    >
                       <TableCell className="px-3 py-2 font-medium">{idx + 1}</TableCell>
-                      <TableCell className="px-3 py-2">{cat.name}</TableCell>
+                      <TableCell className="px-3 py-2">
+                        <Link
+                          to={`/items/category/${cat.slug}`}
+                          className="font-medium text-zinc-900 hover:underline"
+                        >
+                          {cat.name}
+                        </Link>
+                      </TableCell>
                       <TableCell className="px-3 py-2 text-muted-foreground">{cat.slug}</TableCell>
                       <TableCell className="px-3 py-2">
                         <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-zinc-100 text-zinc-700">
@@ -140,6 +201,17 @@ export default function ManageCategoriesPage() {
                       </TableCell>
                       <TableCell className="px-3 py-2">{cat.iconName}</TableCell>
                       <TableCell className="px-3 py-2 text-right tabular-nums">{cat.count ?? 0}</TableCell>
+                      <TableCell className="px-3 py-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-muted-foreground hover:text-zinc-900"
+                          onClick={() => openEdit(cat)}
+                          aria-label={`Edit ${cat.name}`}
+                        >
+                          <Pencil className="size-4" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -148,6 +220,113 @@ export default function ManageCategoriesPage() {
           </div>
         </div>
       </section>
+
+      {/* Add Category Dialog */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Category</DialogTitle>
+            <DialogDescription>
+              Enter a name and type. You will be taken to the category page to add the first item—the category is created when the first item is saved.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="add-name">Category name</Label>
+              <Input
+                id="add-name"
+                value={addForm.name}
+                onChange={(e) => setAddForm((p) => ({ ...p, name: e.target.value }))}
+                placeholder="e.g. Office Supplies"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Type</Label>
+              <Select
+                value={addForm.itemType}
+                onValueChange={(v) => setAddForm((p) => ({ ...p, itemType: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SUPPLY">Supply</SelectItem>
+                  <SelectItem value="ASSET">Asset/Property</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Icon</Label>
+              <Select
+                value={addForm.iconName}
+                onValueChange={(v) => setAddForm((p) => ({ ...p, iconName: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ICON_OPTIONS.map((key) => (
+                    <SelectItem key={key} value={key}>
+                      {key}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddSubmit}>Continue</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Category Dialog */}
+      <Dialog open={editOpen} onOpenChange={(open) => !open && setEditOpen(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Category</DialogTitle>
+            <DialogDescription>
+              Category name and type are determined by the items in this category. You can change the display icon.
+            </DialogDescription>
+          </DialogHeader>
+          {editingCategory && (
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label>Name</Label>
+                <Input value={editingCategory.name} readOnly className="bg-muted" />
+              </div>
+              <div className="grid gap-2">
+                <Label>Slug</Label>
+                <Input value={editingCategory.slug} readOnly className="bg-muted" />
+              </div>
+              <div className="grid gap-2">
+                <Label>Icon</Label>
+                <Select value={editIcon} onValueChange={setEditIcon}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ICON_OPTIONS.map((key) => (
+                      <SelectItem key={key} value={key}>
+                        {key}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleEditSubmit}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

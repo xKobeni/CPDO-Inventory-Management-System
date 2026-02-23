@@ -19,3 +19,39 @@ export async function logout() {
   const { data } = await http.post(API_PATHS.auth.logout)
   return data
 }
+
+/**
+ * @param {{ email: string, otp: string }} payload
+ * @returns {Promise<{ ok: boolean, message?: string }>}
+ */
+export async function verifyEmail(payload) {
+  const { data } = await http.post(API_PATHS.auth.verifyEmail, payload)
+  return data
+}
+
+/**
+ * @param {{ email: string }} payload
+ * @returns {Promise<{ ok: boolean, message?: string }>}
+ */
+export async function resendVerification(payload) {
+  const { data } = await http.post(API_PATHS.auth.resendVerification, payload)
+  return data
+}
+
+/**
+ * @param {{ email: string }} payload
+ * @returns {Promise<{ ok: boolean, message?: string }>}
+ */
+export async function forgotPassword(payload) {
+  const { data } = await http.post(API_PATHS.auth.forgotPassword, payload)
+  return data
+}
+
+/**
+ * @param {{ email: string, otp: string, newPassword: string }} payload
+ * @returns {Promise<{ ok: boolean, message?: string }>}
+ */
+export async function resetPassword(payload) {
+  const { data } = await http.post(API_PATHS.auth.resetPassword, payload)
+  return data
+}

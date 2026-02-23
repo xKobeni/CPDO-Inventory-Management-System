@@ -34,12 +34,39 @@ const SLUG_TO_ICON = {
   general: "Box",
 }
 
+const ICON_OVERRIDES_KEY = "cpdc_category_icon_overrides"
+
+function loadIconOverrides() {
+  try {
+    const raw = localStorage.getItem(ICON_OVERRIDES_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
 const CategoriesContext = createContext(null)
 
 export function CategoriesProvider({ children }) {
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [iconOverrides, setIconOverridesState] = useState(loadIconOverrides)
+
+  const setIconOverride = useCallback((slug, iconName) => {
+    setIconOverridesState((prev) => {
+      const next = { ...prev }
+      if (iconName == null || iconName === "") {
+        delete next[slug]
+      } else {
+        next[slug] = iconName
+      }
+      try {
+        localStorage.setItem(ICON_OVERRIDES_KEY, JSON.stringify(next))
+      } catch {}
+      return next
+    })
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -50,6 +77,7 @@ export function CategoriesProvider({ children }) {
       .then((data) => {
         if (cancelled) return
         const all = data?.all ?? []
+        const overrides = loadIconOverrides()
         const list = all.map((entry) => {
           const name = entry.category ?? "General"
           const slug = slugFromName(name)
@@ -59,7 +87,7 @@ export function CategoriesProvider({ children }) {
             : types[0] === "ASSET"
               ? "ASSET"
               : "SUPPLY"
-          const iconName = SLUG_TO_ICON[slug] ?? "Box"
+          const iconName = overrides[slug] ?? SLUG_TO_ICON[slug] ?? "Box"
           return {
             id: slug,
             name,
@@ -101,6 +129,7 @@ export function CategoriesProvider({ children }) {
   const refreshCategories = useCallback(() => {
     setLoading(true)
     setError(null)
+    const overrides = loadIconOverrides()
     dashboardService
       .getCategories()
       .then((data) => {
@@ -114,7 +143,7 @@ export function CategoriesProvider({ children }) {
             : types[0] === "ASSET"
               ? "ASSET"
               : "SUPPLY"
-          const iconName = SLUG_TO_ICON[slug] ?? "Box"
+          const iconName = overrides[slug] ?? SLUG_TO_ICON[slug] ?? "Box"
           return {
             id: slug,
             name,
@@ -133,15 +162,21 @@ export function CategoriesProvider({ children }) {
       .finally(() => setLoading(false))
   }, [])
 
+  const categoriesWithOverrides = categories.map((c) => ({
+    ...c,
+    iconName: iconOverrides[c.slug] ?? c.iconName,
+  }))
+
   return (
     <CategoriesContext.Provider
       value={{
-        categories,
+        categories: categoriesWithOverrides,
         loading,
         error,
         refreshCategories,
         getCategoriesWithIcons,
         getCategoryBySlug,
+        setIconOverride,
         ICON_MAP,
         ICON_OPTIONS: Object.keys(ICON_MAP),
       }}
