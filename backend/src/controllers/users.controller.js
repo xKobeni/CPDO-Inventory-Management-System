@@ -1,7 +1,8 @@
 import { z } from "zod";
 import User from "../models/User.js";
 import AuditLog from "../models/AuditLog.js";
-import { hashPassword } from "../utils/hash.js";
+import { hashPassword, hashToken } from "../utils/hash.js";
+import { sendPasswordResetNotification, sendVerificationOtpEmail } from "../services/email.service.js";
 
 export const adminCreateUserSchema = z.object({
   name: z.string().min(2),
@@ -36,7 +37,7 @@ export async function adminListUsers(req, res) {
   }
 
   const users = await User.find(filter)
-    .select("_id name email role isActive createdAt updatedAt")
+    .select("_id name email role isActive isVerified createdAt updatedAt")
     .sort({ createdAt: -1 })
     .limit(500);
 
@@ -49,12 +50,18 @@ export async function adminCreateUser(req, res) {
   const exists = await User.findOne({ email });
   if (exists) return res.status(409).json({ message: "Email already in use" });
 
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  const otpExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
   const user = await User.create({
     name,
     email,
     passwordHash: await hashPassword(password),
     role,
     isActive: true,
+    isVerified: false,
+    emailVerificationOtpHash: await hashToken(otp),
+    emailVerificationOtpExpires: otpExpires,
   });
 
   await AuditLog.create({
@@ -65,12 +72,20 @@ export async function adminCreateUser(req, res) {
     meta: { email: user.email, role: user.role },
   });
 
+  try {
+    await sendVerificationOtpEmail(user.email, user.name, otp);
+  } catch (err) {
+    console.error("Verification email failed:", err?.message || err);
+    // User is created; they can use "Resend verification" later
+  }
+
   res.status(201).json({
     id: user._id,
     name: user.name,
     email: user.email,
     role: user.role,
     isActive: user.isActive,
+    isVerified: false,
   });
 }
 
@@ -131,6 +146,13 @@ export async function adminResetPassword(req, res) {
     targetId: user._id.toString(),
     meta: { email: user.email },
   });
+
+  try {
+    await sendPasswordResetNotification(user.email, user.name);
+  } catch (err) {
+    console.error("Password reset email failed:", err?.message || err);
+    // Do not fail the request; password was already reset
+  }
 
   res.json({ ok: true });
 }

@@ -3,6 +3,17 @@ import User from "../models/User.js";
 import AuditLog from "../models/AuditLog.js";
 import { hashPassword, verifyPassword, hashToken, verifyTokenHash } from "../utils/hash.js";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../utils/jwt.js";
+import {
+  sendVerificationOtpEmail,
+  sendPasswordResetOtpEmail,
+} from "../services/email.service.js";
+
+const VERIFICATION_OTP_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
+const RESET_OTP_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes
+
+function generateOtp() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
 
 export const registerSchema = z.object({
   name: z.string().min(2),
@@ -14,6 +25,25 @@ export const registerSchema = z.object({
 export const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+});
+
+export const verifyEmailSchema = z.object({
+  email: z.string().email().transform((v) => v.toLowerCase().trim()),
+  otp: z.string().length(6).regex(/^\d+$/),
+});
+
+export const resendVerificationSchema = z.object({
+  email: z.string().email().transform((v) => v.toLowerCase().trim()),
+});
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email().transform((v) => v.toLowerCase().trim()),
+});
+
+export const resetPasswordSchema = z.object({
+  email: z.string().email().transform((v) => v.toLowerCase().trim()),
+  otp: z.string().length(6).regex(/^\d+$/),
+  newPassword: z.string().min(8),
 });
 
 function refreshCookieOptions() {
@@ -50,6 +80,14 @@ export async function login(req, res) {
 
   const user = await User.findOne({ email });
   if (!user || !user.isActive) return res.status(401).json({ message: "Invalid credentials" });
+
+  if (!user.isVerified) {
+    return res.status(403).json({
+      message: "Please verify your email before signing in.",
+      code: "NEEDS_VERIFICATION",
+      email: user.email,
+    });
+  }
 
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) return res.status(401).json({ message: "Invalid credentials" });
@@ -125,4 +163,110 @@ export async function logout(req, res) {
 
   res.clearCookie("refresh_token", { path: "/api/auth/refresh" });
   res.json({ ok: true });
+}
+
+export async function verifyEmail(req, res) {
+  const { email, otp } = req.body;
+
+  const user = await User.findOne({ email });
+  if (!user) return res.status(400).json({ message: "Invalid email or OTP." });
+
+  if (!user.emailVerificationOtpHash || !user.emailVerificationOtpExpires) {
+    return res.status(400).json({ message: "No pending verification. You may already be verified—try logging in." });
+  }
+  if (new Date() > user.emailVerificationOtpExpires) {
+    user.emailVerificationOtpHash = null;
+    user.emailVerificationOtpExpires = null;
+    await user.save();
+    return res.status(400).json({ message: "Verification code expired. Please request a new one." });
+  }
+
+  const ok = await verifyTokenHash(otp, user.emailVerificationOtpHash);
+  if (!ok) return res.status(400).json({ message: "Invalid email or OTP." });
+
+  user.isVerified = true;
+  user.emailVerificationOtpHash = null;
+  user.emailVerificationOtpExpires = null;
+  await user.save();
+
+  res.json({ ok: true, message: "Email verified. You can now sign in." });
+}
+
+export async function resendVerification(req, res) {
+  const { email } = req.body;
+
+  const user = await User.findOne({ email });
+  if (!user) {
+    // Same response for security: don't reveal if email exists
+    return res.json({ ok: true, message: "If that email is registered, a new code was sent." });
+  }
+  if (user.isVerified) {
+    return res.json({ ok: true, message: "Account is already verified. You can sign in." });
+  }
+
+  const otp = generateOtp();
+  user.emailVerificationOtpHash = await hashToken(otp);
+  user.emailVerificationOtpExpires = new Date(Date.now() + VERIFICATION_OTP_EXPIRY_MS);
+  await user.save();
+
+  try {
+    await sendVerificationOtpEmail(user.email, user.name, otp);
+  } catch (err) {
+    console.error("Resend verification email failed:", err?.message || err);
+    return res.status(500).json({ message: "Failed to send email. Try again later." });
+  }
+
+  res.json({ ok: true, message: "A new verification code was sent to your email." });
+}
+
+export async function forgotPassword(req, res) {
+  const { email } = req.body;
+
+  const user = await User.findOne({ email });
+  if (!user || !user.isActive) {
+    return res.json({ ok: true, message: "If that email is registered, you will receive a reset code." });
+  }
+
+  const otp = generateOtp();
+  user.passwordResetOtpHash = await hashToken(otp);
+  user.passwordResetOtpExpires = new Date(Date.now() + RESET_OTP_EXPIRY_MS);
+  await user.save();
+
+  try {
+    await sendPasswordResetOtpEmail(user.email, user.name, otp);
+  } catch (err) {
+    console.error("Forgot password email failed:", err?.message || err);
+    return res.status(500).json({ message: "Failed to send email. Try again later." });
+  }
+
+  res.json({ ok: true, message: "If that email is registered, you will receive a reset code." });
+}
+
+export async function resetPassword(req, res) {
+  const { email, otp, newPassword } = req.body;
+
+  const user = await User.findOne({ email });
+  if (!user || !user.isActive) {
+    return res.status(400).json({ message: "Invalid email or OTP." });
+  }
+  if (!user.passwordResetOtpHash || !user.passwordResetOtpExpires) {
+    return res.status(400).json({ message: "No reset requested or code expired. Request a new code." });
+  }
+  if (new Date() > user.passwordResetOtpExpires) {
+    user.passwordResetOtpHash = null;
+    user.passwordResetOtpExpires = null;
+    await user.save();
+    return res.status(400).json({ message: "Reset code expired. Please request a new one." });
+  }
+
+  const ok = await verifyTokenHash(otp, user.passwordResetOtpHash);
+  if (!ok) return res.status(400).json({ message: "Invalid email or OTP." });
+
+  user.passwordHash = await hashPassword(newPassword);
+  user.passwordResetOtpHash = null;
+  user.passwordResetOtpExpires = null;
+  user.refreshTokenHash = null;
+  await user.save();
+
+  res.json({ ok: true, message: "Password reset. You can sign in with your new password." });
 }
