@@ -3,7 +3,7 @@ import { z } from "zod";
 import { validateBody } from "../middleware/validate.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireRole } from "../middleware/roles.js";
-import { listTransactions, createStockIn, createIssuance, createAssetAssign, deleteIssuance } from "../controllers/transactions.controller.js";
+import { listTransactions, createStockIn, createIssuance, createAssetAssign, deleteIssuance, deleteIssuanceLine } from "../controllers/transactions.controller.js";
 
 const r = Router();
 
@@ -49,6 +49,7 @@ r.get("/", requireAuth, listTransactions);
 r.post("/stock-in", requireAuth, requireRole("ADMIN", "STAFF"), validateBody(stockInSchema), createStockIn);
 r.post("/issuance", requireAuth, requireRole("ADMIN", "STAFF"), validateBody(issuanceSchema), createIssuance);
 r.post("/asset-assign", requireAuth, requireRole("ADMIN", "STAFF"), validateBody(assetAssignSchema), createAssetAssign);
+r.delete("/:id/line/:itemId", requireAuth, requireRole("ADMIN", "STAFF"), deleteIssuanceLine);
 r.delete("/:id", requireAuth, requireRole("ADMIN", "STAFF"), deleteIssuance);
 
 export default r;

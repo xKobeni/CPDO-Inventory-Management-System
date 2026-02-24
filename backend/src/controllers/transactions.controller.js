@@ -269,3 +269,71 @@ export async function deleteIssuance(req, res) {
     session.endSession();
   }
 }
+
+/** Delete a single line item from an ISSUANCE (return stock) or ASSET_ASSIGN (revert assignment) transaction. */
+export async function deleteIssuanceLine(req, res) {
+  const { id, itemId } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ message: "Invalid transaction id" });
+  }
+  if (!mongoose.Types.ObjectId.isValid(itemId)) {
+    return res.status(400).json({ message: "Invalid item id" });
+  }
+
+  const session = await mongoose.startSession();
+  try {
+    session.startTransaction();
+
+    const tx = await Transaction.findById(id).session(session);
+    if (!tx) return res.status(404).json({ message: "Transaction not found" });
+    if (tx.type !== "ISSUANCE" && tx.type !== "ASSET_ASSIGN") {
+      return res.status(400).json({ message: "Only issuance or asset-assign transactions can be modified" });
+    }
+
+    const idx = (tx.items || []).findIndex(
+      (line) => String(line.itemId?.toString?.() ?? line.itemId) === String(itemId)
+    );
+    if (idx === -1) return res.status(404).json({ message: "Item not found in this transaction" });
+
+    const line = tx.items[idx];
+    const qty = Number(line.qty) || 1;
+
+    if (tx.type === "ISSUANCE") {
+      await applyStockChange(session, [{ itemId, qty }], +1);
+    }
+
+    if (tx.type === "ASSET_ASSIGN") {
+      const item = await Item.findById(itemId).session(session);
+      if (item) {
+        item.accountablePerson = { name: "", position: "", office: "CPDC" };
+        item.status = "IN_STOCK";
+        item.assignedDate = null;
+        item.returnedDate = null;
+        await item.save({ session });
+      }
+    }
+
+    tx.items.splice(idx, 1);
+    if ((tx.items || []).length === 0) {
+      await Transaction.findByIdAndDelete(id).session(session);
+    } else {
+      await tx.save({ session });
+    }
+
+    await AuditLog.create([{
+      actorId: req.user._id,
+      action: tx.type === "ISSUANCE" ? "ISSUANCE_LINE_DELETE" : "ASSET_ASSIGN_LINE_DELETE",
+      targetType: "Transaction",
+      targetId: id,
+      meta: { itemId, qty },
+    }], { session });
+
+    await session.commitTransaction();
+    return res.status(200).json({ ok: true });
+  } catch (e) {
+    await session.abortTransaction();
+    throw e;
+  } finally {
+    session.endSession();
+  }
+}

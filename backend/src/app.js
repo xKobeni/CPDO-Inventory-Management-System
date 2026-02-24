@@ -14,6 +14,7 @@ import txRoutes from "./routes/transactions.routes.js";
 import { notFound, errorHandler } from "./middleware/error.js";
 import exportRoutes from "./routes/export.routes.js";
 import importRoutes from "./routes/import.routes.js";
+import peopleRoutes from "./routes/people.routes.js";
 
 const app = express();
 
@@ -52,6 +53,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/items", itemsRoutes);
 app.use("/api/transactions", txRoutes);
 app.use("/api/users", usersRoutes);
+app.use("/api/people", peopleRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/export", exportRoutes);
 app.use("/api/import", importRoutes);
