@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react"
-import { ClipboardList, Search, Plus, Trash2, Filter } from "lucide-react"
+import { ClipboardList, Search, Plus, Trash2, Filter, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -36,6 +36,19 @@ import { getErrorMessage } from "@/utils/api"
 
 const ISSUE_MODE_SUPPLY = "supply"
 const ISSUE_MODE_ASSET = "asset"
+const PAGE_SIZE_OPTIONS = [10, 25, 50]
+const FILTER_TYPE_ALL = "all"
+const FILTER_TYPE_SUPPLY = "supply"
+const FILTER_TYPE_ASSET = "asset"
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10)
+}
+function lastMonthStr() {
+  const d = new Date()
+  d.setMonth(d.getMonth() - 1)
+  return d.toISOString().slice(0, 10)
+}
 
 export default function IssuancePage() {
   const [issueMode, setIssueMode] = useState(ISSUE_MODE_SUPPLY)
@@ -49,6 +62,11 @@ export default function IssuancePage() {
   const [search, setSearch] = useState("")
   const [filterAccountable, setFilterAccountable] = useState("")
   const [filterItem, setFilterItem] = useState("")
+  const [filterType, setFilterType] = useState(FILTER_TYPE_ALL)
+  const [dateFrom, setDateFrom] = useState(lastMonthStr())
+  const [dateTo, setDateTo] = useState(todayStr())
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [deletingTxId, setDeletingTxId] = useState(null)
 
   const [lines, setLines] = useState([{ itemId: "", qty: 1 }])
@@ -70,18 +88,21 @@ export default function IssuancePage() {
     } catch (err) {
       setError(getErrorMessage(err))
       setSupplies([])
+      toast.error(getErrorMessage(err))
     } finally {
       setLoading(false)
     }
   }, [])
 
-  const fetchTransactions = useCallback(async () => {
+  const fetchTransactions = useCallback(async (showToast = false) => {
     setTxLoading(true)
     try {
       const data = await transactionsService.listTransactions({ type: "ISSUANCE,ASSET_ASSIGN" })
       setTransactions(data)
-    } catch {
+      if (showToast) toast.success("List refreshed.")
+    } catch (err) {
       setTransactions([])
+      toast.error(getErrorMessage(err))
     } finally {
       setTxLoading(false)
     }
@@ -95,6 +116,7 @@ export default function IssuancePage() {
     } catch (err) {
       setError(getErrorMessage(err))
       setAssets([])
+      toast.error(getErrorMessage(err))
     } finally {
       setAssetsLoading(false)
     }
@@ -251,6 +273,21 @@ export default function IssuancePage() {
 
   const filteredRows = useMemo(() => {
     return flattenedRows.filter((row) => {
+      if (filterType !== FILTER_TYPE_ALL) {
+        const isSupply = row.txType === "ISSUANCE"
+        if (filterType === FILTER_TYPE_SUPPLY && !isSupply) return false
+        if (filterType === FILTER_TYPE_ASSET && isSupply) return false
+      }
+      if (dateFrom && row.createdAt) {
+        const rowDate = new Date(row.createdAt)
+        const from = new Date(dateFrom + "T00:00:00.000Z")
+        if (rowDate < from) return false
+      }
+      if (dateTo && row.createdAt) {
+        const rowDate = new Date(row.createdAt)
+        const to = new Date(dateTo + "T23:59:59.999Z")
+        if (rowDate > to) return false
+      }
       if (filterAccountable) {
         const acc = (row.item?.accountablePerson?.name ?? row.accountablePerson?.name ?? row.issuedToPerson ?? "").trim()
         if (acc.toLowerCase() !== filterAccountable.toLowerCase()) return false
@@ -278,7 +315,17 @@ export default function IssuancePage() {
       }
       return true
     })
-  }, [flattenedRows, filterAccountable, filterItem, search])
+  }, [flattenedRows, filterAccountable, filterItem, search, filterType, dateFrom, dateTo])
+
+  const totalFiltered = filteredRows.length
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize))
+  const paginatedRows = filteredRows.slice((page - 1) * pageSize, page * pageSize)
+  const startRow = totalFiltered === 0 ? 0 : (page - 1) * pageSize + 1
+  const endRow = Math.min(page * pageSize, totalFiltered)
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, filterAccountable, filterItem, filterType, dateFrom, dateTo])
 
   const handleRemoveTransaction = async (txId, txType) => {
     const isAsset = txType === "ASSET_ASSIGN"
@@ -323,6 +370,10 @@ export default function IssuancePage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="icon" onClick={() => fetchTransactions(true)} disabled={txLoading}>
+            <RefreshCw className="size-4" />
+            <span className="sr-only">Refresh</span>
+          </Button>
           <Button asChild>
             <Link to="/items">View inventory</Link>
           </Button>
@@ -548,6 +599,36 @@ export default function IssuancePage() {
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="date-from-iss" className="text-muted-foreground text-xs whitespace-nowrap">From</Label>
+                <Input
+                  id="date-from-iss"
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="w-[140px]"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="date-to-iss" className="text-muted-foreground text-xs whitespace-nowrap">To</Label>
+                <Input
+                  id="date-to-iss"
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="w-[140px]"
+                />
+              </div>
+              <Select value={filterType} onValueChange={setFilterType}>
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={FILTER_TYPE_ALL}>All</SelectItem>
+                  <SelectItem value={FILTER_TYPE_SUPPLY}>Supply</SelectItem>
+                  <SelectItem value={FILTER_TYPE_ASSET}>Asset</SelectItem>
+                </SelectContent>
+              </Select>
               <Select
                 value={filterAccountable || "_"}
                 onValueChange={(v) => setFilterAccountable(v === "_" ? "" : v)}
@@ -578,13 +659,14 @@ export default function IssuancePage() {
                   ))}
                 </SelectContent>
               </Select>
-              {(filterAccountable || filterItem) && (
+              {(filterAccountable || filterItem || filterType !== FILTER_TYPE_ALL) && (
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => {
                     setFilterAccountable("")
                     setFilterItem("")
+                    setFilterType(FILTER_TYPE_ALL)
                   }}
                 >
                   Clear filters
@@ -618,12 +700,12 @@ export default function IssuancePage() {
                   ) : filteredRows.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
-                        No issuance or assignment records yet.
+                        No issuance or assignment records match your filters.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredRows.map((row, idx) => {
-                      const isFirstOfTx = idx === 0 || filteredRows[idx - 1].txId !== row.txId
+                    paginatedRows.map((row, idx) => {
+                      const isFirstOfTx = idx === 0 || paginatedRows[idx - 1].txId !== row.txId
                       const isIssuance = row.txType === "ISSUANCE"
                       const accName = row.item?.accountablePerson?.name ?? row.accountablePerson?.name ?? row.issuedToPerson ?? "—"
                       return (
@@ -674,6 +756,33 @@ export default function IssuancePage() {
               </Table>
             </div>
           </div>
+          {filteredRows.length > 0 && (
+            <div className="flex flex-col gap-3 border-t px-4 py-3 lg:px-6 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                <span>Showing {startRow}–{endRow} of {totalFiltered}</span>
+                <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1) }}>
+                  <SelectTrigger className="h-8 w-[70px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAGE_SIZE_OPTIONS.map((n) => (
+                      <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span>per page</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
+                  <ChevronLeft className="size-4" /> Previous
+                </Button>
+                <span className="min-w-[90px] text-center text-sm text-muted-foreground">Page {page} of {totalPages}</span>
+                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
+                  Next <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </section>
       </section>
     </div>

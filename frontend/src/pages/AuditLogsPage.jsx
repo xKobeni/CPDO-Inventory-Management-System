@@ -1,12 +1,19 @@
 import { useState, useEffect, useCallback } from "react"
-import { Search, RefreshCw, Download } from "lucide-react"
+import { Search, RefreshCw, Download, ChevronLeft, ChevronRight } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Table,
   TableBody,
@@ -17,6 +24,16 @@ import {
 } from "@/components/ui/table"
 import { dashboardService, exportService } from "@/services"
 import { getErrorMessage } from "@/utils/api"
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50]
+function todayStr() {
+  return new Date().toISOString().slice(0, 10)
+}
+function lastMonthStr() {
+  const d = new Date()
+  d.setMonth(d.getMonth() - 1)
+  return d.toISOString().slice(0, 10)
+}
 
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob)
@@ -32,14 +49,18 @@ export default function AuditLogsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [search, setSearch] = useState("")
+  const [dateFrom, setDateFrom] = useState(lastMonthStr())
+  const [dateTo, setDateTo] = useState(todayStr())
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [downloading, setDownloading] = useState(false)
 
   const fetchLogs = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const data = await dashboardService.getSummary()
-      setLogs(data?.previews?.recentAuditLogs ?? [])
+      const data = await dashboardService.getAuditLogs()
+      setLogs(Array.isArray(data) ? data : [])
     } catch (err) {
       setError(getErrorMessage(err))
       setLogs([])
@@ -66,13 +87,34 @@ export default function AuditLogsPage() {
   }
 
   const filtered = logs.filter((log) => {
-    if (!search.trim()) return true
-    const s = search.toLowerCase()
-    const user = (log.actorId?.name ?? "").toLowerCase()
-    const action = (log.action ?? "").toLowerCase()
-    const target = (log.targetType ?? "").toLowerCase()
-    return user.includes(s) || action.includes(s) || target.includes(s)
+    const logDate = log.createdAt ? new Date(log.createdAt) : null
+    if (dateFrom && logDate) {
+      const from = new Date(dateFrom + "T00:00:00.000Z")
+      if (logDate < from) return false
+    }
+    if (dateTo && logDate) {
+      const to = new Date(dateTo + "T23:59:59.999Z")
+      if (logDate > to) return false
+    }
+    if (search.trim()) {
+      const s = search.toLowerCase()
+      const user = (log.actorId?.name ?? "").toLowerCase()
+      const action = (log.action ?? "").toLowerCase()
+      const target = (log.targetType ?? "").toLowerCase()
+      if (!user.includes(s) && !action.includes(s) && !target.includes(s)) return false
+    }
+    return true
   })
+
+  const totalFiltered = filtered.length
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize))
+  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize)
+  const startRow = totalFiltered === 0 ? 0 : (page - 1) * pageSize + 1
+  const endRow = Math.min(page * pageSize, totalFiltered)
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, dateFrom, dateTo])
 
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-6">
@@ -106,26 +148,39 @@ export default function AuditLogsPage() {
         </div>
       )}
 
-      <section className="@container/main grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardDescription>Recent (preview)</CardDescription>
-            <CardTitle className="text-2xl font-semibold tabular-nums">{logs.length}</CardTitle>
-          </CardHeader>
-        </Card>
-      </section>
-
       <section className="overflow-hidden rounded-xl border bg-white">
-        <div className="flex flex-col gap-3 border-b px-4 py-3 lg:px-6 md:flex-row md:items-center md:justify-between">
-          <div className="relative w-full md:max-w-sm">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Search logs..."
-              className="pl-9"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+        <div className="flex flex-col gap-3 border-b px-4 py-3 lg:px-6">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative max-w-sm flex-1 min-w-[180px]">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search logs..."
+                className="pl-9"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="date-from-audit" className="text-muted-foreground text-xs whitespace-nowrap">From</Label>
+              <Input
+                id="date-from-audit"
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="w-[140px]"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="date-to-audit" className="text-muted-foreground text-xs whitespace-nowrap">To</Label>
+              <Input
+                id="date-to-audit"
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="w-[140px]"
+              />
+            </div>
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -148,11 +203,11 @@ export default function AuditLogsPage() {
               ) : filtered.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                    No audit logs to show.
+                    No audit logs match your filters.
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((log) => (
+                paginated.map((log) => (
                   <TableRow key={log._id}>
                     <TableCell>{log.actorId?.name ?? "—"}</TableCell>
                     <TableCell>{log.action ?? "—"}</TableCell>
@@ -168,9 +223,33 @@ export default function AuditLogsPage() {
             </TableBody>
           </Table>
         </div>
-        <div className="flex items-center justify-between border-t px-4 py-3 text-sm text-muted-foreground lg:px-6">
-          <p>Showing {filtered.length} of {logs.length} recent logs</p>
-        </div>
+        {filtered.length > 0 && (
+          <div className="flex flex-col gap-3 border-t px-4 py-3 lg:px-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+              <span>Showing {startRow}–{endRow} of {totalFiltered}</span>
+              <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1) }}>
+                <SelectTrigger className="h-8 w-[70px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAGE_SIZE_OPTIONS.map((n) => (
+                    <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span>per page</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
+                <ChevronLeft className="size-4" /> Previous
+              </Button>
+              <span className="min-w-[90px] text-center text-sm text-muted-foreground">Page {page} of {totalPages}</span>
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
+                Next <ChevronRight className="size-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </section>
     </div>
   )

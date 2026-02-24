@@ -3,7 +3,7 @@ import { setAuth } from "@/lib/auth"
 import { API_PATHS } from "@/constants/api"
 
 /**
- * @param {{ email: string, password: string }} payload
+ * @param {{ email: string, password: string, turnstileToken?: string }} payload
  * @returns {Promise<{ accessToken: string, user: { id: string, name: string, email: string, role: string } }>}
  */
 export async function login(payload) {

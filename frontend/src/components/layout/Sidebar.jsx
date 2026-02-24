@@ -81,7 +81,7 @@ export default function Sidebar({ collapsed = false }) {
             </div>
             {!collapsed && (
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold text-zinc-900">CPDC Inventory</div>
+                <div className="truncate text-sm font-semibold text-zinc-900">CPDO Inventory</div>
                 <div className="truncate text-xs text-zinc-500">{user?.role ? `Role: ${user.role}` : "Not signed in"}</div>
               </div>
             )}

@@ -122,7 +122,12 @@ export default function ManageCategoriesPage() {
             <Plus className="size-4" />
             Add Category
           </Button>
-          <Button variant="outline" size="icon" onClick={refreshCategories} disabled={loading}>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => refreshCategories()?.then(() => toast.success("Categories refreshed."))?.catch(() => {})}
+            disabled={loading}
+          >
             <RefreshCw className="size-4" />
             <span className="sr-only">Refresh</span>
           </Button>

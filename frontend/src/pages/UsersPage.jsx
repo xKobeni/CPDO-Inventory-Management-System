@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
-import { Users, Search, MoreHorizontal } from "lucide-react"
+import { Users, Search, MoreHorizontal, RefreshCw } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -81,7 +81,7 @@ export default function UsersPage() {
   const [resetForm, setResetForm] = useState({ newPassword: "" })
   const [submitting, setSubmitting] = useState(false)
 
-  const fetchUsers = useCallback(async () => {
+  const fetchUsers = useCallback(async (showToast = false) => {
     setLoading(true)
     setError(null)
     const params = {}
@@ -91,9 +91,11 @@ export default function UsersPage() {
     try {
       const data = await usersService.listUsers(params)
       setUsers(data)
+      if (showToast) toast.success("Users refreshed.")
     } catch (err) {
       setError(getErrorMessage(err))
       setUsers([])
+      toast.error(getErrorMessage(err))
     } finally {
       setLoading(false)
     }
@@ -229,6 +231,10 @@ export default function UsersPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="icon" onClick={() => fetchUsers(true)} disabled={loading}>
+            <RefreshCw className="size-4" />
+            <span className="sr-only">Refresh</span>
+          </Button>
           <Button onClick={() => setAddOpen(true)}>Add User</Button>
           <Button asChild variant="outline">
             <Link to="/items">View inventory</Link>

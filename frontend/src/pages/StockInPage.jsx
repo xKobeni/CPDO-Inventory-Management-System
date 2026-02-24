@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
-import { Search, Plus, Trash2, Package } from "lucide-react"
+import { Search, Plus, Trash2, Package, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -35,6 +35,16 @@ import { getErrorMessage } from "@/utils/api"
 
 const STOCK_IN_MODE_SUPPLY = "supply"
 const STOCK_IN_MODE_ASSET = "asset"
+const PAGE_SIZE_OPTIONS = [10, 25, 50]
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10)
+}
+function lastMonthStr() {
+  const d = new Date()
+  d.setMonth(d.getMonth() - 1)
+  return d.toISOString().slice(0, 10)
+}
 
 export default function StockInPage() {
   const [mode, setMode] = useState(STOCK_IN_MODE_SUPPLY)
@@ -44,6 +54,10 @@ export default function StockInPage() {
   const [txLoading, setTxLoading] = useState(true)
   const [error, setError] = useState(null)
   const [search, setSearch] = useState("")
+  const [dateFrom, setDateFrom] = useState(lastMonthStr())
+  const [dateTo, setDateTo] = useState(todayStr())
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   const [lines, setLines] = useState([{ itemId: "", qty: 1 }])
   const [supplier, setSupplier] = useState("")
@@ -57,18 +71,21 @@ export default function StockInPage() {
     } catch (err) {
       setError(getErrorMessage(err))
       setSupplies([])
+      toast.error(getErrorMessage(err))
     } finally {
       setLoading(false)
     }
   }, [])
 
-  const fetchTransactions = useCallback(async () => {
+  const fetchTransactions = useCallback(async (showToast = false) => {
     setTxLoading(true)
     try {
       const data = await transactionsService.listTransactions({ type: "STOCK_IN" })
       setTransactions(data)
-    } catch {
+      if (showToast) toast.success("List refreshed.")
+    } catch (err) {
       setTransactions([])
+      toast.error(getErrorMessage(err))
     } finally {
       setTxLoading(false)
     }
@@ -133,14 +150,35 @@ export default function StockInPage() {
   }
 
   const filteredTx = transactions.filter((t) => {
-    if (!search.trim()) return true
-    const s = search.toLowerCase()
-    const by = t.createdBy?.name ?? ""
-    const sup = (t.supplier ?? "").toLowerCase()
-    const ref = (t.referenceNo ?? "").toLowerCase()
-    const itemNames = (t.items ?? []).map((i) => (i.itemId?.name ?? "").toLowerCase()).join(" ")
-    return by.includes(s) || sup.includes(s) || ref.includes(s) || itemNames.includes(s)
+    const txDate = t.createdAt ? new Date(t.createdAt) : null
+    if (dateFrom && txDate) {
+      const from = new Date(dateFrom + "T00:00:00.000Z")
+      if (txDate < from) return false
+    }
+    if (dateTo && txDate) {
+      const to = new Date(dateTo + "T23:59:59.999Z")
+      if (txDate > to) return false
+    }
+    if (search.trim()) {
+      const s = search.toLowerCase()
+      const by = (t.createdBy?.name ?? "").toLowerCase()
+      const sup = (t.supplier ?? "").toLowerCase()
+      const ref = (t.referenceNo ?? "").toLowerCase()
+      const itemNames = (t.items ?? []).map((i) => (i.itemId?.name ?? "").toLowerCase()).join(" ")
+      if (!by.includes(s) && !sup.includes(s) && !ref.includes(s) && !itemNames.includes(s)) return false
+    }
+    return true
   })
+
+  const totalFiltered = filteredTx.length
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize))
+  const paginatedTx = filteredTx.slice((page - 1) * pageSize, page * pageSize)
+  const startRow = totalFiltered === 0 ? 0 : (page - 1) * pageSize + 1
+  const endRow = Math.min(page * pageSize, totalFiltered)
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, dateFrom, dateTo])
 
   return (
     <div className="mx-auto flex min-w-0 w-full max-w-[1400px] flex-col gap-6">
@@ -167,6 +205,10 @@ export default function StockInPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="icon" onClick={() => fetchTransactions(true)} disabled={txLoading}>
+            <RefreshCw className="size-4" />
+            <span className="sr-only">Refresh</span>
+          </Button>
           <Button asChild>
             <Link to="/stock/out">Stock Out</Link>
           </Button>
@@ -322,16 +364,38 @@ export default function StockInPage() {
         </Card>
 
         <section className="lg:col-span-2 min-w-0 overflow-hidden rounded-xl border bg-white">
-          <div className="flex flex-col gap-3 border-b px-4 py-3 lg:px-6 md:flex-row md:items-center md:justify-between">
-            <div className="relative max-w-sm flex-1">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder="Search records..."
-                className="pl-9"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+          <div className="flex flex-col gap-3 border-b px-4 py-3 lg:px-6">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative max-w-sm flex-1 min-w-[180px]">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Search records..."
+                  className="pl-9"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="date-from-si" className="text-muted-foreground text-xs whitespace-nowrap">From</Label>
+                <Input
+                  id="date-from-si"
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="w-[140px]"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="date-to-si" className="text-muted-foreground text-xs whitespace-nowrap">To</Label>
+                <Input
+                  id="date-to-si"
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="w-[140px]"
+                />
+              </div>
             </div>
           </div>
           <div className="w-full min-w-0 overflow-x-auto px-4 lg:px-6">
@@ -355,11 +419,11 @@ export default function StockInPage() {
                   ) : filteredTx.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={4} className="px-3 py-8 text-center text-muted-foreground">
-                        No stock-in records yet.
+                        No stock-in records match your filters.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredTx.map((tx) => (
+                    paginatedTx.map((tx) => (
                       <TableRow key={tx._id}>
                         <TableCell className="px-3 tabular-nums">
                           {tx.createdAt ? new Date(tx.createdAt).toLocaleString() : "—"}
@@ -376,6 +440,33 @@ export default function StockInPage() {
               </Table>
             </div>
           </div>
+          {filteredTx.length > 0 && (
+            <div className="flex flex-col gap-3 border-t px-4 py-3 lg:px-6 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                <span>Showing {startRow}–{endRow} of {totalFiltered}</span>
+                <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1) }}>
+                  <SelectTrigger className="h-8 w-[70px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAGE_SIZE_OPTIONS.map((n) => (
+                      <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span>per page</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
+                  <ChevronLeft className="size-4" /> Previous
+                </Button>
+                <span className="min-w-[90px] text-center text-sm text-muted-foreground">Page {page} of {totalPages}</span>
+                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
+                  Next <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </section>
       </section>
     </div>

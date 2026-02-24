@@ -21,12 +21,12 @@ export default function LoginPage() {
     return <Navigate to={from} replace />
   }
 
-  async function handleSubmit({ email, password, rememberMe }) {
+  async function handleSubmit({ email, password, rememberMe, turnstileToken }) {
     setError(null)
     setNeedsVerification(null)
     setIsLoading(true)
     try {
-      await authService.login({ email, password })
+      await authService.login({ email, password, turnstileToken })
       setRememberedEmail(rememberMe ? email : null)
       toast.success("Successfully signed in")
       navigate(from, { replace: true })

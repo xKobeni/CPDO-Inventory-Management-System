@@ -130,7 +130,7 @@ export function CategoriesProvider({ children }) {
     setLoading(true)
     setError(null)
     const overrides = loadIconOverrides()
-    dashboardService
+    return dashboardService
       .getCategories()
       .then((data) => {
         const all = data?.all ?? []
@@ -158,6 +158,7 @@ export function CategoriesProvider({ children }) {
       .catch((err) => {
         setError(err?.response?.data?.message ?? err?.message ?? "Failed to load categories")
         setCategories([])
+        throw err
       })
       .finally(() => setLoading(false))
   }, [])

@@ -1,9 +1,33 @@
 import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
-import { Package, ArrowDownToLine, ArrowUpFromLine, ClipboardList } from "lucide-react"
+import {
+  Package,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  ClipboardList,
+  Boxes,
+  AlertTriangle,
+  TrendingDown,
+  FileText,
+  Activity,
+  Cpu,
+} from "lucide-react"
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+  AreaChart,
+  Area,
+} from "recharts"
 
-import { SectionCards } from "@/components/section-cards"
-import { ChartAreaInteractive } from "@/components/chart-area-interactive"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -17,17 +41,71 @@ import {
 import { dashboardService } from "@/services"
 import { getErrorMessage } from "@/utils/api"
 
+const CHART_COLORS = ["#0f172a", "#334155", "#475569", "#64748b", "#94a3b8", "#cbd5e1", "#e2e8f0"]
+
+function StatCard({ title, value, description, icon: Icon, variant = "default", href }) {
+  const isAlert = variant === "danger" || variant === "warning"
+  const bg =
+    variant === "danger"
+      ? "bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-900"
+      : variant === "warning"
+        ? "bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-900"
+        : "bg-white border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800"
+  const iconBg =
+    variant === "danger"
+      ? "bg-red-100 text-red-700 dark:bg-red-900/50"
+      : variant === "warning"
+        ? "bg-amber-100 text-amber-700 dark:bg-amber-900/50"
+        : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800"
+  const valueColor =
+    variant === "danger"
+      ? "text-red-700 dark:text-red-400"
+      : variant === "warning"
+        ? "text-amber-700 dark:text-amber-400"
+        : "text-zinc-900 dark:text-zinc-100"
+
+  const content = (
+    <Card className={`overflow-hidden border transition-shadow hover:shadow-md ${bg}`}>
+      <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+          {title}
+        </CardTitle>
+        <div className={`rounded-lg p-2 ${iconBg}`}>
+          <Icon className="size-4" />
+        </div>
+      </CardHeader>
+      <CardContent>
+        <p className={`text-2xl font-bold tabular-nums ${valueColor}`}>
+          {value ?? "—"}
+        </p>
+        {description && (
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{description}</p>
+        )}
+      </CardContent>
+    </Card>
+  )
+
+  if (href) {
+    return (
+      <Link to={href} className="block focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:ring-offset-2 rounded-xl">
+        {content}
+      </Link>
+    )
+  }
+  return content
+}
+
 function QuickAction({ to, title, description, icon }) {
   const Icon = icon
   return (
-    <Card className="transition-shadow hover:shadow-sm">
-      <CardHeader className="flex-row items-start justify-between space-y-0">
+    <Card className="transition-shadow hover:shadow-md border-zinc-200 dark:border-zinc-800">
+      <CardHeader className="flex flex-row items-start justify-between space-y-0">
         <div className="space-y-1">
           <CardTitle className="text-base">{title}</CardTitle>
           <CardDescription>{description}</CardDescription>
         </div>
-        <div className="grid size-9 place-items-center rounded-lg bg-zinc-900 text-white">
-          <Icon className="size-4" />
+        <div className="grid size-10 place-items-center rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900">
+          <Icon className="size-5" />
         </div>
       </CardHeader>
       <CardContent>
@@ -37,6 +115,153 @@ function QuickAction({ to, title, description, icon }) {
       </CardContent>
     </Card>
   )
+}
+
+function TransactionsChart({ data }) {
+  // Fill missing days with 0 for last 14 days
+  const days = 14
+  const end = new Date()
+  end.setHours(0, 0, 0, 0)
+  const map = new Map((data || []).map((d) => [d.date, d.count]))
+  const chartData = []
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(end)
+    d.setDate(d.getDate() - i)
+    const key = d.toISOString().slice(0, 10)
+    chartData.push({ date: key, count: map.get(key) ?? 0 })
+  }
+
+  return (
+    <Card className="border-zinc-200 dark:border-zinc-800">
+      <CardHeader>
+        <CardTitle className="text-base">Transactions (last 14 days)</CardTitle>
+        <CardDescription>Daily transaction count</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[220px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="fillCount" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#0f172a" stopOpacity={0.4} />
+                  <stop offset="95%" stopColor="#0f172a" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-zinc-200 dark:stroke-zinc-700" vertical={false} />
+              <XAxis
+                dataKey="date"
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                tickFormatter={(v) => {
+                  const d = new Date(v)
+                  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                }}
+                className="text-xs fill-zinc-500"
+              />
+              <YAxis tickLine={false} axisLine={false} tickMargin={8} width={24} className="text-xs fill-zinc-500" />
+              <Tooltip
+                contentStyle={{ borderRadius: "8px", border: "1px solid var(--border)" }}
+                labelFormatter={(v) => new Date(v).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                formatter={(value) => [value, "Transactions"]}
+              />
+              <Area
+                type="monotone"
+                dataKey="count"
+                stroke="#0f172a"
+                strokeWidth={2}
+                fill="url(#fillCount)"
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function SuppliesByCategoryChart({ data }) {
+  if (!data?.length) return null
+  const chartData = data.map((d) => ({ name: d.category || "Uncategorized", count: d.count }))
+  return (
+    <Card className="border-zinc-200 dark:border-zinc-800">
+      <CardHeader>
+        <CardTitle className="text-base">Supplies by category</CardTitle>
+        <CardDescription>Item count per category</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[220px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-zinc-200 dark:stroke-zinc-700" horizontal={false} />
+              <XAxis type="number" tickLine={false} axisLine={false} tickMargin={8} className="text-xs" />
+              <YAxis
+                type="category"
+                dataKey="name"
+                width={90}
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 11 }}
+              />
+              <Tooltip
+                contentStyle={{ borderRadius: "8px", border: "1px solid var(--border)" }}
+                formatter={(value) => [value, "Items"]}
+              />
+              <Bar dataKey="count" fill="oklch(0.21 0.006 285.885)" radius={[0, 4, 4, 0]} maxBarSize={28} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function AssetsByStatusChart({ data }) {
+  if (!data?.length) return null
+  const chartData = data.map((d) => ({ name: formatStatus(d.status), value: d.count }))
+  return (
+    <Card className="border-zinc-200 dark:border-zinc-800">
+      <CardHeader>
+        <CardTitle className="text-base">Assets by status</CardTitle>
+        <CardDescription>Distribution by status</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[220px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={chartData}
+                cx="50%"
+                cy="50%"
+                innerRadius={50}
+                outerRadius={80}
+                paddingAngle={2}
+                dataKey="value"
+                nameKey="name"
+                label={({ name, value }) => `${name}: ${value}`}
+              >
+                {chartData.map((_, i) => (
+                  <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip
+                contentStyle={{ borderRadius: "8px", border: "1px solid var(--border)" }}
+                formatter={(value) => [value, "Assets"]}
+              />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function formatStatus(s) {
+  if (!s) return "—"
+  return String(s)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
 export default function DashboardHome() {
@@ -59,105 +284,146 @@ export default function DashboardHome() {
       .finally(() => {
         if (!cancelled) setLoading(false)
       })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [])
 
+  const kpis = summary?.kpis ?? {}
+  const charts = summary?.charts ?? {}
   const recentTransactions = summary?.previews?.recentTransactions ?? []
 
   return (
-    <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+    <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-8 pb-8">
+      {/* Header */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <h1 className="truncate text-xl font-semibold tracking-tight text-zinc-900">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">
-            Overview of inventory activity, trends, and recent actions.
+          <h1 className="truncate text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+            Dashboard
+          </h1>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            Overview of inventory, stock levels, and recent activity.
           </p>
         </div>
-
         <div className="flex flex-wrap gap-2">
           <Button asChild>
             <Link to="/items">View inventory</Link>
           </Button>
           <Button asChild variant="outline">
-            <Link to="/reports">Open reports</Link>
+            <Link to="/reports">Reports</Link>
           </Button>
         </div>
       </div>
 
       {error && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
           {error}
         </div>
       )}
 
-      <section className="@container/main rounded-xl border bg-white py-2">
-        <SectionCards kpis={summary?.kpis} />
+      {/* KPI Cards */}
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+        <StatCard
+          title="Total items"
+          value={loading ? "…" : kpis.activeItems}
+          description="Active supplies + assets"
+          icon={Boxes}
+        />
+        <StatCard
+          title="Supplies"
+          value={loading ? "…" : kpis.totalSupplies}
+          description="Consumable items"
+          icon={Package}
+        />
+        <StatCard
+          title="Assets"
+          value={loading ? "…" : kpis.totalAssets}
+          description={`${kpis.deployedAssets ?? 0} deployed`}
+          icon={Cpu}
+        />
+        <StatCard
+          title="Out of stock"
+          value={loading ? "…" : kpis.outOfStockCount}
+          description="Supplies with zero quantity"
+          icon={AlertTriangle}
+          variant="danger"
+          href="/items/out-of-stock"
+        />
+        <StatCard
+          title="Low stock"
+          value={loading ? "…" : kpis.lowStockCount}
+          description="At or below reorder level"
+          icon={TrendingDown}
+          variant="warning"
+          href="/items/low-stock"
+        />
       </section>
 
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className="lg:col-span-8">
-          <ChartAreaInteractive />
-        </div>
+      {/* Second row: Transactions today / month */}
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Transactions today"
+          value={loading ? "…" : kpis.txToday}
+          description="Recorded today"
+          icon={Activity}
+        />
+        <StatCard
+          title="This month"
+          value={loading ? "…" : kpis.txThisMonth}
+          description="Total this month"
+          icon={FileText}
+        />
+      </section>
 
+      {/* Charts + Quick actions */}
+      <section className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        <div className="space-y-6 lg:col-span-8">
+          <TransactionsChart data={charts.transactionsByDay} />
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <SuppliesByCategoryChart data={charts.suppliesByCategory} />
+            <AssetsByStatusChart data={charts.assetsByStatus} />
+          </div>
+        </div>
         <div className="grid gap-4 lg:col-span-4">
-          <QuickAction
-            to="/stock/in"
-            title="Stock In"
-            description="Record incoming items"
-            icon={ArrowDownToLine}
-          />
-          <QuickAction
-            to="/stock/out"
-            title="Stock Out"
-            description="Record released items"
-            icon={ArrowUpFromLine}
-          />
-          <QuickAction
-            to="/issuance"
-            title="Asset Assignment"
-            description="Assign assets to personnel"
-            icon={ClipboardList}
-          />
-          <QuickAction
-            to="/items"
-            title="Inventory"
-            description="Browse and manage items"
-            icon={Package}
-          />
+          <QuickAction to="/stock/in" title="Stock In" description="Record incoming items" icon={ArrowDownToLine} />
+          <QuickAction to="/stock/out" title="Stock Out" description="Record released items" icon={ArrowUpFromLine} />
+          <QuickAction to="/issuance" title="Asset Assignment" description="Assign assets to personnel" icon={ClipboardList} />
+          <QuickAction to="/items" title="Inventory" description="Browse and manage items" icon={Package} />
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-xl border bg-white">
-        <div className="border-b px-4 py-3 lg:px-6">
-          <h2 className="text-sm font-semibold text-zinc-900">Recent activity</h2>
-          <p className="text-xs text-muted-foreground">
-            Latest transactions from the API{loading ? " (loading…)" : ""}.
+      {/* Recent activity */}
+      <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="border-b border-zinc-200 px-4 py-4 dark:border-zinc-800 lg:px-6">
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Recent activity</h2>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            Latest transactions {loading ? "(loading…)" : ""}
           </p>
         </div>
         {loading ? (
-          <div className="px-4 py-8 text-center text-sm text-muted-foreground">Loading…</div>
+          <div className="px-4 py-12 text-center text-sm text-zinc-500">Loading…</div>
         ) : recentTransactions.length === 0 ? (
-          <div className="px-4 py-8 text-center text-sm text-muted-foreground">No recent transactions.</div>
+          <div className="px-4 py-12 text-center text-sm text-zinc-500">No recent transactions.</div>
         ) : (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>By</TableHead>
-                  <TableHead>Details</TableHead>
+                <TableRow className="border-zinc-200 dark:border-zinc-800 hover:bg-transparent">
+                  <TableHead className="font-medium">Type</TableHead>
+                  <TableHead className="font-medium">Date</TableHead>
+                  <TableHead className="font-medium">By</TableHead>
+                  <TableHead className="font-medium">Details</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {recentTransactions.map((tx) => (
-                  <TableRow key={tx._id}>
+                  <TableRow key={tx._id} className="border-zinc-100 dark:border-zinc-800">
                     <TableCell className="font-medium">{tx.type}</TableCell>
-                    <TableCell className="tabular-nums">
+                    <TableCell className="tabular-nums text-zinc-600 dark:text-zinc-400">
                       {tx.createdAt ? new Date(tx.createdAt).toLocaleString() : "—"}
                     </TableCell>
                     <TableCell>{tx.createdBy?.name ?? "—"}</TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
+                    <TableCell className="text-sm text-zinc-500 dark:text-zinc-400">
                       {tx.items?.length
                         ? tx.items.map((i) => `${i.qty}× ${i.itemId?.name ?? i.itemId ?? "—"}`).join(", ")
                         : "—"}

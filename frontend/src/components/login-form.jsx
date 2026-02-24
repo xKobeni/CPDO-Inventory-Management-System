@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -13,6 +13,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Eye, EyeOff } from "lucide-react"
 import { getRememberedEmail } from "@/lib/auth"
 
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || ""
+
 export function LoginForm({
   className,
   onSubmit,
@@ -24,11 +26,66 @@ export function LoginForm({
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [defaultEmail, setDefaultEmail] = useState("")
+  const [turnstileToken, setTurnstileToken] = useState("")
+  const [turnstileError, setTurnstileError] = useState("")
+  const turnstileWidgetIdRef = useRef(null)
 
   useEffect(() => {
     setDefaultEmail(getRememberedEmail() || "")
     setRememberMe(!!getRememberedEmail())
   }, [])
+
+  const onTurnstileSuccess = useCallback((token) => {
+    setTurnstileToken(token)
+    setTurnstileError("")
+  }, [])
+
+  const onTurnstileError = useCallback(() => {
+    setTurnstileToken("")
+    setTurnstileError("Verification failed. Please try again.")
+  }, [])
+
+  const onTurnstileExpire = useCallback(() => {
+    setTurnstileToken("")
+  }, [])
+
+  // Load Cloudflare Turnstile script and render widget when site key is set
+  const turnstileContainerRef = useRef(null)
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY || typeof window === "undefined" || !turnstileContainerRef.current) return
+    const renderWidget = () => {
+      if (!window.turnstile || !turnstileContainerRef.current) return
+      if (turnstileWidgetIdRef.current != null) return
+      try {
+        turnstileWidgetIdRef.current = window.turnstile.render(turnstileContainerRef.current, {
+          sitekey: TURNSTILE_SITE_KEY,
+          theme: "light",
+          callback: onTurnstileSuccess,
+          "error-callback": onTurnstileError,
+          "expired-callback": onTurnstileExpire,
+        })
+      } catch (_) {}
+    }
+    if (window.turnstile) {
+      renderWidget()
+      return
+    }
+    const script = document.createElement("script")
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js"
+    script.async = true
+    script.onload = renderWidget
+    document.head.appendChild(script)
+  }, [onTurnstileSuccess, onTurnstileError, onTurnstileExpire])
+
+  // Reset Turnstile widget when login fails so user can get a new token
+  useEffect(() => {
+    if (error && TURNSTILE_SITE_KEY && typeof window !== "undefined" && window.turnstile && turnstileWidgetIdRef.current != null) {
+      try {
+        window.turnstile.reset(turnstileWidgetIdRef.current)
+      } catch (_) {}
+      setTurnstileToken("")
+    }
+  }, [error])
 
   return (
     <div className={cn("flex flex-col gap-8", className)} {...props}>
@@ -38,21 +95,29 @@ export function LoginForm({
             className="p-8 md:p-10 lg:p-12 flex flex-col justify-center"
             onSubmit={(e) => {
               e.preventDefault()
+              setTurnstileError("")
+              if (TURNSTILE_SITE_KEY && !turnstileToken) {
+                setTurnstileError("Please complete the verification below.")
+                return
+              }
               const form = e.target
               const email = form.querySelector('input[name="email"]')?.value
               const password = form.querySelector('input[name="password"]')?.value
-              onSubmit?.({ email, password, rememberMe })
+              onSubmit?.({ email, password, rememberMe, turnstileToken: TURNSTILE_SITE_KEY ? turnstileToken : undefined })
             }}
           >
             <FieldGroup className="gap-6">
               <div className="flex flex-col items-center gap-2 text-center mb-2">
                 <h1 className="text-2xl md:text-3xl font-bold">Welcome back</h1>
                 <p className="text-muted-foreground text-balance text-sm md:text-base">
-                  Login to your CPDC Inventory account
+                  Login to your CPDO Inventory account
                 </p>
               </div>
               {error && (
                 <p className="text-center text-sm text-red-600">{error}</p>
+              )}
+              {(turnstileError) && (
+                <p className="text-center text-sm text-red-600">{turnstileError}</p>
               )}
               <Field>
                 <FieldLabel htmlFor="email">Email</FieldLabel>
@@ -92,6 +157,7 @@ export function LoginForm({
                   </button>
                 </div>
               </Field>
+
               <div className="flex w-full min-w-0 items-center gap-2">
                 <Checkbox
                   id="rememberMe"
@@ -108,6 +174,11 @@ export function LoginForm({
                   Remember me
                 </label>
               </div>
+              {TURNSTILE_SITE_KEY && (
+                <div className="flex flex-col items-center gap-1">
+                  <div ref={turnstileContainerRef} />
+                </div>
+              )}
               <Field>
                 <Button type="submit" disabled={isLoading}>
                   {isLoading ? "Signing in…" : "Login"}
@@ -124,7 +195,7 @@ export function LoginForm({
                 <circle cx="7" cy="7" r="3" />
               </svg>
             </div>
-            <p className="text-lg font-semibold text-zinc-800">CPDC Inventory</p>
+            <p className="text-lg font-semibold text-zinc-800">CPDO Inventory</p>
             <p className="text-sm text-zinc-500 mt-1 text-center max-w-[200px]">Manage stock, items, and reports in one place.</p>
           </div>
         </CardContent>

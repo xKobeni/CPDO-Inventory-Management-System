@@ -6,7 +6,7 @@ export default function App() {
     <div className="min-h-screen bg-zinc-50 p-8">
       <Card className="max-w-md">
         <CardHeader>
-          <CardTitle>CPDC Inventory</CardTitle>
+          <CardTitle>CPDO Inventory</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-zinc-600">

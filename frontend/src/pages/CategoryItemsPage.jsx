@@ -754,7 +754,7 @@ export default function CategoryItemsPage() {
     }
   }
 
-  const loadItems = useCallback(async () => {
+  const loadItems = useCallback(async (fromRefresh = false) => {
     if (!category?.name) {
       setItems([])
       return
@@ -767,6 +767,7 @@ export default function CategoryItemsPage() {
         archived: "false",
       })
       setItems(data.map((i) => ({ ...i, id: i._id?.toString() ?? i.id ?? i._id })))
+      if (fromRefresh) toast.success("Items refreshed.")
     } catch (err) {
       setError(getErrorMessage(err))
       setItems([])
@@ -975,7 +976,7 @@ export default function CategoryItemsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="icon" onClick={loadItems} disabled={loading}>
+          <Button variant="outline" size="icon" onClick={() => loadItems(true)} disabled={loading}>
             <RefreshCw className="size-4" />
             <span className="sr-only">Refresh</span>
           </Button>

@@ -26,3 +26,11 @@ export async function getItemHistory(itemId) {
   const { data } = await http.get(API_PATHS.dashboard.itemHistory(itemId))
   return data
 }
+
+/**
+ * @returns {Promise<Array>} All audit logs (up to 10000), sorted by createdAt desc
+ */
+export async function getAuditLogs() {
+  const { data } = await http.get(API_PATHS.dashboard.auditLogs)
+  return data
+}

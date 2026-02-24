@@ -36,7 +36,7 @@ export default function OutOfStockPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const load = async () => {
+  const load = async (showToast = false) => {
     setLoading(true)
     setError(null)
     try {
@@ -48,6 +48,7 @@ export default function OutOfStockPage() {
         return qty <= 0
       })
       setItems(outOfStock)
+      if (showToast) toast.success("List refreshed.")
     } catch (err) {
       setError(getErrorMessage(err))
       setItems([])
@@ -93,7 +94,7 @@ export default function OutOfStockPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="icon" onClick={load} disabled={loading}>
+          <Button variant="outline" size="icon" onClick={() => load(true)} disabled={loading}>
             <RefreshCw className="size-4" />
             <span className="sr-only">Refresh</span>
           </Button>

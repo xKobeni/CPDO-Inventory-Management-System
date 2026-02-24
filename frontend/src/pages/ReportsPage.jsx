@@ -195,6 +195,7 @@ export default function ReportsPage() {
         setTxResults(Array.isArray(filtered) ? filtered : [])
       }
       setHasResults(true)
+      toast.success("Report generated.")
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {

@@ -33,6 +33,7 @@ export const API_PATHS = {
     summary: "/dashboard/summary",
     categories: "/dashboard/categories",
     itemHistory: (id) => `/dashboard/item/${id}/history`,
+    auditLogs: "/dashboard/audit-logs",
   },
   export: {
     itemsXlsx: "/export/items.xlsx",

@@ -66,7 +66,7 @@ export default function Topbar() {
             {collapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
           </Button>
           <Separator orientation="vertical" className="h-5 md:block" />
-          <h1 className="truncate text-sm font-semibold text-zinc-800">CPDC Inventory</h1>
+          <h1 className="truncate text-sm font-semibold text-zinc-800">CPDO Inventory</h1>
         </div>
 
         {/* Right: user menu */}
