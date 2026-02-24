@@ -7,6 +7,7 @@ import {
   sendVerificationOtpEmail,
   sendPasswordResetOtpEmail,
 } from "../services/email.service.js";
+import { verifyTurnstile } from "../utils/turnstile.js";
 
 const VERIFICATION_OTP_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 const RESET_OTP_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes
@@ -25,6 +26,7 @@ export const registerSchema = z.object({
 export const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+  turnstileToken: z.string().min(1).optional(),
 });
 
 export const verifyEmailSchema = z.object({
@@ -76,7 +78,22 @@ export async function register(req, res) {
 }
 
 export async function login(req, res) {
-  const { email, password } = req.body;
+  const { email, password, turnstileToken } = req.body;
+  const secret = process.env.TURNSTILE_SECRET_KEY;
+
+  if (secret) {
+    if (!turnstileToken) {
+      return res.status(400).json({ message: "Verification required. Please complete the challenge and try again." });
+    }
+    const { success, errorCodes } = await verifyTurnstile(secret, turnstileToken, req.ip);
+    if (!success) {
+      return res.status(400).json({
+        message: "Verification failed. Please try again.",
+        code: "TURNSTILE_FAILED",
+        errorCodes,
+      });
+    }
+  }
 
   const user = await User.findOne({ email });
   if (!user || !user.isActive) return res.status(401).json({ message: "Invalid credentials" });

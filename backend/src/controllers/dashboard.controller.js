@@ -23,6 +23,13 @@ export async function getDashboardSummary(req, res) {
     Item.countDocuments({ isArchived: true }),
   ]);
 
+  // ------------- OUT OF STOCK (supplies with qty 0) -------------
+  const outOfStockCount = await Item.countDocuments({
+    itemType: "SUPPLY",
+    isArchived: false,
+    quantityOnHand: 0,
+  });
+
   // ------------- LOW STOCK -------------
   // Supply only, reorderLevel > 0, qty <= reorderLevel
   const [lowStockCount, lowStockPreview] = await Promise.all([
@@ -68,7 +75,11 @@ export async function getDashboardSummary(req, res) {
   ]);
 
   // ------------- TRANSACTIONS -------------
-  const [txToday, txThisMonth, recentTransactions] = await Promise.all([
+  const startOf14DaysAgo = new Date(now);
+  startOf14DaysAgo.setDate(startOf14DaysAgo.getDate() - 14);
+  startOf14DaysAgo.setHours(0, 0, 0, 0);
+
+  const [txToday, txThisMonth, recentTransactions, transactionsByDay] = await Promise.all([
     Transaction.countDocuments({ createdAt: { $gte: startOfToday } }),
     Transaction.countDocuments({ createdAt: { $gte: startOfMonth } }),
     Transaction.find({})
@@ -76,6 +87,17 @@ export async function getDashboardSummary(req, res) {
       .populate("items.itemId", "name unit category itemType propertyNumber")
       .sort({ createdAt: -1 })
       .limit(10),
+    Transaction.aggregate([
+      { $match: { createdAt: { $gte: startOf14DaysAgo } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+      { $project: { date: "$_id", count: 1, _id: 0 } },
+    ]),
   ]);
 
   // ------------- AUDIT LOGS -------------
@@ -108,6 +130,7 @@ export async function getDashboardSummary(req, res) {
       totalSupplies,
       totalAssets,
       deployedAssets,
+      outOfStockCount,
       lowStockCount,
       totalSupplyQty,
       txToday,
@@ -117,6 +140,7 @@ export async function getDashboardSummary(req, res) {
       assetsByStatus,
       assetsByCondition,
       suppliesByCategory,
+      transactionsByDay,
     },
     previews: {
       lowStockPreview,
@@ -124,6 +148,15 @@ export async function getDashboardSummary(req, res) {
       recentAuditLogs,
     },
   });
+}
+
+export async function getAuditLogs(req, res) {
+  const logs = await AuditLog.find({})
+    .populate("actorId", "name role email")
+    .sort({ createdAt: -1 })
+    .limit(10000);
+
+  res.json(logs);
 }
 
 export async function getCategories(req, res) {

@@ -45,7 +45,7 @@ app.use(
   })
 );
 
-app.get("/", (req, res) => res.json({ ok: true, name: "CPDO Inventory API" }));
+app.get("/", (req, res) => res.json({ ok: true, name: "CPDC Inventory API" }));
 
 app.use("/api/health", healthRoutes);
 app.use("/api/auth", authRoutes);
