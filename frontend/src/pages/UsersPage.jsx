@@ -47,8 +47,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { usersService } from "@/services"
+import { usersService, peopleService } from "@/services"
 import { getErrorMessage } from "@/utils/api"
+import { usePeople } from "@/contexts/PeopleContext"
 
 const ROLE_OPTIONS = [
   { value: "", label: "All Roles" },
@@ -63,6 +64,7 @@ const ACTIVE_OPTIONS = [
 ]
 
 export default function UsersPage() {
+  const { peopleOptions, refreshPeople } = usePeople()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -75,6 +77,21 @@ export default function UsersPage() {
   const [resetOpen, setResetOpen] = useState(false)
   const [resetUser, setResetUser] = useState(null)
   const [actionConfirm, setActionConfirm] = useState(null) // { type: 'deactivate'|'activate', user }
+
+  const [peopleOpen, setPeopleOpen] = useState(false)
+  const [personForm, setPersonForm] = useState({ name: "", position: "", division: "CPDC" })
+  const [removingPersonId, setRemovingPersonId] = useState(null)
+  const [peopleSearch, setPeopleSearch] = useState("")
+  const [peopleDivisionFilter, setPeopleDivisionFilter] = useState("")
+  const [peopleSortAsc, setPeopleSortAsc] = useState(true)
+  const [editingPersonId, setEditingPersonId] = useState(null)
+
+  const DIVISIONS = [
+    "IT Division",
+    "Zoning Section Division",
+    "Plan and Program Division",
+    "Research Statistics and Evaluation Division",
+  ]
 
   const [addForm, setAddForm] = useState({ name: "", email: "", password: "", role: "STAFF" })
   const [editForm, setEditForm] = useState({ name: "", role: "STAFF", isActive: true })
@@ -203,6 +220,61 @@ export default function UsersPage() {
     }
   }
 
+  const handleAddPerson = async () => {
+    if (!personForm.name.trim()) {
+      toast.error("Name is required.")
+      return
+    }
+    setSubmitting(true)
+    try {
+      const payload = {
+        name: personForm.name.trim(),
+        position: personForm.position.trim(),
+        office: personForm.division.trim() || "CPDC",
+      }
+
+      if (editingPersonId) {
+        await peopleService.updatePerson(editingPersonId, payload)
+        toast.success("Person updated.")
+        setEditingPersonId(null)
+      } else {
+        await peopleService.createPerson(payload)
+        toast.success("Person added.")
+      }
+
+      setPersonForm({ name: "", position: "", division: "CPDC" })
+      await refreshPeople()
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleRemovePerson = async (id) => {
+    if (!window.confirm("Remove this person from the dropdown list?")) return
+    setRemovingPersonId(id)
+    try {
+      await peopleService.deletePerson(id)
+      toast.success("Person removed.")
+      await refreshPeople()
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setRemovingPersonId(null)
+    }
+  }
+
+  const startEditPerson = (p) => {
+    setEditingPersonId(p.id)
+    setPersonForm({ name: p.name || "", position: p.position || "", division: p.office || "CPDC" })
+  }
+
+  const cancelEditPerson = () => {
+    setEditingPersonId(null)
+    setPersonForm({ name: "", position: "", division: "CPDC" })
+  }
+
   const openEdit = (user) => {
     setEditUser(user)
     setEditForm({
@@ -236,6 +308,7 @@ export default function UsersPage() {
             <span className="sr-only">Refresh</span>
           </Button>
           <Button onClick={() => setAddOpen(true)}>Add User</Button>
+          <Button variant="outline" onClick={() => setPeopleOpen(true)}>People Management</Button>
           <Button asChild variant="outline">
             <Link to="/items">View inventory</Link>
           </Button>
@@ -538,6 +611,187 @@ export default function UsersPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* People Management Dialog */}
+      <Dialog open={peopleOpen} onOpenChange={setPeopleOpen}>
+        <DialogContent className="w-full sm:max-w-4xl lg:max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>People Management</DialogTitle>
+            <DialogDescription>
+              Add/remove people used in Accountable Person / Issued Person dropdowns. (Division is stored internally under the legacy “office” field.)
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4">
+            <div className="grid gap-3 rounded-lg border p-4">
+              <div className="grid gap-2">
+                <Label htmlFor="person-name">Name</Label>
+                <Input
+                  id="person-name"
+                  value={personForm.name}
+                  onChange={(e) => setPersonForm((p) => ({ ...p, name: e.target.value }))}
+                  placeholder="e.g. Jella Mae Dimaculangan"
+                />
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="person-position">Position</Label>
+                  <Input
+                    id="person-position"
+                    value={personForm.position}
+                    onChange={(e) => setPersonForm((p) => ({ ...p, position: e.target.value }))}
+                    placeholder="Optional"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="person-division">Division</Label>
+                  <Select
+                    value={personForm.division || "CPDC"}
+                    onValueChange={(v) => setPersonForm((p) => ({ ...p, division: v }))}
+                  >
+                    <SelectTrigger id="person-division">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="CPDC">CPDC</SelectItem>
+                      {DIVISIONS.map((d) => (
+                        <SelectItem key={d} value={d}>{d}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                {editingPersonId ? (
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={cancelEditPerson} disabled={submitting}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleAddPerson} disabled={submitting || !personForm.name.trim()}>
+                      {submitting ? "Saving…" : "Save changes"}
+                    </Button>
+                  </div>
+                ) : (
+                  <Button onClick={handleAddPerson} disabled={submitting || !personForm.name.trim()}>
+                    {submitting ? "Adding…" : "Add person"}
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            <div className="px-4 py-3 flex items-center gap-3 border-b">
+              <div className="relative w-full md:max-w-sm">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Search people..."
+                  className="pl-9"
+                  value={peopleSearch}
+                  onChange={(e) => setPeopleSearch(e.target.value)}
+                />
+              </div>
+              <Select value={peopleDivisionFilter || "_"} onValueChange={(v) => setPeopleDivisionFilter(v === "_" ? "" : v)}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="All Divisions" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_">All Divisions</SelectItem>
+                  <SelectItem value="CPDC">CPDC</SelectItem>
+                  {DIVISIONS.map((d) => (
+                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button variant="outline" size="icon" onClick={() => setPeopleSortAsc((s) => !s)}>
+                {peopleSortAsc ? "↑" : "↓"}
+              </Button>
+            </div>
+
+            <div className="overflow-hidden rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">#</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Position</TableHead>
+                    <TableHead>Division</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {peopleOptions.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                        No people yet. Add one above.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    (() => {
+                      const q = (peopleSearch || "").trim().toLowerCase()
+                      const filtered = peopleOptions
+                        .filter((p) => {
+                          if (peopleDivisionFilter && (p.office || "CPDC") !== peopleDivisionFilter) return false
+                          if (!q) return true
+                          return (
+                            (p.name || "").toLowerCase().includes(q) ||
+                            (p.position || "").toLowerCase().includes(q) ||
+                            (p.office || "CPDC").toLowerCase().includes(q)
+                          )
+                        })
+                        .sort((a, b) => {
+                          const an = (a.name || "").toLowerCase()
+                          const bn = (b.name || "").toLowerCase()
+                          if (an < bn) return peopleSortAsc ? -1 : 1
+                          if (an > bn) return peopleSortAsc ? 1 : -1
+                          return 0
+                        })
+
+                      if (filtered.length === 0) {
+                        return (
+                          <TableRow>
+                            <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                              No people match your filters.
+                            </TableCell>
+                          </TableRow>
+                        )
+                      }
+
+                      return filtered.map((p, idx) => (
+                        <TableRow key={p.id}>
+                          <TableCell>{idx + 1}</TableCell>
+                          <TableCell className="font-medium">{p.name}</TableCell>
+                          <TableCell className="text-muted-foreground">{p.position || "N/A"}</TableCell>
+                          <TableCell className="text-muted-foreground">{p.office || "CPDC"}</TableCell>
+                          <TableCell className="text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="size-8">
+                                  <MoreHorizontal className="size-4" />
+                                  <span className="sr-only">Open menu</span>
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => startEditPerson(p)}>Edit</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleRemovePerson(p.id)} className="text-destructive">
+                                  Remove
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    })()
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPeopleOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

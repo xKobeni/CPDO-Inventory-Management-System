@@ -31,8 +31,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerClose,
+} from "@/components/ui/drawer"
 import { itemsService, transactionsService } from "@/services"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { getErrorMessage } from "@/utils/api"
+import { usePeople } from "@/contexts/PeopleContext"
 
 const ISSUE_MODE_SUPPLY = "supply"
 const ISSUE_MODE_ASSET = "asset"
@@ -51,7 +62,10 @@ function lastMonthStr() {
 }
 
 export default function IssuancePage() {
+  const { peopleOptions } = usePeople()
+  const isMobile = useIsMobile()
   const [issueMode, setIssueMode] = useState(ISSUE_MODE_SUPPLY)
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const [supplies, setSupplies] = useState([])
   const [assets, setAssets] = useState([])
   const [assetsLoading, setAssetsLoading] = useState(false)
@@ -80,6 +94,14 @@ export default function IssuancePage() {
   const [assetAccPosition, setAssetAccPosition] = useState("")
   const [assetAccOffice, setAssetAccOffice] = useState("CPDC")
   const [assetRemarks, setAssetRemarks] = useState("")
+
+  const personByName = useMemo(() => {
+    const map = new Map()
+    ;(peopleOptions || []).forEach((p) => {
+      if (p?.name) map.set(String(p.name), p)
+    })
+    return map
+  }, [peopleOptions])
 
   const fetchSupplies = useCallback(async () => {
     try {
@@ -167,21 +189,26 @@ export default function IssuancePage() {
       toast.error("Add at least one item with quantity.")
       return
     }
-    if (!issuedToOffice.trim()) {
-      toast.error("Issued to Division is required.")
+    // require a person for supply issuance
+    if (!issuedToPerson || !issuedToPerson.trim()) {
+      toast.error("Issued to Person is required.")
       return
     }
+
+    // derive office from selected person if available, otherwise default to CPDC
+    const office = (issuedToOffice && issuedToOffice.trim()) || (issuedToPerson ? (personByName.get(issuedToPerson)?.office || "CPDC") : "CPDC")
     setSubmitting(true)
     try {
       await transactionsService.createIssuance({
         items,
-        issuedToOffice: issuedToOffice.trim(),
+        issuedToOffice: office,
         issuedToPerson: issuedToPerson.trim() || undefined,
         purpose: remarks.trim() || undefined,
         accountablePerson: {
           name: issuedToPerson.trim() || "",
+          // position/office are derived from the selected person if present
           position: "",
-          office: issuedToOffice.trim() || "CPDC",
+          office: office,
         },
       })
       toast.success("Issuance recorded.")
@@ -247,6 +274,7 @@ export default function IssuancePage() {
           accountablePerson: tx.accountablePerson,
           createdBy: tx.createdBy,
           qty: line.qty,
+          itemId: typeof line.itemId === "object" && line.itemId != null ? (line.itemId._id ?? line.itemId.id) : line.itemId,
           item: line.itemId,
         }))
       ),
@@ -345,6 +373,25 @@ export default function IssuancePage() {
     }
   }
 
+  const handleRemoveLine = async (txId, txType, itemId) => {
+    const isAsset = txType === "ASSET_ASSIGN"
+    const msg = isAsset
+      ? "Remove this assigned asset from the transaction? The asset will return to inventory (unassigned)."
+      : "Remove this issued item line? Stock will be returned to inventory."
+    if (!window.confirm(msg)) return
+    const key = `${txId}:${itemId}`
+    setDeletingTxId(key)
+    try {
+      await transactionsService.deleteIssuanceLine(txId, itemId)
+      toast.success(isAsset ? "Line removed (asset unassigned)." : "Line removed (stock returned).")
+      fetchTransactions()
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setDeletingTxId(null)
+    }
+  }
+
   return (
     <div className="mx-auto flex min-w-0 w-full max-w-[1400px] flex-col gap-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -374,6 +421,7 @@ export default function IssuancePage() {
             <RefreshCw className="size-4" />
             <span className="sr-only">Refresh</span>
           </Button>
+          <Button onClick={() => setDrawerOpen(true)}>New Issuance</Button>
           <Button asChild>
             <Link to="/items">View inventory</Link>
           </Button>
@@ -390,14 +438,23 @@ export default function IssuancePage() {
       )}
 
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between gap-2">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <ClipboardList className="size-4" />
-                New Issuance
-              </CardTitle>
-              <div className="flex rounded-md border border-input bg-muted/30 p-0.5">
+        {/* Left card removed — New Issuance is opened via header button */}
+
+        {/* Issuance Drawer */}
+        <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} direction={isMobile ? "bottom" : "right"}>
+          <DrawerContent className="data-[vaul-drawer-direction=right]:sm:max-w-md">
+            <DrawerHeader>
+              <div className="flex items-center justify-between">
+                <DrawerTitle>New Issuance</DrawerTitle>
+                <DrawerClose />
+              </div>
+              <DrawerDescription>
+                {issueMode === ISSUE_MODE_SUPPLY ? "Issue supplies to division/person" : "Assign assets to accountable person"}
+              </DrawerDescription>
+            </DrawerHeader>
+
+            <div className="p-4 space-y-4">
+              <div className="flex items-center gap-2">
                 <Button
                   type="button"
                   variant={issueMode === ISSUE_MODE_SUPPLY ? "secondary" : "ghost"}
@@ -417,176 +474,185 @@ export default function IssuancePage() {
                   Asset
                 </Button>
               </div>
-            </div>
-            <CardDescription>
-              {issueMode === ISSUE_MODE_SUPPLY ? "Issue supplies to division/person" : "Assign assets to accountable person"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {issueMode === ISSUE_MODE_SUPPLY ? (
-              <>
-                {lines.map((line, idx) => (
-                  <div key={idx} className="flex gap-2 items-end">
-                    <div className="flex-1 grid gap-2">
-                      <Label>Item</Label>
-                      <Select
-                        value={line.itemId}
-                        onValueChange={(v) => setLine(idx, "itemId", v)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select item" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {supplies.map((item) => (
-                            <SelectItem key={item._id} value={item._id}>
-                              {item.name}
-                            </SelectItem>
-                          ))}
-                          {supplies.length === 0 && !loading && (
-                            <SelectItem value="_" disabled>No supplies</SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="w-24 grid gap-2">
-                      <Label>Qty</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={line.qty}
-                        onChange={(e) => setLine(idx, "qty", e.target.value)}
-                      />
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeLine(idx)}
-                      disabled={lines.length <= 1}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </div>
-                ))}
-                <Button type="button" variant="outline" size="sm" onClick={addLine}>
-                  <Plus className="size-4" />
-                  Add line
-                </Button>
-                <div className="space-y-2">
-                  <Label htmlFor="office-issue">Issued to Division *</Label>
-                  <Input
-                    id="office-issue"
-                    value={issuedToOffice}
-                    onChange={(e) => setIssuedToOffice(e.target.value)}
-                    placeholder="e.g. ICT Division"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="person-issue">Issued to Person (optional)</Label>
-                  <Input
-                    id="person-issue"
-                    value={issuedToPerson}
-                    onChange={(e) => setIssuedToPerson(e.target.value)}
-                    placeholder="Employee name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="remarks-issue">Remarks (optional)</Label>
-                  <Input
-                    id="remarks-issue"
-                    value={remarks}
-                    onChange={(e) => setRemarks(e.target.value)}
-                    placeholder="Remarks"
-                  />
-                </div>
-                <Button className="w-full" onClick={handleSubmit} disabled={submitting || loading}>
-                  {submitting ? "Submitting…" : "Issue Items"}
-                </Button>
-              </>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Select assets to assign</Label>
-                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={selectAllAssets}>
-                      {selectedAssetIds.size >= assets.length ? "Clear all" : "Select all"}
-                    </Button>
-                  </div>
-                  <div className="max-h-40 overflow-y-auto rounded-md border p-2 space-y-2">
-                    {assetsLoading ? (
-                      <p className="text-sm text-muted-foreground py-2">Loading assets…</p>
-                    ) : assets.length === 0 ? (
-                      <p className="text-sm text-muted-foreground py-2">No assets in inventory.</p>
-                    ) : (
-                      assets.map((a) => {
-                        const id = String(a._id ?? a.id)
-                        const isSelected = selectedAssetIds.has(id)
-                        return (
-                          <label
-                            key={id}
-                            className="flex items-center gap-2 cursor-pointer rounded px-2 py-1.5 hover:bg-muted/50"
-                          >
-                            <Checkbox checked={isSelected} onCheckedChange={() => toggleAssetSelection(id)} />
-                            <span className="text-sm truncate">
-                              {a.propertyNumber ? `${a.propertyNumber} – ` : ""}{a.name ?? "—"}
-                            </span>
-                          </label>
-                        )
-                      })
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="asset-acc-name">Accountable person *</Label>
-                  <Input
-                    id="asset-acc-name"
-                    value={assetAccName}
-                    onChange={(e) => setAssetAccName(e.target.value)}
-                    placeholder="e.g. Jella Mae Dimaculangan"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="asset-acc-position">Position</Label>
-                    <Input
-                      id="asset-acc-position"
-                      value={assetAccPosition}
-                      onChange={(e) => setAssetAccPosition(e.target.value)}
-                      placeholder="Optional"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="asset-acc-office">Division</Label>
-                    <Input
-                      id="asset-acc-office"
-                      value={assetAccOffice}
-                      onChange={(e) => setAssetAccOffice(e.target.value)}
-                      placeholder="e.g. ICT Division"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="asset-remarks">Remarks (optional)</Label>
-                  <Input
-                    id="asset-remarks"
-                    value={assetRemarks}
-                    onChange={(e) => setAssetRemarks(e.target.value)}
-                    placeholder="Remarks"
-                  />
-                </div>
-                <Button
-                  className="w-full"
-                  onClick={handleSubmitAsset}
-                  disabled={submitting || assetsLoading || selectedAssetIds.size === 0}
-                >
-                  {submitting ? "Assigning…" : `Assign ${selectedAssetIds.size > 0 ? selectedAssetIds.size : ""} asset(s)`}
-                </Button>
-              </>
-            )}
-          </CardContent>
-        </Card>
 
-        <section className="lg:col-span-2 min-w-0 overflow-hidden rounded-xl border bg-white">
+              {issueMode === ISSUE_MODE_SUPPLY ? (
+                <>
+                  {lines.map((line, idx) => (
+                    <div key={idx} className="flex gap-2 items-end">
+                      <div className="flex-1 grid gap-2">
+                        <Label>Item</Label>
+                        <Select
+                          value={line.itemId}
+                          onValueChange={(v) => setLine(idx, "itemId", v)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select item" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {supplies.map((item) => (
+                              <SelectItem key={item._id} value={item._id}>
+                                {item.name}
+                              </SelectItem>
+                            ))}
+                            {supplies.length === 0 && !loading && (
+                              <SelectItem value="_" disabled>No supplies</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="w-24 grid gap-2">
+                        <Label>Qty</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={line.qty}
+                          onChange={(e) => setLine(idx, "qty", e.target.value)}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeLine(idx)}
+                        disabled={lines.length <= 1}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button type="button" variant="outline" size="sm" onClick={addLine}>
+                    <Plus className="size-4" />
+                    Add line
+                  </Button>
+
+                  <div className="space-y-2">
+                    <Label>Issued to Person *</Label>
+                    <Select
+                      value={issuedToPerson || ""}
+                      onValueChange={(v) => {
+                        const next = v || ""
+                        setIssuedToPerson(next)
+                        const p = next ? personByName.get(next) : null
+                        if (p) setIssuedToOffice(p.office || "CPDC")
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select person" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {peopleOptions.map((p) => (
+                          <SelectItem key={p.id} value={p.name}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="remarks-issue">Remarks (optional)</Label>
+                    <Input
+                      id="remarks-issue"
+                      value={remarks}
+                      onChange={(e) => setRemarks(e.target.value)}
+                      placeholder="Remarks"
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setDrawerOpen(false)}>Cancel</Button>
+                    <Button className="flex-1" onClick={() => { handleSubmit(); setDrawerOpen(false); }} disabled={submitting || loading}>
+                      {submitting ? "Submitting…" : "Issue Items"}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label>Select assets to assign</Label>
+                      <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={selectAllAssets}>
+                        {selectedAssetIds.size >= assets.length ? "Clear all" : "Select all"}
+                      </Button>
+                    </div>
+                    <div className="max-h-40 overflow-y-auto rounded-md border p-2 space-y-2">
+                      {assetsLoading ? (
+                        <p className="text-sm text-muted-foreground py-2">Loading assets…</p>
+                      ) : assets.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-2">No assets in inventory.</p>
+                      ) : (
+                        assets.map((a) => {
+                          const id = String(a._id ?? a.id)
+                          const isSelected = selectedAssetIds.has(id)
+                          return (
+                            <label
+                              key={id}
+                              className="flex items-center gap-2 cursor-pointer rounded px-2 py-1.5 hover:bg-muted/50"
+                            >
+                              <Checkbox checked={isSelected} onCheckedChange={() => toggleAssetSelection(id)} />
+                              <span className="text-sm truncate">
+                                {a.propertyNumber ? `${a.propertyNumber} – ` : ""}{a.name ?? "—"}
+                              </span>
+                            </label>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Accountable person *</Label>
+                    <Select
+                      value={assetAccName || "_"}
+                      onValueChange={(v) => {
+                        const next = v === "_" ? "" : v
+                        setAssetAccName(next)
+                        const p = next ? personByName.get(next) : null
+                        if (p) {
+                          setAssetAccPosition(p.position || "")
+                          setAssetAccOffice(p.office || "CPDC")
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="asset-acc-name">
+                        <SelectValue placeholder="Select person" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_">Select…</SelectItem>
+                        {peopleOptions.map((p) => (
+                          <SelectItem key={p.id} value={p.name}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="asset-remarks">Remarks (optional)</Label>
+                    <Input
+                      id="asset-remarks"
+                      value={assetRemarks}
+                      onChange={(e) => setAssetRemarks(e.target.value)}
+                      placeholder="Remarks"
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setDrawerOpen(false)}>Cancel</Button>
+                    <Button className="flex-1" onClick={() => { handleSubmitAsset(); setDrawerOpen(false); }} disabled={submitting || assetsLoading || selectedAssetIds.size === 0}>
+                      {submitting ? "Assigning…" : `Assign ${selectedAssetIds.size > 0 ? selectedAssetIds.size : ""} asset(s)`}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <DrawerFooter />
+          </DrawerContent>
+        </Drawer>
+
+        <section className="lg:col-span-3 min-w-0 overflow-hidden rounded-xl border bg-white">
           <div className="flex flex-col gap-3 border-b px-4 py-3 lg:px-6">
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative max-w-sm flex-1 min-w-[200px]">
@@ -705,7 +771,6 @@ export default function IssuancePage() {
                     </TableRow>
                   ) : (
                     paginatedRows.map((row, idx) => {
-                      const isFirstOfTx = idx === 0 || paginatedRows[idx - 1].txId !== row.txId
                       const isIssuance = row.txType === "ISSUANCE"
                       const accName = row.item?.accountablePerson?.name ?? row.accountablePerson?.name ?? row.issuedToPerson ?? "—"
                       return (
@@ -735,18 +800,16 @@ export default function IssuancePage() {
                             {row.purpose ?? "—"}
                           </TableCell>
                           <TableCell className="px-3">
-                            {isFirstOfTx ? (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                                onClick={() => handleRemoveTransaction(row.txId, row.txType)}
-                                disabled={deletingTxId === row.txId}
-                                title={isIssuance ? "Remove issuance (return stock)" : "Remove assignment (asset returns to pool)"}
-                              >
-                                <Trash2 className="size-4" />
-                              </Button>
-                            ) : null}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => handleRemoveLine(row.txId, row.txType, row.itemId)}
+                              disabled={deletingTxId === `${row.txId}:${row.itemId}`}
+                              title={isIssuance ? "Remove this line (return stock)" : "Remove this line (asset returns to pool)"}
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       )

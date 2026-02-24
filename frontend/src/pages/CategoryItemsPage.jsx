@@ -84,6 +84,7 @@ import { Separator } from "@/components/ui/separator"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useCategories } from "@/contexts/CategoriesContext"
+import { usePeople } from "@/contexts/PeopleContext"
 import { itemsService } from "@/services"
 import { getErrorMessage } from "@/utils/api"
 import { toast } from "sonner"
@@ -110,6 +111,13 @@ const CONDITION_OPTIONS = [
   { value: "POOR", label: "Poor" },
   { value: "DAMAGED", label: "Damaged" },
 ]
+
+// Consistent placeholder for optional/empty text fields
+function displayNA(value) {
+  if (value == null) return "N/A"
+  const s = typeof value === "string" ? value.trim() : String(value)
+  return s === "" ? "N/A" : s
+}
 
 const defaultAccountablePerson = () => ({ name: "", position: "", office: "CPDC" })
 
@@ -346,7 +354,7 @@ function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, onArchive, 
         )
       case "propertyNo":
         return (
-          <TableCell key={id} className={`px-3 py-2 font-medium ${getColAlignment(id)}`}>{item.propertyNumber ?? "—"}</TableCell>
+          <TableCell key={id} className={`px-3 py-2 font-medium ${getColAlignment(id)}`}>{displayNA(item.propertyNumber)}</TableCell>
         )
       case "name":
         return (
@@ -354,7 +362,7 @@ function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, onArchive, 
         )
       case "category":
         return (
-          <TableCell key={id} className={`px-3 py-2 truncate ${getColAlignment(id)}`}>{item.category ?? "—"}</TableCell>
+          <TableCell key={id} className={`px-3 py-2 truncate ${getColAlignment(id)}`}>{displayNA(item.category)}</TableCell>
         )
       case "quantity":
         return (
@@ -370,7 +378,7 @@ function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, onArchive, 
         )
       case "serialNo":
         return (
-          <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>{item.serialNumber ?? "—"}</TableCell>
+          <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>{displayNA(item.serialNumber)}</TableCell>
         )
       case "status":
         return (
@@ -389,13 +397,13 @@ function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, onArchive, 
       case "accountablePerson":
         return (
           <TableCell key={id} className={`px-3 py-2 truncate ${getColAlignment(id)}`}>
-            {item.accountablePerson?.name ?? "—"}
+            {displayNA(item.accountablePerson?.name)}
           </TableCell>
         )
       case "dateAcquired":
         return (
           <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>
-            {item.dateAcquired ? new Date(item.dateAcquired).toLocaleDateString() : "—"}
+            {item.dateAcquired ? new Date(item.dateAcquired).toLocaleDateString() : "N/A"}
           </TableCell>
         )
       case "actions":
@@ -478,21 +486,21 @@ function SortableRowAsset({ item, selectedIds, toggleRow, openEdit, onArchive, c
         )
       case "category":
         return (
-          <TableCell key={id} className={`px-3 py-2 truncate ${getColAlignment(id)}`}>{item.category ?? "—"}</TableCell>
+          <TableCell key={id} className={`px-3 py-2 truncate ${getColAlignment(id)}`}>{displayNA(item.category)}</TableCell>
         )
       case "propertyNo":
         return (
-          <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>{item.propertyNumber ?? "—"}</TableCell>
+          <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>{displayNA(item.propertyNumber)}</TableCell>
         )
       case "serialNo":
         return (
-          <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>{item.serialNumber ?? "—"}</TableCell>
+          <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>{displayNA(item.serialNumber)}</TableCell>
         )
       case "details":
         return (
           <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>
             <span className="text-muted-foreground text-sm">
-              {[item.brand, item.model].filter(Boolean).join(" · ") || "—"}
+              {[item.brand, item.model].filter(Boolean).join(" · ") || "N/A"}
             </span>
             <br />
             <span className="text-xs text-muted-foreground">
@@ -518,13 +526,13 @@ function SortableRowAsset({ item, selectedIds, toggleRow, openEdit, onArchive, c
       case "accountability":
         return (
           <TableCell key={id} className={`px-3 py-2 truncate ${getColAlignment(id)}`} title={acc?.name ?? undefined}>
-            {item.accountablePerson?.name ?? "—"}
+            {displayNA(item.accountablePerson?.name)}
           </TableCell>
         )
       case "remarks":
         return (
           <TableCell key={id} className={`px-3 py-2 truncate ${getColAlignment(id)}`} title={item.remarks ?? ""}>
-            {item.remarks ?? "—"}
+            {displayNA(item.remarks)}
           </TableCell>
         )
       case "actions":
@@ -690,6 +698,7 @@ export default function CategoryItemsPage() {
   const { categorySlug } = useParams()
   const location = useLocation()
   const { getCategoryBySlug, refreshCategories } = useCategories()
+  const { peopleOptions } = usePeople()
   const categoryFromApi = getCategoryBySlug(categorySlug)
   const navState = location.state
   const category = categoryFromApi ?? (categorySlug ? {
@@ -726,6 +735,14 @@ export default function CategoryItemsPage() {
   const [pageSize, setPageSize] = useState(10)
   const dndId = useId()
   const isMobile = useIsMobile()
+
+  const personByName = useMemo(() => {
+    const map = new Map()
+    ;(peopleOptions || []).forEach((p) => {
+      if (p?.name) map.set(String(p.name), p)
+    })
+    return map
+  }, [peopleOptions])
 
   const isEmptyNewCategory = !!(category && items.length === 0 && navState?.newCategory)
   const blocker = useBlocker(isEmptyNewCategory)
@@ -1279,15 +1296,34 @@ export default function CategoryItemsPage() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="add-acc-name">Accountable person</Label>
-                    <Input
-                      id="add-acc-name"
-                      value={form.accountablePerson?.name ?? ""}
-                      onChange={(e) => setForm((f) => ({
-                        ...f,
-                        accountablePerson: { ...(f.accountablePerson || defaultAccountablePerson()), name: e.target.value },
-                      }))}
-                      placeholder="e.g. Jella Mae Dimaculangan"
-                    />
+                    <Select
+                      value={form.accountablePerson?.name?.trim() ? form.accountablePerson.name : "_"}
+                      onValueChange={(v) => {
+                        const next = v === "_" ? "" : v
+                        const p = next ? personByName.get(next) : null
+                        setForm((f) => ({
+                          ...f,
+                          accountablePerson: {
+                            ...(f.accountablePerson || defaultAccountablePerson()),
+                            name: next,
+                            position: p?.position ?? (f.accountablePerson?.position ?? ""),
+                            office: p?.office ?? (f.accountablePerson?.office ?? "CPDC"),
+                          },
+                        }))
+                      }}
+                    >
+                      <SelectTrigger id="add-acc-name">
+                        <SelectValue placeholder="Select person" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_">N/A</SelectItem>
+                        {peopleOptions.map((p) => (
+                          <SelectItem key={p.id} value={p.name}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="add-transferredTo">Transferred to (optional)</Label>
@@ -1509,15 +1545,34 @@ export default function CategoryItemsPage() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="edit-acc-name">Accountable person</Label>
-                    <Input
-                      id="edit-acc-name"
-                      value={form.accountablePerson?.name ?? ""}
-                      onChange={(e) => setForm((f) => ({
-                        ...f,
-                        accountablePerson: { ...(f.accountablePerson || defaultAccountablePerson()), name: e.target.value },
-                      }))}
-                      placeholder="e.g. Jella Mae Dimaculangan"
-                    />
+                    <Select
+                      value={form.accountablePerson?.name?.trim() ? form.accountablePerson.name : "_"}
+                      onValueChange={(v) => {
+                        const next = v === "_" ? "" : v
+                        const p = next ? personByName.get(next) : null
+                        setForm((f) => ({
+                          ...f,
+                          accountablePerson: {
+                            ...(f.accountablePerson || defaultAccountablePerson()),
+                            name: next,
+                            position: p?.position ?? (f.accountablePerson?.position ?? ""),
+                            office: p?.office ?? (f.accountablePerson?.office ?? "CPDC"),
+                          },
+                        }))
+                      }}
+                    >
+                      <SelectTrigger id="edit-acc-name">
+                        <SelectValue placeholder="Select person" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_">N/A</SelectItem>
+                        {peopleOptions.map((p) => (
+                          <SelectItem key={p.id} value={p.name}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="edit-transferredTo">Transferred to (optional)</Label>
@@ -1694,7 +1749,7 @@ export default function CategoryItemsPage() {
                   <div className="flex items-center gap-2 leading-none font-medium">
                     <StatusBadge status={drawerItem.status} />
                     <span className="text-muted-foreground text-sm">
-                      {CONDITION_LABELS[drawerItem.condition] ?? drawerItem.condition ?? "—"} condition
+                      {CONDITION_LABELS[drawerItem.condition] ?? drawerItem.condition ?? "N/A"} condition
                     </span>
                   </div>
                   <p className="text-muted-foreground text-sm">
@@ -1710,7 +1765,7 @@ export default function CategoryItemsPage() {
                     <>
                       <div className="space-y-2">
                         <Label className="text-muted-foreground font-medium">Property No.</Label>
-                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.propertyNumber ?? "—"}</p>
+                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{displayNA(drawerItem.propertyNumber)}</p>
                       </div>
                       <div className="space-y-2">
                         <Label className="text-muted-foreground font-medium">Name</Label>
@@ -1729,11 +1784,11 @@ export default function CategoryItemsPage() {
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label className="text-muted-foreground font-medium">Category</Label>
-                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.category ?? "—"}</p>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{displayNA(drawerItem.category)}</p>
                         </div>
                         <div className="space-y-2">
                           <Label className="text-muted-foreground font-medium">Serial No.</Label>
-                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.serialNumber ?? "—"}</p>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{displayNA(drawerItem.serialNumber)}</p>
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
@@ -1745,26 +1800,24 @@ export default function CategoryItemsPage() {
                         </div>
                         <div className="space-y-2">
                           <Label className="text-muted-foreground font-medium">Condition</Label>
-                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{CONDITION_LABELS[drawerItem.condition] ?? drawerItem.condition ?? "—"}</p>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{CONDITION_LABELS[drawerItem.condition] ?? drawerItem.condition ?? "N/A"}</p>
                         </div>
                       </div>
                       <div className="space-y-2">
                         <Label className="text-muted-foreground font-medium">Division</Label>
-                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.division ?? "—"}</p>
+                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{displayNA(drawerItem.division)}</p>
                       </div>
                       <div className="space-y-2">
                         <Label className="text-muted-foreground font-medium">Accountable Person</Label>
-                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.accountablePerson?.name ?? "—"}</p>
+                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{displayNA(drawerItem.accountablePerson?.name)}</p>
                       </div>
-                      {drawerItem.transferredTo ? (
-                        <div className="space-y-2">
-                          <Label className="text-muted-foreground font-medium">Transferred to</Label>
-                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.transferredTo}</p>
-                        </div>
-                      ) : null}
+                      <div className="space-y-2">
+                        <Label className="text-muted-foreground font-medium">Transferred to</Label>
+                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{displayNA(drawerItem.transferredTo)}</p>
+                      </div>
                       <div className="space-y-2">
                         <Label className="text-muted-foreground font-medium">Date Acquired</Label>
-                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.dateAcquired ? new Date(drawerItem.dateAcquired).toLocaleDateString() : "—"}</p>
+                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.dateAcquired ? new Date(drawerItem.dateAcquired).toLocaleDateString() : "N/A"}</p>
                       </div>
                     </>
                   ) : (
@@ -1776,31 +1829,31 @@ export default function CategoryItemsPage() {
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label className="text-muted-foreground font-medium">Category</Label>
-                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.category ?? "—"}</p>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{displayNA(drawerItem.category)}</p>
                         </div>
                         <div className="space-y-2">
                           <Label className="text-muted-foreground font-medium">Property No.</Label>
-                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.propertyNumber ?? "—"}</p>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{displayNA(drawerItem.propertyNumber)}</p>
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label className="text-muted-foreground font-medium">Serial No.</Label>
-                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.serialNumber ?? "—"}</p>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{displayNA(drawerItem.serialNumber)}</p>
                         </div>
                         <div className="space-y-2">
                           <Label className="text-muted-foreground font-medium">Unit Cost</Label>
-                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.unitCost != null && drawerItem.unitCost > 0 ? `₱${Number(drawerItem.unitCost).toLocaleString()}` : "—"}</p>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.unitCost != null && drawerItem.unitCost > 0 ? `₱${Number(drawerItem.unitCost).toLocaleString()}` : "N/A"}</p>
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label className="text-muted-foreground font-medium">Brand</Label>
-                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.brand ?? "—"}</p>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{displayNA(drawerItem.brand)}</p>
                         </div>
                         <div className="space-y-2">
                           <Label className="text-muted-foreground font-medium">Model</Label>
-                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.model ?? "—"}</p>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{displayNA(drawerItem.model)}</p>
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
@@ -1812,30 +1865,28 @@ export default function CategoryItemsPage() {
                         </div>
                         <div className="space-y-2">
                           <Label className="text-muted-foreground font-medium">Condition</Label>
-                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{CONDITION_LABELS[drawerItem.condition] ?? drawerItem.condition ?? "—"}</p>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{CONDITION_LABELS[drawerItem.condition] ?? drawerItem.condition ?? "N/A"}</p>
                         </div>
                       </div>
                       <div className="space-y-2">
                         <Label className="text-muted-foreground font-medium">Date Acquired</Label>
-                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.dateAcquired ? new Date(drawerItem.dateAcquired).toLocaleDateString() : "—"}</p>
+                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.dateAcquired ? new Date(drawerItem.dateAcquired).toLocaleDateString() : "N/A"}</p>
                       </div>
                       <div className="space-y-2">
                         <Label className="text-muted-foreground font-medium">Accountability</Label>
                         <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
                           {drawerItem.accountablePerson?.name
                             ? [drawerItem.accountablePerson.name, drawerItem.accountablePerson.position, drawerItem.accountablePerson.office].filter(Boolean).join(" · ")
-                            : "—"}
+                            : "N/A"}
                         </p>
                       </div>
-                      {drawerItem.transferredTo ? (
-                        <div className="space-y-2">
-                          <Label className="text-muted-foreground font-medium">Transferred to</Label>
-                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.transferredTo}</p>
-                        </div>
-                      ) : null}
+                      <div className="space-y-2">
+                        <Label className="text-muted-foreground font-medium">Transferred to</Label>
+                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{displayNA(drawerItem.transferredTo)}</p>
+                      </div>
                       <div className="space-y-2">
                         <Label className="text-muted-foreground font-medium">Remarks</Label>
-                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.remarks ?? "—"}</p>
+                        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{displayNA(drawerItem.remarks)}</p>
                       </div>
                     </>
                   )}

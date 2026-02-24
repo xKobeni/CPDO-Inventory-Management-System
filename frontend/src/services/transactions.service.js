@@ -47,3 +47,14 @@ export async function deleteIssuance(id) {
   const { data } = await http.delete(API_PATHS.transaction(id))
   return data
 }
+
+/**
+ * Remove a single line item from an issuance/asset assignment transaction.
+ * @param {string} txId
+ * @param {string} itemId
+ * @returns {Promise<Object>}
+ */
+export async function deleteIssuanceLine(txId, itemId) {
+  const { data } = await http.delete(API_PATHS.transactionLine(txId, itemId))
+  return data
+}
