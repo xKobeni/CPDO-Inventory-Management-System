@@ -707,7 +707,7 @@ export default function UsersPage() {
               </Button>
             </div>
 
-            <div className="overflow-hidden rounded-lg border">
+            <div className="max-h-80 overflow-y-auto overflow-x-auto rounded-lg border">
               <Table>
                 <TableHeader>
                   <TableRow>
