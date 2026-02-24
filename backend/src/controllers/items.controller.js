@@ -56,10 +56,25 @@ export async function createItem(req, res) {
   if (body.itemType === "ASSET") {
     body.quantityOnHand = 1;
     body.reorderLevel = 0;
+    const pn = body.propertyNumber?.trim();
+    if (pn) {
+      const existing = await Item.findOne({ propertyNumber: pn });
+      if (existing) {
+        return res.status(409).json({ message: "An item with this property number already exists" });
+      }
+    }
   }
 
   if (body.itemType === "SUPPLY") {
     body.propertyNumber = null;
+  }
+
+  const sn = body.serialNumber?.trim();
+  if (sn) {
+    const existing = await Item.findOne({ serialNumber: sn });
+    if (existing) {
+      return res.status(409).json({ message: "An item with this serial number already exists" });
+    }
   }
 
   const item = await Item.create(body);
@@ -102,6 +117,21 @@ export async function updateItem(req, res) {
 
   if (item.itemType === "SUPPLY") {
     item.propertyNumber = null;
+  }
+
+  const pn = item.propertyNumber?.trim();
+  if (pn) {
+    const existing = await Item.findOne({ propertyNumber: pn, _id: { $ne: item._id } });
+    if (existing) {
+      return res.status(409).json({ message: "An item with this property number already exists" });
+    }
+  }
+  const sn = item.serialNumber?.trim();
+  if (sn) {
+    const existing = await Item.findOne({ serialNumber: sn, _id: { $ne: item._id } });
+    if (existing) {
+      return res.status(409).json({ message: "An item with this serial number already exists" });
+    }
   }
 
   await item.save();

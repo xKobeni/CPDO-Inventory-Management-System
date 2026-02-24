@@ -64,8 +64,6 @@ const ItemSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Unique-ish constraints (sparse allows nulls)
-ItemSchema.index({ propertyNumber: 1 }, { unique: true, sparse: true });
-ItemSchema.index({ serialNumber: 1 }, { unique: true, sparse: true });
+// Uniqueness for propertyNumber/serialNumber enforced in controller to avoid E11000 on null
 
 export default mongoose.model("Item", ItemSchema);
