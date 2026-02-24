@@ -11,109 +11,102 @@ function dateOnly(d) {
   return x.toISOString().slice(0, 10);
 }
 
+/** M/D/YYYY like the Report Results in the system (e.g. 2/24/2026) */
+function dateReport(d) {
+  if (!d) return "";
+  const x = new Date(d);
+  if (Number.isNaN(x.getTime())) return "";
+  return `${x.getMonth() + 1}/${x.getDate()}/${x.getFullYear()}`;
+}
+
+/** Philippine Peso with commas (e.g. ₱10,000) */
+function formatAmount(n) {
+  if (n == null || Number.isNaN(Number(n))) return "₱0";
+  return "₱" + Number(n).toLocaleString("en-PH", { maximumFractionDigits: 0, minimumFractionDigits: 0 });
+}
+
+/** Build the same filter as listItems so export matches what the frontend shows. */
+function itemsFilterFromQuery(query) {
+  const { q, archived, type, category } = query || {};
+  const filter = {};
+  if (archived === "true") filter.isArchived = true;
+  else if (archived === "false" || archived === undefined) filter.isArchived = false;
+  if (type) filter.itemType = type;
+  if (category) filter.category = category;
+  if (q && String(q).trim()) {
+    const escaped = String(q).trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(escaped, "i");
+    filter.$or = [
+      { name: re },
+      { category: re },
+      { propertyNumber: re },
+      { serialNumber: re },
+      { "accountablePerson.name": re },
+      { division: re },
+    ];
+  }
+  return filter;
+}
+
+/** One row in Report Results format: Acquired Date, Item Name, Amount, Property, Accountable Person, Transferred To, Remarks */
+function rowFromItem(it, txPurpose = "") {
+  const acc = it.accountablePerson || {};
+  const accPerson =
+    acc?.name?.trim() || acc?.office?.trim()
+      ? [acc?.name?.trim(), acc?.office?.trim()].filter(Boolean).join(" - ")
+      : "";
+  const transferredTo = it.transferredTo?.trim() || "None";
+  return {
+    acquiredDate: dateReport(it.dateAcquired),
+    itemName: it.name || "",
+    amount: formatAmount(it.unitCost),
+    property: it.propertyNumber || "",
+    accountablePerson: accPerson,
+    transferredTo,
+    remarks: it.remarks?.trim() || txPurpose || "",
+  };
+}
+
+const REPORT_RESULTS_COLUMNS = [
+  { header: "Acquired Date", key: "acquiredDate", width: 14 },
+  { header: "Item Name", key: "itemName", width: 28 },
+  { header: "Amount", key: "amount", width: 14 },
+  { header: "Property", key: "property", width: 22 },
+  { header: "Accountable Person", key: "accountablePerson", width: 28 },
+  { header: "Transferred To", key: "transferredTo", width: 20 },
+  { header: "Remarks", key: "remarks", width: 28 },
+];
+
 export async function exportItemsXlsx(req, res) {
-  const items = await Item.find({ isArchived: false }).sort({ updatedAt: -1 });
+  const filter = itemsFilterFromQuery(req.query);
+  const items = await Item.find(filter).sort({ updatedAt: -1 }).limit(500).lean();
 
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet("Items");
-
-  ws.columns = [
-    { header: "Item Type", key: "itemType", width: 10 },
-    { header: "Name", key: "name", width: 28 },
-    { header: "Category", key: "category", width: 18 },
-    { header: "Unit", key: "unit", width: 10 },
-
-    { header: "Qty On Hand", key: "quantityOnHand", width: 12 },
-    { header: "Reorder Level", key: "reorderLevel", width: 12 },
-
-    { header: "Property No.", key: "propertyNumber", width: 18 },
-    { header: "Serial No.", key: "serialNumber", width: 18 },
-    { header: "Brand", key: "brand", width: 14 },
-    { header: "Model", key: "model", width: 14 },
-
-    { header: "Date Acquired", key: "dateAcquired", width: 14 },
-    { header: "Unit Cost", key: "unitCost", width: 12 },
-
-    { header: "Division", key: "division", width: 22 },
-    { header: "Accountable Name", key: "accName", width: 18 },
-    { header: "Accountable Position", key: "accPos", width: 18 },
-    { header: "Accountable Office", key: "accOffice", width: 14 },
-
-    { header: "Status", key: "status", width: 12 },
-    { header: "Condition", key: "condition", width: 12 },
-    { header: "Remarks", key: "remarks", width: 28 },
-
-    { header: "Created At", key: "createdAt", width: 18 },
-    { header: "Updated At", key: "updatedAt", width: 18 },
-  ];
-
-  items.forEach((it) => {
-    ws.addRow({
-      itemType: it.itemType,
-      name: it.name,
-      category: it.category,
-      unit: it.unit,
-
-      quantityOnHand: it.itemType === "SUPPLY" ? it.quantityOnHand : 1,
-      reorderLevel: it.itemType === "SUPPLY" ? it.reorderLevel : 0,
-
-      propertyNumber: it.propertyNumber || "",
-      serialNumber: it.serialNumber || "",
-      brand: it.brand || "",
-      model: it.model || "",
-
-      dateAcquired: dateOnly(it.dateAcquired),
-      unitCost: it.unitCost ?? 0,
-
-      division: it.division || "",
-      accName: it.accountablePerson?.name || "",
-      accPos: it.accountablePerson?.position || "",
-      accOffice: it.accountablePerson?.office || "",
-
-      status: it.status || "",
-      condition: it.condition || "",
-      remarks: it.remarks || "",
-
-      createdAt: it.createdAt?.toISOString?.() || "",
-      updatedAt: it.updatedAt?.toISOString?.() || "",
-    });
-  });
+  const ws = wb.addWorksheet("Items", { views: [{ state: "frozen", ySplit: 1 }] });
+  ws.columns = REPORT_RESULTS_COLUMNS;
+  items.forEach((it) => ws.addRow(rowFromItem(it)));
 
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="cpdc_items_${dateOnly(new Date())}.xlsx"`);
-
   await wb.xlsx.write(res);
   res.end();
 }
 
 export async function exportItemsCsv(req, res) {
-  const items = await Item.find({ isArchived: false }).sort({ updatedAt: -1 });
+  const filter = itemsFilterFromQuery(req.query);
+  const items = await Item.find(filter).sort({ updatedAt: -1 }).limit(500).lean();
 
-  const rows = items.map((it) => ({
-    itemType: it.itemType,
-    name: it.name,
-    category: it.category,
-    unit: it.unit,
-    quantityOnHand: it.itemType === "SUPPLY" ? it.quantityOnHand : 1,
-    reorderLevel: it.itemType === "SUPPLY" ? it.reorderLevel : 0,
-    propertyNumber: it.propertyNumber || "",
-    serialNumber: it.serialNumber || "",
-    brand: it.brand || "",
-    model: it.model || "",
-    dateAcquired: dateOnly(it.dateAcquired),
-    unitCost: it.unitCost ?? 0,
-    division: it.division || "",
-    accountableName: it.accountablePerson?.name || "",
-    accountablePosition: it.accountablePerson?.position || "",
-    accountableOffice: it.accountablePerson?.office || "",
-    status: it.status || "",
-    condition: it.condition || "",
-    remarks: it.remarks || "",
-    createdAt: it.createdAt?.toISOString?.() || "",
-    updatedAt: it.updatedAt?.toISOString?.() || "",
-  }));
+  const rows = items.map((it) => rowFromItem(it));
 
-  const fields = Object.keys(rows[0] || { name: "" });
+  const fields = [
+    { label: "Acquired Date", value: "acquiredDate" },
+    { label: "Item Name", value: "itemName" },
+    { label: "Amount", value: "amount" },
+    { label: "Property", value: "property" },
+    { label: "Accountable Person", value: "accountablePerson" },
+    { label: "Transferred To", value: "transferredTo" },
+    { label: "Remarks", value: "remarks" },
+  ];
   const parser = new Json2CsvParser({ fields });
   const csv = parser.parse(rows);
 
@@ -124,6 +117,73 @@ export async function exportItemsCsv(req, res) {
 
 export async function exportTransactionsXlsx(req, res) {
   const { from, to, type } = req.query;
+
+  const isIssuanceReport =
+    type === "ISSUANCE" || type === "ASSET_ASSIGN" || type === "Issuance";
+
+  if (isIssuanceReport) {
+    const itemType = req.query.itemType;
+    const category = req.query.category ? String(req.query.category).trim() : "";
+    const accountablePerson = req.query.accountablePerson ? String(req.query.accountablePerson).trim() : "";
+    const filter = { type: { $in: ["ISSUANCE", "ASSET_ASSIGN"] } };
+    if (from || to) {
+      filter.createdAt = {};
+      if (from) filter.createdAt.$gte = new Date(from);
+      if (to) filter.createdAt.$lte = new Date(to);
+    }
+    const txs = await Transaction.find(filter)
+      .populate("items.itemId")
+      .sort({ createdAt: -1 })
+      .limit(5000)
+      .lean();
+
+    const rows = [];
+    for (const t of txs) {
+      const acc = t.accountablePerson || {};
+      const accPerson =
+        acc.name?.trim() || acc.office?.trim()
+          ? [acc.name.trim(), acc.office.trim()].filter(Boolean).join(" - ")
+          : "";
+      const purpose = t.purpose?.trim() || "";
+      if (accountablePerson) {
+        const txAccName = (acc.name || "").trim() || (t.issuedToPerson || "").trim();
+        const txMatches = txAccName === accountablePerson;
+        if (!txMatches) {
+          const itemMatches = (t.items || []).some(
+            (line) => (line.itemId?.accountablePerson?.name || "").trim() === accountablePerson
+          );
+          if (!itemMatches) continue;
+        }
+      }
+      for (const line of t.items || []) {
+        const it = line?.itemId;
+        if (!it) continue;
+        if (itemType === "ASSET" || itemType === "SUPPLY") {
+          if ((it.itemType || "") !== itemType) continue;
+        }
+        if (category && (it.category || "").trim() !== category) continue;
+        rows.push({
+          acquiredDate: dateReport(it.dateAcquired),
+          itemName: it.name || "",
+          amount: formatAmount(it.unitCost),
+          property: it.propertyNumber || "",
+          accountablePerson: accPerson,
+          transferredTo: it.transferredTo?.trim() || "None",
+          remarks: purpose,
+        });
+      }
+    }
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Issuance", { views: [{ state: "frozen", ySplit: 1 }] });
+    ws.columns = REPORT_RESULTS_COLUMNS;
+    rows.forEach((r) => ws.addRow(r));
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="cpdc_issuance_${dateOnly(new Date())}.xlsx"`);
+    await wb.xlsx.write(res);
+    return res.end();
+  }
 
   const filter = {};
   if (type) filter.type = type;
@@ -181,6 +241,72 @@ export async function exportTransactionsXlsx(req, res) {
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="cpdc_transactions_${dateOnly(new Date())}.xlsx"`);
 
+  await wb.xlsx.write(res);
+  res.end();
+}
+
+/** Issuance report: same columns as Report Results in the system (Acquired Date, Item Name, Amount, Property, Accountable Person, Transferred To, Remarks). One row per issued item. */
+export async function exportIssuanceXlsx(req, res) {
+  const { from, to, itemType } = req.query;
+  const category = req.query.category ? String(req.query.category).trim() : "";
+  const accountablePerson = req.query.accountablePerson ? String(req.query.accountablePerson).trim() : "";
+  const filter = { type: { $in: ["ISSUANCE", "ASSET_ASSIGN"] } };
+  if (from || to) {
+    filter.createdAt = {};
+    if (from) filter.createdAt.$gte = new Date(from);
+    if (to) filter.createdAt.$lte = new Date(to);
+  }
+
+  const txs = await Transaction.find(filter)
+    .populate("items.itemId")
+    .sort({ createdAt: -1 })
+    .limit(5000)
+    .lean();
+
+  const rows = [];
+  for (const t of txs) {
+    const acc = t.accountablePerson || {};
+    const accPerson =
+      acc.name?.trim() || acc.office?.trim()
+        ? [acc.name.trim(), acc.office.trim()].filter(Boolean).join(" - ")
+        : "";
+    const purpose = t.purpose?.trim() || "";
+    if (accountablePerson) {
+      const txAccName = (acc.name || "").trim() || (t.issuedToPerson || "").trim();
+      const txMatches = txAccName === accountablePerson;
+      if (!txMatches) {
+        const itemMatches = (t.items || []).some(
+          (line) => (line.itemId?.accountablePerson?.name || "").trim() === accountablePerson
+        );
+        if (!itemMatches) continue;
+      }
+    }
+    for (const line of t.items || []) {
+      const it = line?.itemId;
+      if (!it) continue;
+      if (itemType === "ASSET" || itemType === "SUPPLY") {
+        if ((it.itemType || "") !== itemType) continue;
+      }
+      if (category && (it.category || "").trim() !== category) continue;
+      rows.push({
+        acquiredDate: dateReport(it.dateAcquired),
+        itemName: it.name || "",
+        amount: formatAmount(it.unitCost),
+        property: it.propertyNumber || "",
+        accountablePerson: accPerson,
+        transferredTo: it.transferredTo?.trim() || "None",
+        remarks: purpose,
+      });
+    }
+  }
+
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Issuance", { views: [{ state: "frozen", ySplit: 1 }] });
+  ws.columns = REPORT_RESULTS_COLUMNS;
+  rows.forEach((r) => ws.addRow(r));
+
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="cpdc_issuance_${dateOnly(new Date())}.xlsx"`);
   await wb.xlsx.write(res);
   res.end();
 }

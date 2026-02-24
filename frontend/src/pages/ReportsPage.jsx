@@ -88,6 +88,7 @@ export default function ReportsPage() {
   const [dateRangePreset, setDateRangePreset] = useState("range")
   const [dateFrom, setDateFrom] = useState("2026-01-01")
   const [dateTo, setDateTo] = useState(() => todayYYYYMMDD())
+  const [issuanceItemType, setIssuanceItemType] = useState("all")
   const [filterCategory, setFilterCategory] = useState("")
   const [filterAccountablePerson, setFilterAccountablePerson] = useState("")
   const [accountablePersonOptions, setAccountablePersonOptions] = useState([])
@@ -99,7 +100,30 @@ export default function ReportsPage() {
 
   const isInventory = reportType === "inventory"
   const results = isInventory ? inventoryResults : txResults
-  const resultCount = Array.isArray(results) ? results.length : 0
+  const issuanceDisplayResults =
+    reportType === "issuance" && Array.isArray(txResults)
+      ? txResults
+          .map((tx) => ({
+            ...tx,
+            items:
+              issuanceItemType === "all"
+                ? tx.items ?? []
+                : (tx.items ?? []).filter(
+                    (line) => (line.itemId?.itemType ?? "") === issuanceItemType
+                  ),
+          }))
+          .filter((tx) => (tx.items ?? []).length > 0)
+      : []
+  const resultCount =
+    reportType === "issuance"
+      ? issuanceDisplayResults.reduce(
+          (sum, tx) => sum + (tx.items ?? []).length,
+          0
+        )
+      : Array.isArray(results)
+        ? results.length
+        : 0
+  const resultsForTable = reportType === "issuance" ? issuanceDisplayResults : results
 
   useEffect(() => {
     if (!reportType) return
@@ -155,6 +179,7 @@ export default function ReportsPage() {
 
   const handleReportTypeChange = (value) => {
     setReportType(value)
+    setIssuanceItemType("all")
     setFilterCategory("")
     setFilterAccountablePerson("")
     setHasResults(false)
@@ -212,7 +237,19 @@ export default function ReportsPage() {
           : await exportService.downloadItemsXlsx()
         downloadBlob(blob, `inventory_${new Date().toISOString().slice(0, 10)}.${format === "csv" ? "csv" : "xlsx"}`)
       } else {
-        const blob = await exportService.downloadTransactionsXlsx()
+        const params = {}
+        if (dateRangePreset === "range") {
+          if (dateFrom) params.from = dateFrom
+          if (dateTo) params.to = dateTo
+        }
+        if (reportType === "issuance") {
+          params.type = "ISSUANCE"
+          if (issuanceItemType !== "all") params.itemType = issuanceItemType
+          if (filterCategory) params.category = filterCategory
+          if (filterAccountablePerson) params.accountablePerson = filterAccountablePerson
+        } else if (reportType === "stock-in") params.type = "STOCK_IN"
+        else if (reportType === "stock-out") params.type = "ISSUANCE"
+        const blob = await exportService.downloadTransactionsXlsx(params)
         downloadBlob(blob, `transactions_${new Date().toISOString().slice(0, 10)}.xlsx`)
       }
       toast.success("Download started.")
@@ -316,6 +353,26 @@ export default function ReportsPage() {
                 )}
               </div>
             </div>
+
+            {reportType === "issuance" && (
+              <div className="space-y-2">
+                <Label htmlFor="issuance-item-type">Item type</Label>
+                <Select
+                  id="issuance-item-type"
+                  value={issuanceItemType}
+                  onValueChange={setIssuanceItemType}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="ASSET">Asset</SelectItem>
+                    <SelectItem value="SUPPLY">Supply</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {reportType && (
               <div className="grid gap-4 sm:grid-cols-2">
@@ -571,7 +628,7 @@ export default function ReportsPage() {
                 </TableHeader>
                 <TableBody>
                   {(() => {
-                    const rows = results.flatMap((tx, txIdx) =>
+                    const rows = resultsForTable.flatMap((tx, txIdx) =>
                       (tx.items ?? []).map((line, idx) => {
                         const item = typeof line.itemId === "object" ? line.itemId : null
                         const acc = item?.accountablePerson ?? tx.accountablePerson ?? {}

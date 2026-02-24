@@ -54,7 +54,7 @@ export async function listTransactions(req, res) {
 
   const txs = await Transaction.find(filter)
     .populate("createdBy", "name email role")
-    .populate("items.itemId", "name unit category dateAcquired unitCost propertyNumber accountablePerson transferredTo")
+    .populate("items.itemId", "name unit category itemType dateAcquired unitCost propertyNumber accountablePerson transferredTo")
     .sort({ createdAt: -1 })
     .limit(300);
 

@@ -16,10 +16,19 @@ export async function downloadItemsCsv() {
   return data
 }
 
-export async function downloadTransactionsXlsx() {
-  const { data } = await http.get(API_PATHS.export.transactionsXlsx, {
-    responseType: "blob",
+/**
+ * @param {Object} [params] - Query params: from, to, type (e.g. ISSUANCE), itemType (e.g. ASSET, SUPPLY for issuance report).
+ */
+export async function downloadTransactionsXlsx(params = {}) {
+  const searchParams = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value != null && value !== "") searchParams.set(key, value)
   })
+  const query = searchParams.toString()
+  const url = query
+    ? `${API_PATHS.export.transactionsXlsx}?${query}`
+    : API_PATHS.export.transactionsXlsx
+  const { data } = await http.get(url, { responseType: "blob" })
   return data
 }
 
