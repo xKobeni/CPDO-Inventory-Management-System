@@ -84,6 +84,7 @@ export default function UsersPage() {
   const [peopleSearch, setPeopleSearch] = useState("")
   const [peopleDivisionFilter, setPeopleDivisionFilter] = useState("")
   const [peopleSortAsc, setPeopleSortAsc] = useState(true)
+  const [peopleLastnameFirst, setPeopleLastnameFirst] = useState(false)
   const [editingPersonId, setEditingPersonId] = useState(null)
 
   const DIVISIONS = [
@@ -705,6 +706,16 @@ export default function UsersPage() {
               <Button variant="outline" size="icon" onClick={() => setPeopleSortAsc((s) => !s)}>
                 {peopleSortAsc ? "↑" : "↓"}
               </Button>
+              <div className="flex items-center gap-2">
+                <input
+                  id="people-lastname-first"
+                  type="checkbox"
+                  checked={peopleLastnameFirst}
+                  onChange={(e) => setPeopleLastnameFirst(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <Label htmlFor="people-lastname-first" className="text-sm">Lastname first</Label>
+              </div>
             </div>
 
             <div className="max-h-80 overflow-y-auto overflow-x-auto rounded-lg border">
@@ -738,13 +749,21 @@ export default function UsersPage() {
                             (p.office || "CPDC").toLowerCase().includes(q)
                           )
                         })
-                        .sort((a, b) => {
-                          const an = (a.name || "").toLowerCase()
-                          const bn = (b.name || "").toLowerCase()
-                          if (an < bn) return peopleSortAsc ? -1 : 1
-                          if (an > bn) return peopleSortAsc ? 1 : -1
-                          return 0
-                        })
+                          .sort((a, b) => {
+                            const getSortable = (name) => {
+                              if (!name) return ""
+                              const parts = String(name).trim().split(/\s+/)
+                              if (!peopleLastnameFirst) return name.toLowerCase()
+                              const last = parts.length ? parts[parts.length - 1] : ""
+                              const rest = parts.length > 1 ? parts.slice(0, parts.length - 1).join(" ") : ""
+                              return `${last} ${rest}`.toLowerCase()
+                            }
+                            const an = getSortable(a.name)
+                            const bn = getSortable(b.name)
+                            if (an < bn) return peopleSortAsc ? -1 : 1
+                            if (an > bn) return peopleSortAsc ? 1 : -1
+                            return 0
+                          })
 
                       if (filtered.length === 0) {
                         return (
@@ -756,10 +775,20 @@ export default function UsersPage() {
                         )
                       }
 
+                      const formatDisplayName = (name) => {
+                        if (!name) return "—"
+                        if (!peopleLastnameFirst) return name
+                        const parts = String(name).trim().split(/\s+/)
+                        if (parts.length === 1) return name
+                        const last = parts.pop()
+                        const rest = parts.join(" ")
+                        return `${last}, ${rest}`
+                      }
+
                       return filtered.map((p, idx) => (
                         <TableRow key={p.id}>
                           <TableCell>{idx + 1}</TableCell>
-                          <TableCell className="font-medium">{p.name}</TableCell>
+                          <TableCell className="font-medium">{formatDisplayName(p.name)}</TableCell>
                           <TableCell className="text-muted-foreground">{p.position || "N/A"}</TableCell>
                           <TableCell className="text-muted-foreground">{p.office || "CPDC"}</TableCell>
                           <TableCell className="text-right">

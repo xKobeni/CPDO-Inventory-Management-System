@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from "react"
-import { ClipboardList, Search, Plus, Trash2, Filter, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react"
+import { useState, useEffect, useCallback, useMemo, useRef, memo } from "react"
+import { ClipboardList, Search, Plus, Trash2, Filter, RefreshCw, ChevronLeft, ChevronRight, MoreVertical } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -41,9 +41,55 @@ import {
   DrawerClose,
 } from "@/components/ui/drawer"
 import { itemsService, transactionsService } from "@/services"
+import { FixedSizeList as List } from "react-window"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogClose,
+} from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { getErrorMessage } from "@/utils/api"
 import { usePeople } from "@/contexts/PeopleContext"
+
+const AssetRow = memo(function AssetRow({ index, style, data }) {
+  const a = data.assets[index]
+  const id = String(a._id ?? a.id)
+  const isSelected = data.selectedAssetIds.has(id)
+  const assignedTo = a?.accountablePerson?.name?.trim()
+  const disabled = Boolean(assignedTo)
+  return (
+    <div style={style} key={id} className="flex items-center gap-2 px-2 hover:bg-muted/50">
+      <Checkbox checked={isSelected} disabled={disabled} onCheckedChange={() => { if (!disabled) data.toggleAssetSelection(id) }} />
+      <div className="flex-1 min-w-0">
+        <div className="text-sm truncate">{a.propertyNumber ? `${a.propertyNumber} – ` : ""}{a.name}</div>
+        <div className="text-xs text-muted-foreground">
+          {a.location ?? "—"}{assignedTo ? ` • Assigned to ${assignedTo}` : ""}
+        </div>
+      </div>
+    </div>
+  )
+})
 
 const ISSUE_MODE_SUPPLY = "supply"
 const ISSUE_MODE_ASSET = "asset"
@@ -69,6 +115,14 @@ export default function IssuancePage() {
   const [supplies, setSupplies] = useState([])
   const [assets, setAssets] = useState([])
   const [assetsLoading, setAssetsLoading] = useState(false)
+  const [assetQuery, setAssetQuery] = useState("")
+  const [assetCategoryFilter, setAssetCategoryFilter] = useState("")
+  // status filter removed
+  const [assetAssignedFilter, setAssetAssignedFilter] = useState("false") // Assigned = No (string because API uses string flags elsewhere)
+  const [assetPage, setAssetPage] = useState(1)
+  const [assetPageSize, setAssetPageSize] = useState(50)
+  const [assetsHasMore, setAssetsHasMore] = useState(true)
+  const assetsRef = useRef(new Map())
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(true)
   const [txLoading, setTxLoading] = useState(true)
@@ -82,6 +136,13 @@ export default function IssuancePage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [deletingTxId, setDeletingTxId] = useState(null)
+  const [actionRow, setActionRow] = useState(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [transferDialogOpen, setTransferDialogOpen] = useState(false)
+  const [transferName, setTransferName] = useState("")
+  const [transferPosition, setTransferPosition] = useState("")
+  const [transferOffice, setTransferOffice] = useState("CPDC")
+  const [transferRemarks, setTransferRemarks] = useState("")
 
   const [lines, setLines] = useState([{ itemId: "", qty: 1 }])
   const [issuedToOffice, setIssuedToOffice] = useState("")
@@ -119,7 +180,8 @@ export default function IssuancePage() {
   const fetchTransactions = useCallback(async (showToast = false) => {
     setTxLoading(true)
     try {
-      const data = await transactionsService.listTransactions({ type: "ISSUANCE,ASSET_ASSIGN" })
+      // include ASSET_TRANSFER so transfers show up in the ledger
+      const data = await transactionsService.listTransactions({ type: "ISSUANCE,ASSET_ASSIGN,ASSET_TRANSFER" })
       setTransactions(data)
       if (showToast) toast.success("List refreshed.")
     } catch (err) {
@@ -129,34 +191,85 @@ export default function IssuancePage() {
       setTxLoading(false)
     }
   }, [])
+  // fetchAssets implemented via ref to avoid identity-change loops that cause repeated fetches
+  const fetchAssetsRef = useRef(null)
+  const assetQueryRef = useRef("")
+  const assetCategoryRef = useRef("")
+  const assetAssignedRef = useRef("")
+  const assetPageRef = useRef(assetPage)
+  const assetPageSizeRef = useRef(assetPageSize)
 
-  const fetchAssets = useCallback(async () => {
+  // keep refs in sync with state
+  useEffect(() => { assetQueryRef.current = assetQuery }, [assetQuery])
+  useEffect(() => { assetCategoryRef.current = assetCategoryFilter }, [assetCategoryFilter])
+  useEffect(() => { assetAssignedRef.current = assetAssignedFilter }, [assetAssignedFilter])
+  useEffect(() => { assetPageRef.current = assetPage }, [assetPage])
+  useEffect(() => { assetPageSizeRef.current = assetPageSize }, [assetPageSize])
+
+  fetchAssetsRef.current = async ({ reset = false } = {}) => {
     setAssetsLoading(true)
     try {
-      const data = await itemsService.listItems({ type: "ASSET", archived: "false" })
-      setAssets(data)
+      const pageToLoad = reset ? 1 : assetPageRef.current
+      const params = {
+        type: "ASSET",
+        archived: "false",
+        q: assetQueryRef.current || undefined,
+        category: assetCategoryRef.current || undefined,
+        assigned: assetAssignedRef.current || undefined,
+        page: pageToLoad,
+        pageSize: assetPageSizeRef.current,
+      }
+      const data = await itemsService.listItems(params)
+      if (reset) {
+        setAssets(data || [])
+        setAssetPage(2)
+        assetPageRef.current = 2
+        setAssetsHasMore((data || []).length >= assetPageSizeRef.current)
+        assetsRef.current = new Map((data || []).map((a) => [String(a._id ?? a.id), a]))
+      } else {
+        setAssets((prev) => {
+          const next = [...prev, ...(data || [])]
+          ;(data || []).forEach((a) => assetsRef.current.set(String(a._id ?? a.id), a))
+          return next
+        })
+        setAssetPage((p) => {
+          const next = p + 1
+          assetPageRef.current = next
+          return next
+        })
+        setAssetsHasMore((data || []).length >= assetPageSizeRef.current)
+      }
     } catch (err) {
       setError(getErrorMessage(err))
-      setAssets([])
+      if (reset) setAssets([])
       toast.error(getErrorMessage(err))
     } finally {
       setAssetsLoading(false)
     }
-  }, [])
+  }
+
+  // Refetch assets when asset filters/search change or when user switches to Asset mode.
+  useEffect(() => {
+    if (issueMode !== ISSUE_MODE_ASSET) return
+    const t = setTimeout(() => {
+      // reset pagination when filters/search change
+      setAssetPage(1)
+          if (fetchAssetsRef.current) fetchAssetsRef.current({ reset: true })
+    }, 300)
+    return () => clearTimeout(t)
+  }, [issueMode, assetQuery, assetCategoryFilter, assetAssignedFilter])
 
   useEffect(() => {
     fetchSupplies()
   }, [fetchSupplies])
 
-  useEffect(() => {
-    if (issueMode === ISSUE_MODE_ASSET) fetchAssets()
-  }, [issueMode, fetchAssets])
+  // asset fetching is handled by a dedicated effect that observes filters and issueMode
 
   useEffect(() => {
     fetchTransactions()
   }, [fetchTransactions])
 
-  const toggleAssetSelection = (id) => {
+  const toggleAssetSelection = useCallback((id) => {
     const sid = String(id)
     setSelectedAssetIds((prev) => {
       const next = new Set(prev)
@@ -164,12 +277,31 @@ export default function IssuancePage() {
       else next.add(sid)
       return next
     })
-  }
+  }, [])
 
-  const selectAllAssets = () => {
-    if (selectedAssetIds.size >= assets.length) setSelectedAssetIds(new Set())
-    else setSelectedAssetIds(new Set(assets.map((a) => String(a._id ?? a.id))))
-  }
+  const selectAllAssets = useCallback(() => {
+    setSelectedAssetIds((prev) => {
+      if (prev.size >= assets.length) return new Set()
+      // only select unassigned assets
+      return new Set(assets.filter((a) => {
+        const name = a?.accountablePerson?.name
+        return !(name && String(name).trim())
+      }).map((a) => String(a._id ?? a.id)))
+    })
+  }, [assets])
+
+  // memoized category/location lists to avoid recalculating each render
+  const assetCategories = useMemo(() => Array.from(new Set(assets.map((a) => a.category).filter(Boolean))), [assets])
+  // location filter removed; assetLocations no longer needed
+
+  const handleItemsRendered = useCallback(
+    ({ visibleStopIndex }) => {
+      if (assetsHasMore && visibleStopIndex >= assets.length - 6 && !assetsLoading) {
+        if (fetchAssetsRef.current) fetchAssetsRef.current()
+      }
+    },
+    [assetsHasMore, assets.length, assetsLoading]
+  )
 
   const addLine = () => setLines((prev) => [...prev, { itemId: "", qty: 1 }])
   const removeLine = (idx) => setLines((prev) => prev.filter((_, i) => i !== idx))
@@ -251,7 +383,7 @@ export default function IssuancePage() {
       setAssetAccPosition("")
       setAssetAccOffice("CPDC")
       setAssetRemarks("")
-      fetchAssets()
+      if (fetchAssetsRef.current) fetchAssetsRef.current({ reset: true })
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
@@ -392,6 +524,52 @@ export default function IssuancePage() {
     }
   }
 
+  // Confirmed delete (used by AlertDialog) - deletes the specific line stored in `actionRow`
+  const confirmDelete = async () => {
+    if (!actionRow) return
+    const { txId, txType, itemId } = actionRow
+    const isAsset = txType === "ASSET_ASSIGN"
+    const key = `${txId}:${itemId}`
+    setDeletingTxId(key)
+    setDeleteDialogOpen(false)
+    try {
+      await transactionsService.deleteIssuanceLine(txId, itemId)
+      toast.success(isAsset ? "Line removed (asset unassigned)." : "Line removed (stock returned).")
+      fetchTransactions()
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setDeletingTxId(null)
+      setActionRow(null)
+    }
+  }
+
+  const performTransfer = async () => {
+    if (!actionRow) return
+    const itemId = actionRow.itemId
+    setTransferDialogOpen(false)
+    try {
+      await itemsService.transferAsset(itemId, {
+        txId: actionRow.txId,
+        transferredTo: transferName.trim(),
+        division: actionRow.item?.division ?? undefined,
+        remarks: transferRemarks.trim() || undefined,
+        office: transferOffice.trim() || undefined,
+      })
+      toast.success("Asset transferred.")
+      fetchTransactions()
+      if (fetchAssetsRef.current) fetchAssetsRef.current({ reset: true })
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setActionRow(null)
+      setTransferName("")
+      setTransferPosition("")
+      setTransferOffice("CPDC")
+      setTransferRemarks("")
+    }
+  }
+
   return (
     <div className="mx-auto flex min-w-0 w-full max-w-[1400px] flex-col gap-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -442,7 +620,7 @@ export default function IssuancePage() {
 
         {/* Issuance Drawer */}
         <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} direction={isMobile ? "bottom" : "right"}>
-          <DrawerContent className="data-[vaul-drawer-direction=right]:sm:max-w-md">
+          <DrawerContent className="data-[vaul-drawer-direction=right]:sm:max-w-md h-full flex flex-col">
             <DrawerHeader>
               <div className="flex items-center justify-between">
                 <DrawerTitle>New Issuance</DrawerTitle>
@@ -453,7 +631,7 @@ export default function IssuancePage() {
               </DrawerDescription>
             </DrawerHeader>
 
-            <div className="p-4 space-y-4">
+            <div className="p-4 space-y-4 overflow-auto flex-1">
               <div className="flex items-center gap-2">
                 <Button
                   type="button"
@@ -568,35 +746,98 @@ export default function IssuancePage() {
                 </>
               ) : (
                 <>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <Label>Select assets to assign</Label>
-                      <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={selectAllAssets}>
-                        {selectedAssetIds.size >= assets.length ? "Clear all" : "Select all"}
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { selectAllAssets() }}>
+                          {selectedAssetIds.size >= assets.length ? "Clear all" : "Select all"}
+                        </Button>
+                      </div>
                     </div>
-                    <div className="max-h-40 overflow-y-auto rounded-md border p-2 space-y-2">
-                      {assetsLoading ? (
-                        <p className="text-sm text-muted-foreground py-2">Loading assets…</p>
+
+                    {/* Search & filters */}
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          placeholder="🔎 Search assets..."
+                          className="pl-9"
+                          value={assetQuery}
+                          onChange={(e) => setAssetQuery(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <Select value={assetCategoryFilter || "_"} onValueChange={(v) => setAssetCategoryFilter(v === "_" ? "" : v)}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="_">All categories</SelectItem>
+                            {assetCategories.map((c) => (
+                              <SelectItem key={c} value={c}>{c}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex gap-2 sm:col-span-2">
+                        <Select value={assetAssignedFilter || "_"} onValueChange={(v) => setAssetAssignedFilter(v === "_" ? "" : v)}>
+                          <SelectTrigger className="w-[200px]">
+                            <SelectValue placeholder="Assigned" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="_">Either</SelectItem>
+                            <SelectItem value="false">Unassigned (no accountable person)</SelectItem>
+                            <SelectItem value="true">Assigned (has accountable person)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => { setAssetQuery(""); setAssetCategoryFilter(""); setAssetAssignedFilter("false"); if (fetchAssetsRef.current) fetchAssetsRef.current({ reset: true }) }}>
+                          Smart defaults
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Selected list */}
+                    {selectedAssetIds.size > 0 && (
+                      <div className="rounded-md border p-2">
+                        <div className="text-sm font-medium">Selected ({selectedAssetIds.size})</div>
+                        <div className="mt-2 space-y-1">
+                          {Array.from(selectedAssetIds).map((id) => {
+                            const asset = assetsRef.current.get(id) || assets.find((a) => String(a._id ?? a.id) === id)
+                            return (
+                              <label key={id} className="flex items-center gap-2">
+                                <Checkbox checked={true} onCheckedChange={() => toggleAssetSelection(id)} />
+                                <span className="text-sm truncate">{asset ? `${asset.propertyNumber ? `${asset.propertyNumber} – ` : ""}${asset.name}` : id}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Available assets - virtualized + lazy load */}
+                    <div className="h-56 rounded-md border">
+                      {assetsLoading && assets.length === 0 ? (
+                        <div className="p-3 text-sm text-muted-foreground">Loading assets…</div>
                       ) : assets.length === 0 ? (
-                        <p className="text-sm text-muted-foreground py-2">No assets in inventory.</p>
+                        <div className="p-3 text-sm text-muted-foreground">No assets match your filters.</div>
                       ) : (
-                        assets.map((a) => {
-                          const id = String(a._id ?? a.id)
-                          const isSelected = selectedAssetIds.has(id)
-                          return (
-                            <label
-                              key={id}
-                              className="flex items-center gap-2 cursor-pointer rounded px-2 py-1.5 hover:bg-muted/50"
-                            >
-                              <Checkbox checked={isSelected} onCheckedChange={() => toggleAssetSelection(id)} />
-                              <span className="text-sm truncate">
-                                {a.propertyNumber ? `${a.propertyNumber} – ` : ""}{a.name ?? "—"}
-                              </span>
-                            </label>
-                          )
-                        })
+                        <List
+                          height={224}
+                          itemCount={assets.length}
+                          itemSize={48}
+                          width="100%"
+                          itemData={{ assets, selectedAssetIds, toggleAssetSelection }}
+                          itemKey={(index) => {
+                            const a = assets[index]
+                            return String((a && (a._id ?? a.id)) || index)
+                          }}
+                          onItemsRendered={handleItemsRendered}
+                        >
+                          {AssetRow}
+                        </List>
                       )}
+                      {/* removed 'Loading more…' indicator to reduce UI noise */}
                     </div>
                   </div>
 
@@ -800,16 +1041,35 @@ export default function IssuancePage() {
                             {row.purpose ?? "—"}
                           </TableCell>
                           <TableCell className="px-3">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                              onClick={() => handleRemoveLine(row.txId, row.txType, row.itemId)}
-                              disabled={deletingTxId === `${row.txId}:${row.itemId}`}
-                              title={isIssuance ? "Remove this line (return stock)" : "Remove this line (asset returns to pool)"}
-                            >
-                              <Trash2 className="size-4" />
-                            </Button>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                  <MoreVertical className="size-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-40">
+                                <DropdownMenuItem onClick={() => {
+                                  // Edit - navigate to items page where user can edit the item
+                                  // fallback: open items list
+                                  window.location.href = `/items`;
+                                }}>Edit</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => {
+                                  setActionRow(row)
+                                  setTransferName(row.item?.accountablePerson?.name ?? "")
+                                  setTransferPosition(row.item?.accountablePerson?.position ?? "")
+                                  setTransferOffice(row.item?.accountablePerson?.office ?? "CPDC")
+                                  setTransferRemarks("")
+                                  setTransferDialogOpen(true)
+                                }} disabled={row.txType === "ISSUANCE"}>{/* only assets can be transferred */}
+                                  Transfer
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem className="text-destructive" onClick={() => {
+                                  setActionRow(row)
+                                  setDeleteDialogOpen(true)
+                                }}>Remove</DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </TableCell>
                         </TableRow>
                       )
@@ -817,6 +1077,75 @@ export default function IssuancePage() {
                   )}
                 </TableBody>
               </Table>
+
+              {/* Delete confirmation dialog */}
+              <AlertDialog open={deleteDialogOpen} onOpenChange={(open) => { if (!open) { setDeleteDialogOpen(false); setActionRow(null) } }}>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Remove record?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Removing this line will {actionRow?.txType === "ASSET_ASSIGN" ? "return the asset to inventory (unassigned)." : "return stock to inventory."}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={confirmDelete}>
+                      Remove
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              {/* Transfer dialog for assets */}
+              <Dialog open={transferDialogOpen} onOpenChange={(open) => { if (!open) setTransferDialogOpen(false) }}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Transfer asset</DialogTitle>
+                    <DialogDescription>Enter the recipient account/person for this asset.</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-2 py-2">
+                    <div className="space-y-1">
+                      <Label>Transferred to</Label>
+                      <Select value={transferName || "_"} onValueChange={(v) => {
+                        const next = v === "_" ? "" : v
+                        setTransferName(next)
+                        const p = next ? personByName.get(next) : null
+                        if (p) {
+                          setTransferPosition(p.position || "")
+                          setTransferOffice(p.office || "CPDC")
+                        }
+                      }}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select person" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_">Select…</SelectItem>
+                          {peopleOptions.map((p) => (
+                            <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Position (optional)</Label>
+                      <Input value={transferPosition} onChange={(e) => setTransferPosition(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Office</Label>
+                      <Input value={transferOffice} onChange={(e) => setTransferOffice(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Remarks (optional)</Label>
+                      <Input value={transferRemarks} onChange={(e) => setTransferRemarks(e.target.value)} />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setTransferDialogOpen(false)}>Cancel</Button>
+                    <Button onClick={performTransfer} disabled={!transferName.trim()}>Transfer</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
             </div>
           </div>
           {filteredRows.length > 0 && (

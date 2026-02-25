@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Boxes,
   AlertTriangle,
+  Users,
   TrendingDown,
   FileText,
   Activity,
@@ -26,6 +27,8 @@ import {
   Legend,
   AreaChart,
   Area,
+  LineChart,
+  Line,
 } from "recharts"
 
 import { Button } from "@/components/ui/button"
@@ -39,6 +42,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { dashboardService } from "@/services"
+import { peopleService } from "@/services"
+import { itemsService } from "@/services"
 import { getErrorMessage } from "@/utils/api"
 
 const CHART_COLORS = ["#0f172a", "#334155", "#475569", "#64748b", "#94a3b8", "#cbd5e1", "#e2e8f0"]
@@ -257,6 +262,67 @@ function AssetsByStatusChart({ data }) {
   )
 }
 
+function InventoryByCategoryLineChart({ data }) {
+  // data: [{ category, count }]
+  const chartData = Array.isArray(data) ? data.map((d) => ({ category: d.category || "Uncategorized", count: d.count || d.value || 0 })) : []
+  return (
+    <Card className="border-zinc-200 dark:border-zinc-800">
+      <CardHeader>
+        <CardTitle className="text-base">Total inventory per category</CardTitle>
+        <CardDescription>Items per category</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[240px] w-full">
+          {chartData.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-zinc-200 dark:stroke-zinc-700" />
+                <XAxis dataKey="category" tick={{ fontSize: 11 }} />
+                <YAxis />
+                <Tooltip formatter={(v) => [v, "Items"]} />
+                <Line type="monotone" dataKey="count" stroke="#0f172a" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No category data</div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function ValueByCategoryPieChart({ data }) {
+  const chartData = Array.isArray(data) ? data.map((d) => ({ name: d.category || d.name || "Uncategorized", value: Number(d.value ?? d.count ?? 0) })) : []
+  return (
+    <Card className="border-zinc-200 dark:border-zinc-800">
+      <CardHeader>
+        <CardTitle className="text-base">Value breakdown by category</CardTitle>
+        <CardDescription>Monetary value distribution</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[240px] w-full">
+          {chartData.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={chartData} cx="50%" cy="50%" outerRadius={80} dataKey="value" nameKey="name">
+                  {chartData.map((_, i) => (
+                    <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(v) => [v, "Value"]} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No value data</div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 function formatStatus(s) {
   if (!s) return "—"
   return String(s)
@@ -293,6 +359,72 @@ export default function DashboardHome() {
   const charts = summary?.charts ?? {}
   const recentTransactions = summary?.previews?.recentTransactions ?? []
 
+  const [peopleCounts, setPeopleCounts] = useState({ total: null, active: null, inactive: null })
+  const [peopleLoading, setPeopleLoading] = useState(true)
+  const [categoryCounts, setCategoryCounts] = useState([])
+  const [valueByCategory, setValueByCategory] = useState([])
+  const [chartsLoading, setChartsLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    setPeopleLoading(true)
+    peopleService
+      .listPeople()
+      .then((data) => {
+        if (cancelled) return
+        const list = Array.isArray(data) ? data : []
+        const total = list.length
+        const active = list.filter((p) => p?.isActive !== false).length
+        const inactive = total - active
+        setPeopleCounts({ total, active, inactive })
+      })
+      .catch(() => {
+        if (!cancelled) setPeopleCounts({ total: 0, active: 0, inactive: 0 })
+      })
+      .finally(() => {
+        if (!cancelled) setPeopleLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    // Fetch category counts and compute value by category from items
+    let cancelled = false
+    setChartsLoading(true)
+    Promise.all([dashboardService.getCategories(), itemsService.listItems()])
+      .then(([catsResp, items]) => {
+        if (cancelled) return
+        const cats = Array.isArray(catsResp?.all) ? catsResp.all : []
+        setCategoryCounts(cats)
+
+        // Aggregate value per category
+        const map = new Map()
+        (Array.isArray(items) ? items : []).forEach((it) => {
+          const cat = it.category || "Uncategorized"
+          const cost = Number(it.unitCost) || 0
+          const qty = it.itemType === "SUPPLY" ? (Number(it.quantityOnHand) || 0) : (Number(it.quantityOnHand) || 1)
+          const prev = map.get(cat) || 0
+          map.set(cat, prev + cost * qty)
+        })
+        const values = Array.from(map.entries()).map(([category, value]) => ({ category, value }))
+        setValueByCategory(values)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCategoryCounts([])
+          setValueByCategory([])
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setChartsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-8 pb-8">
       {/* Header */}
@@ -322,7 +454,7 @@ export default function DashboardHome() {
       )}
 
       {/* KPI Cards */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
         <StatCard
           title="Total items"
           value={loading ? "…" : kpis.activeItems}
@@ -359,6 +491,19 @@ export default function DashboardHome() {
         />
       </section>
 
+      {/* People stats (only total) */}
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="lg:col-span-2">
+          <StatCard
+            title="People — Total"
+            value={peopleLoading ? "…" : peopleCounts.total}
+            description="All registered people"
+            icon={Users}
+            href="/users"
+          />
+        </div>
+      </section>
+
       {/* Second row: Transactions today / month */}
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
@@ -377,18 +522,12 @@ export default function DashboardHome() {
 
       {/* Charts + Quick actions */}
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <div className="space-y-6 lg:col-span-8">
+        <div className="space-y-6 lg:col-span-12">
           <TransactionsChart data={charts.transactionsByDay} />
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <SuppliesByCategoryChart data={charts.suppliesByCategory} />
-            <AssetsByStatusChart data={charts.assetsByStatus} />
+            <InventoryByCategoryLineChart data={categoryCounts.length ? categoryCounts : (charts?.suppliesByCategory || [])} />
+            <ValueByCategoryPieChart data={valueByCategory.length ? valueByCategory : (charts?.suppliesByCategory || []).map(d => ({ category: d.category || d.name || 'Uncategorized', value: d.count }))} />
           </div>
-        </div>
-        <div className="grid gap-4 lg:col-span-4">
-          <QuickAction to="/stock/in" title="Stock In" description="Record incoming items" icon={ArrowDownToLine} />
-          <QuickAction to="/stock/out" title="Stock Out" description="Record released items" icon={ArrowUpFromLine} />
-          <QuickAction to="/issuance" title="Asset Assignment" description="Assign assets to personnel" icon={ClipboardList} />
-          <QuickAction to="/items" title="Inventory" description="Browse and manage items" icon={Package} />
         </div>
       </section>
 

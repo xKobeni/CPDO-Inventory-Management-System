@@ -100,7 +100,8 @@ const returnSchema = z.object({
 });
 
 const transferSchema = z.object({
-  accountablePerson: accountableSchema,
+  txId: z.string().optional(),
+  transferredTo: z.string().max(200).optional().default(""),
   division: z.string().max(200).optional().default(""),
   remarks: z.string().max(1000).optional().default(""),
 });

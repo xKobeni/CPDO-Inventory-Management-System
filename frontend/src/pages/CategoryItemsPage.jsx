@@ -958,8 +958,22 @@ export default function CategoryItemsPage() {
   const setColumnVisibility = isSupply ? setSupplyColumnVisibility : setAssetColumnVisibility
   const colOrder = isSupply ? SUPPLY_COL_ORDER : ASSET_COL_ORDER
   const colConfig = isSupply ? SUPPLY_COLUMNS : ASSET_COLUMNS
-  const inStockCount = items.filter((i) => (i.status === "IN_STOCK" || i.status === "In Stock")).length
-  const lowStockCount = items.filter((i) => (i.status === "Low Stock" || (i.status && i.status !== "IN_STOCK" && i.status !== "DEPLOYED"))).length
+  // Normalize status string to consistent token like IN_STOCK, LOW_STOCK, DEPLOYED, etc.
+  const normalizeStatus = (s) => (s || "").toString().trim().toUpperCase().replace(/\s+/g, "_")
+  const statuses = items.map((it) => normalizeStatus(it.status))
+  const inStockCount = statuses.filter((st) => st === "IN_STOCK").length
+  const lowStockCount = statuses.filter((st) => st === "LOW_STOCK").length
+  // 'Other' are items with statuses that are not IN_STOCK or LOW_STOCK (e.g., DEPLOYED, FOR_REPAIR, DISPOSED, LOST)
+  const otherCount = Math.max(0, items.length - inStockCount - lowStockCount)
+
+  // Total asset/supply value: for supplies multiply unitCost * quantityOnHand when available,
+  // for assets sum unitCost (or unitCost * quantityOnHand if quantity provided).
+  const totalValue = items.reduce((acc, it) => {
+    const cost = Number(it.unitCost) || 0
+    const qty = (it.itemType === "SUPPLY") ? (Number(it.quantityOnHand) || 0) : (Number(it.quantityOnHand) || 1)
+    return acc + cost * qty
+  }, 0)
+  const formattedTotalValue = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", maximumFractionDigits: 2 }).format(totalValue)
 
   return (
     <>
@@ -1014,24 +1028,54 @@ export default function CategoryItemsPage() {
       )}
 
       <section className="@container/main grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardDescription>Total Items</CardDescription>
-            <CardTitle className="text-2xl font-semibold tabular-nums">{items.length}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>In Stock</CardDescription>
-            <CardTitle className="text-2xl font-semibold tabular-nums text-green-600">{inStockCount}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>Low Stock</CardDescription>
-            <CardTitle className="text-2xl font-semibold tabular-nums text-amber-600">{lowStockCount}</CardTitle>
-          </CardHeader>
-        </Card>
+        <div className="sm:col-span-2">
+          <Card>
+            <CardHeader>
+              <CardDescription>Total Asset Value</CardDescription>
+              <CardTitle className="text-2xl font-semibold tabular-nums">{formattedTotalValue}</CardTitle>
+              <div className="mt-1 text-sm text-muted-foreground">Total items: <span className="font-medium tabular-nums">{items.length}</span></div>
+            </CardHeader>
+          </Card>
+        </div>
+        <div className="sm:col-span-1">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-muted-foreground">{items.length} items</div>
+                <div className="text-sm text-muted-foreground">Summary</div>
+              </div>
+
+              <div className="mt-3">
+                <div className="w-full h-3 rounded-full bg-muted-foreground/20 overflow-hidden flex">
+                  {items.length > 0 ? (
+                    <>
+                      <div className="h-3 bg-green-500" style={{ width: `${(inStockCount / items.length) * 100}%` }} />
+                      <div className="h-3 bg-amber-500" style={{ width: `${(lowStockCount / items.length) * 100}%` }} />
+                      <div className="h-3 bg-zinc-400" style={{ width: `${(otherCount / items.length) * 100}%` }} />
+                    </>
+                  ) : (
+                    <div className="h-3 w-full bg-zinc-200" />
+                  )}
+                </div>
+
+                <div className="mt-3 flex items-center justify-between text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+                    <span>In stock: {inStockCount}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
+                    <span>Low stock: {lowStockCount}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-zinc-400 inline-block" />
+                    <span>Other: {otherCount}</span>
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+          </Card>
+        </div>
       </section>
 
       <section className="min-w-0 overflow-hidden rounded-xl border bg-white">
@@ -1302,14 +1346,15 @@ export default function CategoryItemsPage() {
                         const next = v === "_" ? "" : v
                         const p = next ? personByName.get(next) : null
                         setForm((f) => ({
-                          ...f,
-                          accountablePerson: {
-                            ...(f.accountablePerson || defaultAccountablePerson()),
-                            name: next,
-                            position: p?.position ?? (f.accountablePerson?.position ?? ""),
-                            office: p?.office ?? (f.accountablePerson?.office ?? "CPDC"),
-                          },
-                        }))
+                              ...f,
+                              accountablePerson: {
+                                ...(f.accountablePerson || defaultAccountablePerson()),
+                                name: next,
+                                position: p?.position ?? (f.accountablePerson?.position ?? ""),
+                                office: p?.office ?? (f.accountablePerson?.office ?? "CPDC"),
+                              },
+                              division: p?.office ?? (f.division || ""),
+                            }))
                       }}
                     >
                       <SelectTrigger id="add-acc-name">
@@ -1327,12 +1372,28 @@ export default function CategoryItemsPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="add-transferredTo">Transferred to (optional)</Label>
-                    <Input
-                      id="add-transferredTo"
-                      value={form.transferredTo ?? ""}
-                      onChange={(e) => setForm((f) => ({ ...f, transferredTo: e.target.value }))}
-                      placeholder="Leave blank if none"
-                    />
+                    <Select
+                      value={form.transferredTo?.trim() ? form.transferredTo : "_"}
+                      onValueChange={(v) => {
+                        const next = v === "_" ? "" : v
+                        const p = next ? personByName.get(next) : null
+                        setForm((f) => ({
+                          ...f,
+                          transferredTo: next || undefined,
+                          division: p?.office ?? (f.division || ""),
+                        }))
+                      }}
+                    >
+                      <SelectTrigger id="add-transferredTo">
+                        <SelectValue placeholder="Select person" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_">None</SelectItem>
+                        {peopleOptions.map((p) => (
+                          <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </div>
@@ -1349,6 +1410,7 @@ export default function CategoryItemsPage() {
                       value={form.category}
                       onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
                       placeholder="General"
+                      disabled
                     />
                   </div>
                   <div className="space-y-2">
@@ -1425,7 +1487,12 @@ export default function CategoryItemsPage() {
                           value={form.division}
                           onChange={(e) => setForm((f) => ({ ...f, division: e.target.value }))}
                           placeholder="e.g. Admin, IT, Finance"
+                          readOnly={!!(form.accountablePerson?.name?.trim() || form.transferredTo?.trim())}
+                          className={!!(form.accountablePerson?.name?.trim() || form.transferredTo?.trim()) ? "bg-muted cursor-not-allowed" : ""}
                         />
+                        {(form.accountablePerson?.name?.trim() || form.transferredTo?.trim()) && (
+                          <p className="text-xs text-muted-foreground">Auto-filled from selected person — edit manually if needed</p>
+                        )}
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="add-status">Status</Label>
@@ -1558,6 +1625,7 @@ export default function CategoryItemsPage() {
                             position: p?.position ?? (f.accountablePerson?.position ?? ""),
                             office: p?.office ?? (f.accountablePerson?.office ?? "CPDC"),
                           },
+                          division: p?.office ?? (f.division || ""),
                         }))
                       }}
                     >
@@ -1576,12 +1644,28 @@ export default function CategoryItemsPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="edit-transferredTo">Transferred to (optional)</Label>
-                    <Input
-                      id="edit-transferredTo"
-                      value={form.transferredTo ?? ""}
-                      onChange={(e) => setForm((f) => ({ ...f, transferredTo: e.target.value }))}
-                      placeholder="Leave blank if none"
-                    />
+                    <Select
+                      value={form.transferredTo?.trim() ? form.transferredTo : "_"}
+                      onValueChange={(v) => {
+                        const next = v === "_" ? "" : v
+                        const p = next ? personByName.get(next) : null
+                        setForm((f) => ({
+                          ...f,
+                          transferredTo: next || undefined,
+                          division: p?.office ?? (f.division || ""),
+                        }))
+                      }}
+                    >
+                      <SelectTrigger id="edit-transferredTo">
+                        <SelectValue placeholder="Select person" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_">None</SelectItem>
+                        {peopleOptions.map((p) => (
+                          <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </div>
@@ -1598,6 +1682,7 @@ export default function CategoryItemsPage() {
                       value={form.category}
                       onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
                       placeholder="General"
+                      disabled
                     />
                   </div>
                   <div className="space-y-2">
@@ -1674,7 +1759,12 @@ export default function CategoryItemsPage() {
                           value={form.division}
                           onChange={(e) => setForm((f) => ({ ...f, division: e.target.value }))}
                           placeholder="e.g. Admin, IT, Finance"
+                          readOnly={!!(form.accountablePerson?.name?.trim() || form.transferredTo?.trim())}
+                          className={!!(form.accountablePerson?.name?.trim() || form.transferredTo?.trim()) ? "bg-muted cursor-not-allowed" : ""}
                         />
+                        {(form.accountablePerson?.name?.trim() || form.transferredTo?.trim()) && (
+                          <p className="text-xs text-muted-foreground">Auto-filled from selected person — edit manually if needed</p>
+                        )}
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="edit-status">Status</Label>

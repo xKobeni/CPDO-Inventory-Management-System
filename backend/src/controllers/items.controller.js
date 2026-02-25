@@ -9,27 +9,48 @@ function toDateOrNull(v) {
 }
 
 export async function listItems(req, res) {
-  const { q, archived, type, category } = req.query;
+  const { q, archived, type, category, status, assigned, page, pageSize } = req.query;
 
   const filter = {};
+  const and = [];
+
   if (archived === "true") filter.isArchived = true;
   if (archived === "false") filter.isArchived = false;
 
   if (type) filter.itemType = type;
   if (category) filter.category = category;
+  if (status) filter.status = status;
 
   if (q) {
-    filter.$or = [
-      { name: new RegExp(q, "i") },
-      { category: new RegExp(q, "i") },
-      { propertyNumber: new RegExp(q, "i") },
-      { serialNumber: new RegExp(q, "i") },
-      { "accountablePerson.name": new RegExp(q, "i") },
-      { division: new RegExp(q, "i") },
-    ];
+    and.push({
+      $or: [
+        { name: new RegExp(q, "i") },
+        { category: new RegExp(q, "i") },
+        { propertyNumber: new RegExp(q, "i") },
+        { serialNumber: new RegExp(q, "i") },
+        { "accountablePerson.name": new RegExp(q, "i") },
+        { division: new RegExp(q, "i") },
+      ],
+    });
   }
 
-  const items = await Item.find(filter).sort({ updatedAt: -1 }).limit(500);
+  // assigned: 'true' => has accountable person; 'false' => unassigned (no accountable person)
+  if (assigned === "true") {
+    and.push({ "accountablePerson.name": { $ne: "" } });
+  } else if (assigned === "false") {
+    and.push({ $or: [ { "accountablePerson.name": { $exists: false } }, { "accountablePerson.name": "" } ] });
+  }
+
+  // merge simple filters and and-clauses
+  const finalFilter = { ...filter };
+  if (and.length) finalFilter.$and = and;
+
+  // pagination support (optional). Defaults: page=1, pageSize=500 (cap)
+  const p = Math.max(1, parseInt(page, 10) || 1);
+  const ps = Math.min(500, Math.max(1, parseInt(pageSize, 10) || 500));
+  const skip = (p - 1) * ps;
+
+  const items = await Item.find(finalFilter).sort({ updatedAt: -1 }).skip(skip).limit(ps);
   res.json(items);
 }
 
@@ -95,6 +116,17 @@ export async function updateItem(req, res) {
 
   const patch = { ...req.body };
   if ("dateAcquired" in patch) patch.dateAcquired = toDateOrNull(patch.dateAcquired);
+
+  // Safeguard: prevent direct edits to assignment/accountable fields here.
+  // Assignment changes must go through assign/transfer/return flows which create
+  // the corresponding Transaction records (single source of truth).
+  const protectedFields = ["accountablePerson", "status", "assignedDate", "returnedDate", "transferredTo"];
+  const attempted = Object.keys(patch).filter((k) => protectedFields.includes(k));
+  if (attempted.length) {
+    return res.status(400).json({
+      message: `Direct edits to assignment-related fields are not allowed: ${attempted.join(", ")}. Use assign/transfer/return endpoints instead.`,
+    });
+  }
 
   const item = await Item.findById(id);
   if (!item) return res.status(404).json({ message: "Item not found" });
@@ -249,32 +281,47 @@ export async function transferAsset(req, res) {
   if (!item) return res.status(404).json({ message: "Item not found" });
   if (item.itemType !== "ASSET") return res.status(400).json({ message: "Transfer is for ASSET items only" });
 
+  // keep previous accountable person (do not overwrite)
   const before = item.accountablePerson;
-  const acc = req.body.accountablePerson || {};
-  const accountablePerson = {
-    name: (acc.name || "").trim() || "",
-    position: (acc.position || "").trim() || "",
-    office: (acc.office || "CPDC").trim(),
-  };
 
-  // Transaction is the source of truth; create it first
-  const tx = await Transaction.create({
-    type: "ASSET_TRANSFER",
-    items: [{ itemId: item._id, qty: 1 }],
-    accountablePerson,
-    issuedToOffice: accountablePerson.office,
-    issuedToPerson: accountablePerson.name,
-    purpose: req.body.purpose || "Asset transfer",
-    createdBy: req.user._id,
-  });
+  // transfer recipient is supplied as `transferredTo` in the body (string)
+  const transferredTo = (req.body.transferredTo || "").trim();
 
-  // Item picks up from the transaction
-  item.accountablePerson = { ...accountablePerson };
+  let tx = null
+  // If txId provided, update that transaction (no new transaction should be created)
+  if (req.body.txId) {
+    try {
+      tx = await Transaction.findById(req.body.txId);
+      if (tx) {
+        // update issuedTo fields if present
+        tx.issuedToPerson = transferredTo || req.body.issuedToPerson || tx.issuedToPerson;
+        tx.issuedToOffice = req.body.office || tx.issuedToOffice;
+        tx.purpose = req.body.purpose || req.body.remarks || tx.purpose;
+        await tx.save();
+      }
+    } catch (e) {
+      // ignore and fall back to create below
+      tx = null
+    }
+  }
+
+  // create a transaction record for audit/history only if we didn't update an existing one
+  if (!tx) {
+    tx = await Transaction.create({
+      type: "ASSET_TRANSFER",
+      items: [{ itemId: item._id, qty: 1 }],
+      issuedToOffice: req.body.office || undefined,
+      issuedToPerson: transferredTo || req.body.issuedToPerson || undefined,
+      purpose: req.body.purpose || req.body.remarks || "Asset transfer",
+      createdBy: req.user._id,
+    });
+  }
+
+  // Item: do NOT change accountablePerson. Instead set transferredTo and update optional fields.
+  item.transferredTo = transferredTo || item.transferredTo;
   item.division = req.body.division ?? item.division;
   item.remarks = req.body.remarks ?? item.remarks;
-  item.status = "DEPLOYED";
-  item.assignedDate = new Date();
-  item.returnedDate = null;
+  // keep status/assignedDate as-is (do not reassign accountablePerson)
   await item.save();
 
   await AuditLog.create({
@@ -282,7 +329,7 @@ export async function transferAsset(req, res) {
     action: "ASSET_TRANSFER",
     targetType: "Item",
     targetId: item._id.toString(),
-    meta: { before, after: accountablePerson, txId: tx._id.toString() },
+    meta: { before, transferredTo: item.transferredTo, txId: tx._id.toString() },
   });
 
   res.json(item);
