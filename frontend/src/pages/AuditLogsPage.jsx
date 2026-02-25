@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
-import { Search, RefreshCw, Download, ChevronLeft, ChevronRight } from "lucide-react"
+import { Search, RefreshCw, Download, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -24,6 +24,26 @@ import {
 } from "@/components/ui/table"
 import { dashboardService, exportService } from "@/services"
 import { getErrorMessage } from "@/utils/api"
+
+// Helper to format action names nicely
+function formatAction(action) {
+  if (!action) return "—"
+  return action
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (l) => l.toUpperCase())
+}
+
+// Helper to get badge variant based on action
+function getActionVariant(action) {
+  if (!action) return "secondary"
+  const act = action.toLowerCase()
+  if (act.includes("create") || act.includes("add")) return "default"
+  if (act.includes("update") || act.includes("edit") || act.includes("assign") || act.includes("transfer")) return "outline"
+  if (act.includes("delete") || act.includes("archive") || act.includes("remove")) return "destructive"
+  if (act.includes("login") || act.includes("logout")) return "secondary"
+  return "secondary"
+}
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50]
 function todayStr() {
@@ -54,6 +74,7 @@ export default function AuditLogsPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [downloading, setDownloading] = useState(false)
+  const [expandedRows, setExpandedRows] = useState(new Set())
 
   const fetchLogs = useCallback(async () => {
     setLoading(true)
@@ -116,6 +137,18 @@ export default function AuditLogsPage() {
     setPage(1)
   }, [search, dateFrom, dateTo])
 
+  const toggleRow = (id) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -124,7 +157,7 @@ export default function AuditLogsPage() {
             Audit Logs
           </h1>
           <p className="text-sm text-muted-foreground">
-            Recent system activities. Download full report as Excel. (Admin Only)
+            Track all system activities with detailed change information. Expand rows to view metadata. (Admin Only)
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -187,38 +220,97 @@ export default function AuditLogsPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[40px]"></TableHead>
                 <TableHead>User</TableHead>
                 <TableHead>Action</TableHead>
                 <TableHead>Target</TableHead>
+                <TableHead>Target ID</TableHead>
                 <TableHead>Date & Time</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                     Loading…
                   </TableCell>
                 </TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                     No audit logs match your filters.
                   </TableCell>
                 </TableRow>
               ) : (
-                paginated.map((log) => (
-                  <TableRow key={log._id}>
-                    <TableCell>{log.actorId?.name ?? "—"}</TableCell>
-                    <TableCell>{log.action ?? "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{log.targetType ?? "—"}</Badge>
-                    </TableCell>
-                    <TableCell className="tabular-nums">
-                      {log.createdAt ? new Date(log.createdAt).toLocaleString() : "—"}
-                    </TableCell>
-                  </TableRow>
-                ))
+                <>
+                  {paginated.map((log) => {
+                    const isExpanded = expandedRows.has(log._id)
+                    const hasMeta = log.meta && Object.keys(log.meta).length > 0
+                    return (
+                      <>
+                        <TableRow 
+                          key={log._id} 
+                          className={`${isExpanded ? "border-b-0" : ""} ${hasMeta ? "cursor-pointer hover:bg-muted/50" : ""}`}
+                          onClick={() => hasMeta && toggleRow(log._id)}
+                        >
+                          <TableCell>
+                            {hasMeta && (
+                              isExpanded ? (
+                                <ChevronUp className="size-4 text-muted-foreground" />
+                              ) : (
+                                <ChevronDown className="size-4 text-muted-foreground" />
+                              )
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{log.actorId?.name ?? "—"}</span>
+                              {log.actorId?.role && (
+                                <span className="text-xs text-muted-foreground">{log.actorId.role}</span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={getActionVariant(log.action)}>
+                              {formatAction(log.action)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">{log.targetType ?? "—"}</Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs text-muted-foreground">
+                            {log.targetId ? log.targetId.slice(0, 8) : "—"}
+                          </TableCell>
+                          <TableCell className="tabular-nums text-sm">
+                            {log.createdAt ? new Date(log.createdAt).toLocaleString() : "—"}
+                          </TableCell>
+                        </TableRow>
+                        {isExpanded && hasMeta && (
+                          <TableRow key={`${log._id}-details`} className="bg-muted/30">
+                            <TableCell></TableCell>
+                            <TableCell colSpan={5}>
+                              <div className="py-2 space-y-2">
+                                <h4 className="text-sm font-medium text-muted-foreground">Change Details:</h4>
+                                <div className="rounded-md bg-background border p-3 space-y-1">
+                                  {Object.entries(log.meta).map(([key, value]) => (
+                                    <div key={key} className="flex gap-2 text-sm">
+                                      <span className="font-medium text-muted-foreground min-w-[120px]">
+                                        {key.replace(/([A-Z])/g, ' $1').trim()}:
+                                      </span>
+                                      <span className="font-mono text-xs">
+                                        {typeof value === "object" ? JSON.stringify(value) : String(value)}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </>
+                    )
+                  })}
+                </>
               )}
             </TableBody>
           </Table>

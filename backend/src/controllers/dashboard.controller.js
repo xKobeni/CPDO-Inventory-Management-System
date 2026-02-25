@@ -66,12 +66,46 @@ export async function getDashboardSummary(req, res) {
   ]);
 
   // ------------- SUPPLY BREAKDOWNS -------------
-  const suppliesByCategory = await Item.aggregate([
-    { $match: { itemType: "SUPPLY", isArchived: false } },
-    { $group: { _id: "$category", count: { $sum: 1 } } },
-    { $project: { _id: 0, category: "$_id", count: 1 } },
-    { $sort: { count: -1 } },
-    { $limit: 12 },
+  const [suppliesByCategory, allItemsByCategory, valueByCategory] = await Promise.all([
+    Item.aggregate([
+      { $match: { itemType: "SUPPLY", isArchived: false } },
+      { $group: { _id: "$category", count: { $sum: 1 } } },
+      { $project: { _id: 0, category: "$_id", count: 1 } },
+      { $sort: { count: -1 } },
+      { $limit: 12 },
+    ]),
+    Item.aggregate([
+      { $match: { isArchived: false } },
+      { $group: { _id: "$category", count: { $sum: 1 } } },
+      { $project: { _id: 0, category: "$_id", count: 1 } },
+      { $sort: { count: -1 } },
+      { $limit: 12 },
+    ]),
+    Item.aggregate([
+      { $match: { isArchived: false } },
+      {
+        $group: {
+          _id: "$category",
+          total: {
+            $sum: {
+              $multiply: [
+                { $ifNull: ["$unitCost", 0] },
+                {
+                  $cond: [
+                    { $eq: ["$itemType", "SUPPLY"] },
+                    { $ifNull: ["$quantityOnHand", 0] },
+                    1,
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      },
+      { $project: { _id: 0, category: "$_id", value: "$total" } },
+      { $sort: { value: -1 } },
+      { $limit: 12 },
+    ]),
   ]);
 
   // ------------- TRANSACTIONS -------------
@@ -79,14 +113,16 @@ export async function getDashboardSummary(req, res) {
   startOf14DaysAgo.setDate(startOf14DaysAgo.getDate() - 14);
   startOf14DaysAgo.setHours(0, 0, 0, 0);
 
-  const [txToday, txThisMonth, recentTransactions, transactionsByDay] = await Promise.all([
+  const [txToday, txThisMonth, recentTransactions, recentAuditLogs, transactionsByDay] = await Promise.all([
     Transaction.countDocuments({ createdAt: { $gte: startOfToday } }),
     Transaction.countDocuments({ createdAt: { $gte: startOfMonth } }),
     Transaction.find({})
       .populate("createdBy", "name role")
       .populate("items.itemId", "name unit category itemType propertyNumber")
-      .sort({ createdAt: -1 })
-      .limit(10),
+      .sort({ createdAt: -1 }),
+    AuditLog.find({})
+      .populate("actorId", "name role email")
+      .sort({ createdAt: -1 }),
     Transaction.aggregate([
       { $match: { createdAt: { $gte: startOf14DaysAgo } } },
       {
@@ -100,11 +136,13 @@ export async function getDashboardSummary(req, res) {
     ]),
   ]);
 
-  // ------------- AUDIT LOGS -------------
-  const recentAuditLogs = await AuditLog.find({})
-    .populate("actorId", "name role email")
-    .sort({ createdAt: -1 })
-    .limit(10);
+  // Combine transactions and audit logs, sort by date, take top 8
+  const combinedActivity = [
+    ...recentTransactions.map((tx) => ({ ...tx.toObject?.() ?? tx, _itemType: "transaction" })),
+    ...recentAuditLogs.map((log) => ({ ...log.toObject?.() ?? log, _itemType: "audit" })),
+  ]
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, 8);
 
   // ------------- OPTIONAL: QUICK “CARD” METRICS -------------
   // Assets deployed count
@@ -140,11 +178,13 @@ export async function getDashboardSummary(req, res) {
       assetsByStatus,
       assetsByCondition,
       suppliesByCategory,
+      allItemsByCategory,
+      valueByCategory,
       transactionsByDay,
     },
     previews: {
       lowStockPreview,
-      recentTransactions,
+      recentActivity: combinedActivity,
       recentAuditLogs,
     },
   });

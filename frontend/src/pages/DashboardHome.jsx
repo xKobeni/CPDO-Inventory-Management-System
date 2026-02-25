@@ -46,7 +46,7 @@ import { peopleService } from "@/services"
 import { itemsService } from "@/services"
 import { getErrorMessage } from "@/utils/api"
 
-const CHART_COLORS = ["#0f172a", "#334155", "#475569", "#64748b", "#94a3b8", "#cbd5e1", "#e2e8f0"]
+const CHART_COLORS = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4"]
 
 function StatCard({ title, value, description, icon: Icon, variant = "default", href }) {
   const isAlert = variant === "danger" || variant === "warning"
@@ -275,13 +275,13 @@ function InventoryByCategoryLineChart({ data }) {
         <div className="h-[240px] w-full">
           {chartData.length ? (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+              <BarChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-zinc-200 dark:stroke-zinc-700" />
                 <XAxis dataKey="category" tick={{ fontSize: 11 }} />
                 <YAxis />
                 <Tooltip formatter={(v) => [v, "Items"]} />
-                <Line type="monotone" dataKey="count" stroke="#0f172a" strokeWidth={2} dot={{ r: 3 }} />
-              </LineChart>
+                <Bar dataKey="count" fill="#3b82f6" />
+              </BarChart>
             </ResponsiveContainer>
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No category data</div>
@@ -357,13 +357,10 @@ export default function DashboardHome() {
 
   const kpis = summary?.kpis ?? {}
   const charts = summary?.charts ?? {}
-  const recentTransactions = summary?.previews?.recentTransactions ?? []
+  const recentActivity = summary?.previews?.recentActivity ?? []
 
   const [peopleCounts, setPeopleCounts] = useState({ total: null, active: null, inactive: null })
   const [peopleLoading, setPeopleLoading] = useState(true)
-  const [categoryCounts, setCategoryCounts] = useState([])
-  const [valueByCategory, setValueByCategory] = useState([])
-  const [chartsLoading, setChartsLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
@@ -383,42 +380,6 @@ export default function DashboardHome() {
       })
       .finally(() => {
         if (!cancelled) setPeopleLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
-    // Fetch category counts and compute value by category from items
-    let cancelled = false
-    setChartsLoading(true)
-    Promise.all([dashboardService.getCategories(), itemsService.listItems()])
-      .then(([catsResp, items]) => {
-        if (cancelled) return
-        const cats = Array.isArray(catsResp?.all) ? catsResp.all : []
-        setCategoryCounts(cats)
-
-        // Aggregate value per category
-        const map = new Map()
-        (Array.isArray(items) ? items : []).forEach((it) => {
-          const cat = it.category || "Uncategorized"
-          const cost = Number(it.unitCost) || 0
-          const qty = it.itemType === "SUPPLY" ? (Number(it.quantityOnHand) || 0) : (Number(it.quantityOnHand) || 1)
-          const prev = map.get(cat) || 0
-          map.set(cat, prev + cost * qty)
-        })
-        const values = Array.from(map.entries()).map(([category, value]) => ({ category, value }))
-        setValueByCategory(values)
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setCategoryCounts([])
-          setValueByCategory([])
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setChartsLoading(false)
       })
     return () => {
       cancelled = true
@@ -525,8 +486,8 @@ export default function DashboardHome() {
         <div className="space-y-6 lg:col-span-12">
           <TransactionsChart data={charts.transactionsByDay} />
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <InventoryByCategoryLineChart data={categoryCounts.length ? categoryCounts : (charts?.suppliesByCategory || [])} />
-            <ValueByCategoryPieChart data={valueByCategory.length ? valueByCategory : (charts?.suppliesByCategory || []).map(d => ({ category: d.category || d.name || 'Uncategorized', value: d.count }))} />
+            <InventoryByCategoryLineChart data={charts?.allItemsByCategory || []} />
+            <ValueByCategoryPieChart data={charts?.valueByCategory || []} />
           </div>
         </div>
       </section>
@@ -536,13 +497,13 @@ export default function DashboardHome() {
         <div className="border-b border-zinc-200 px-4 py-4 dark:border-zinc-800 lg:px-6">
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Recent activity</h2>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Latest transactions {loading ? "(loading…)" : ""}
+            Transactions and audit logs {loading ? "(loading…)" : ""}
           </p>
         </div>
         {loading ? (
           <div className="px-4 py-12 text-center text-sm text-zinc-500">Loading…</div>
-        ) : recentTransactions.length === 0 ? (
-          <div className="px-4 py-12 text-center text-sm text-zinc-500">No recent transactions.</div>
+        ) : recentActivity.length === 0 ? (
+          <div className="px-4 py-12 text-center text-sm text-zinc-500">No recent activity.</div>
         ) : (
           <div className="overflow-x-auto">
             <Table>
@@ -555,20 +516,33 @@ export default function DashboardHome() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {recentTransactions.map((tx) => (
-                  <TableRow key={tx._id} className="border-zinc-100 dark:border-zinc-800">
-                    <TableCell className="font-medium">{tx.type}</TableCell>
-                    <TableCell className="tabular-nums text-zinc-600 dark:text-zinc-400">
-                      {tx.createdAt ? new Date(tx.createdAt).toLocaleString() : "—"}
-                    </TableCell>
-                    <TableCell>{tx.createdBy?.name ?? "—"}</TableCell>
-                    <TableCell className="text-sm text-zinc-500 dark:text-zinc-400">
-                      {tx.items?.length
-                        ? tx.items.map((i) => `${i.qty}× ${i.itemId?.name ?? i.itemId ?? "—"}`).join(", ")
-                        : "—"}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {recentActivity.map((item, idx) => {
+                  const isTransaction = item._itemType === "transaction"
+                  return (
+                    <TableRow key={`${item._itemType}-${item._id}-${idx}`} className="border-zinc-100 dark:border-zinc-800">
+                      <TableCell className="font-medium">
+                        {isTransaction ? item.type : item.action}
+                      </TableCell>
+                      <TableCell className="tabular-nums text-zinc-600 dark:text-zinc-400">
+                        {item.createdAt ? new Date(item.createdAt).toLocaleString() : "—"}
+                      </TableCell>
+                      <TableCell>
+                        {isTransaction ? (item.createdBy?.name ?? "—") : (item.actorId?.name ?? "—")}
+                      </TableCell>
+                      <TableCell className="text-sm text-zinc-500 dark:text-zinc-400">
+                        {isTransaction ? (
+                          item.items?.length
+                            ? item.items.map((i) => `${i.qty}× ${i.itemId?.name ?? i.itemId ?? "—"}`).join(", ")
+                            : "—"
+                        ) : (
+                          <span className="text-xs">
+                            {item.targetType} {item.targetId ? `(${item.targetId.slice(0, 8)}...)` : ""} — {item.meta ? JSON.stringify(item.meta).slice(0, 50) : ""}
+                          </span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
           </div>
