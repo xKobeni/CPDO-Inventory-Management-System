@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Item from "../models/Item.js";
 import Transaction from "../models/Transaction.js";
 import AuditLog from "../models/AuditLog.js";
@@ -98,17 +99,70 @@ export async function createItem(req, res) {
     }
   }
 
-  const item = await Item.create(body);
+  const session = await mongoose.startSession();
+  try {
+    session.startTransaction();
 
-  await AuditLog.create({
-    actorId: req.user._id,
-    action: "ITEM_CREATE",
-    targetType: "Item",
-    targetId: item._id.toString(),
-    meta: { name: item.name, itemType: item.itemType },
-  });
+    const created = await Item.create([body], { session });
+    const item = created[0];
 
-  res.status(201).json(item);
+    await AuditLog.create([
+      {
+        actorId: req.user._id,
+        action: "ITEM_CREATE",
+        targetType: "Item",
+        targetId: item._id.toString(),
+        meta: { name: item.name, itemType: item.itemType },
+      },
+    ], { session });
+
+    if (item.itemType === "ASSET") {
+      const accName = (item.accountablePerson?.name || "").trim();
+      if (accName) {
+        const accountablePerson = {
+          name: accName,
+          position: (item.accountablePerson?.position || "").trim(),
+          office: (item.accountablePerson?.office || "CPDC").trim(),
+        };
+
+        const tx = await Transaction.create([
+          {
+            type: "ASSET_ASSIGN",
+            items: [{ itemId: item._id, qty: 1 }],
+            accountablePerson,
+            issuedToOffice: accountablePerson.office,
+            issuedToPerson: accountablePerson.name,
+            purpose: req.body.purpose || req.body.remarks || "Asset assignment",
+            createdBy: req.user._id,
+          },
+        ], { session });
+
+        item.accountablePerson = { ...accountablePerson };
+        item.status = "DEPLOYED";
+        item.assignedDate = new Date();
+        item.returnedDate = null;
+        await item.save({ session });
+
+        await AuditLog.create([
+          {
+            actorId: req.user._id,
+            action: "ASSET_ASSIGN",
+            targetType: "Item",
+            targetId: item._id.toString(),
+            meta: { to: accountablePerson, txId: tx[0]._id.toString(), source: "ITEM_CREATE" },
+          },
+        ], { session });
+      }
+    }
+
+    await session.commitTransaction();
+    res.status(201).json(item);
+  } catch (e) {
+    await session.abortTransaction();
+    throw e;
+  } finally {
+    session.endSession();
+  }
 }
 
 export async function updateItem(req, res) {

@@ -15,6 +15,11 @@ import {
   forgotPassword,
   resetPasswordSchema,
   resetPassword,
+  getMe,
+  updateProfileSchema,
+  updateProfile,
+  changePasswordSchema,
+  changePassword,
 } from "../controllers/auth.controller.js";
 
 const r = Router();
@@ -27,5 +32,10 @@ r.post("/verify-email", authLimiter, validateBody(verifyEmailSchema), verifyEmai
 r.post("/resend-verification", authLimiter, validateBody(resendVerificationSchema), resendVerification);
 r.post("/forgot-password", authLimiter, validateBody(forgotPasswordSchema), forgotPassword);
 r.post("/reset-password", authLimiter, validateBody(resetPasswordSchema), resetPassword);
+
+// Profile management
+r.get("/me", requireAuth, getMe);
+r.put("/profile", requireAuth, validateBody(updateProfileSchema), updateProfile);
+r.post("/change-password", requireAuth, validateBody(changePasswordSchema), changePassword);
 
 export default r;

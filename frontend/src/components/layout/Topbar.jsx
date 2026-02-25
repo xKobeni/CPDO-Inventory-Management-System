@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
-import { PanelLeft, PanelLeftClose, LogOut, User } from "lucide-react"
+import { PanelLeft, PanelLeftClose, LogOut } from "lucide-react"
 import { clearAuth, getUser } from "@/lib/auth"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { useSidebarCollapsed } from "./SidebarCollapsedContext"
@@ -95,11 +95,6 @@ export default function Topbar() {
                   )}
                 </div>
               </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="gap-2 cursor-pointer">
-                <User className="h-4 w-4" />
-                Account
-              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="gap-2 cursor-pointer text-zinc-600 focus:text-red-600"

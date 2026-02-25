@@ -55,3 +55,32 @@ export async function resetPassword(payload) {
   const { data } = await http.post(API_PATHS.auth.resetPassword, payload)
   return data
 }
+
+/**
+ * Get current user's profile
+ * @returns {Promise<{ id: string, name: string, email: string, role: string, isActive: boolean, isVerified: boolean, createdAt: string }>}
+ */
+export async function getMe() {
+  const { data } = await http.get(API_PATHS.auth.me)
+  return data
+}
+
+/**
+ * Update current user's profile
+ * @param {{ name: string }} payload
+ * @returns {Promise<{ id: string, name: string, email: string, role: string }>}
+ */
+export async function updateProfile(payload) {
+  const { data } = await http.put(API_PATHS.auth.profile, payload)
+  return data
+}
+
+/**
+ * Change current user's password
+ * @param {{ currentPassword: string, newPassword: string }} payload
+ * @returns {Promise<{ ok: boolean, message?: string }>}
+ */
+export async function changePassword(payload) {
+  const { data } = await http.post(API_PATHS.auth.changePassword, payload)
+  return data
+}

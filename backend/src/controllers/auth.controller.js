@@ -287,3 +287,80 @@ export async function resetPassword(req, res) {
 
   res.json({ ok: true, message: "Password reset. You can sign in with your new password." });
 }
+
+// Get current user profile
+export async function getMe(req, res) {
+  const user = await User.findById(req.user._id).select("_id name email role isActive isVerified createdAt");
+  if (!user) return res.status(404).json({ message: "User not found" });
+
+  res.json({
+    id: user._id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    isActive: user.isActive,
+    isVerified: user.isVerified,
+    createdAt: user.createdAt,
+  });
+}
+
+// Update current user profile (name only for now)
+export const updateProfileSchema = z.object({
+  name: z.string().min(2),
+});
+
+export async function updateProfile(req, res) {
+  const { name } = req.body;
+
+  const user = await User.findById(req.user._id);
+  if (!user) return res.status(404).json({ message: "User not found" });
+
+  const before = { name: user.name };
+  user.name = name;
+  await user.save();
+
+  await AuditLog.create({
+    actorId: user._id,
+    action: "PROFILE_UPDATE",
+    targetType: "User",
+    targetId: user._id.toString(),
+    meta: { before, after: { name: user.name } },
+  });
+
+  res.json({
+    id: user._id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+  });
+}
+
+// Change password (requires current password)
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8),
+});
+
+export async function changePassword(req, res) {
+  const { currentPassword, newPassword } = req.body;
+
+  const user = await User.findById(req.user._id);
+  if (!user) return res.status(404).json({ message: "User not found" });
+
+  const valid = await verifyPassword(currentPassword, user.passwordHash);
+  if (!valid) return res.status(400).json({ message: "Current password is incorrect" });
+
+  user.passwordHash = await hashPassword(newPassword);
+  // Optionally invalidate all sessions by clearing refresh token hash
+  user.refreshTokenHash = null;
+  await user.save();
+
+  await AuditLog.create({
+    actorId: user._id,
+    action: "PASSWORD_CHANGE",
+    targetType: "User",
+    targetId: user._id.toString(),
+  });
+
+  res.json({ ok: true, message: "Password changed successfully. Please log in again." });
+}
