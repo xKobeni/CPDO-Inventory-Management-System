@@ -23,3 +23,19 @@ export function verifyAccessToken(token) {
 export function verifyRefreshToken(token) {
   return jwt.verify(token, process.env.JWT_REFRESH_SECRET);
 }
+
+export function signEmailVerificationToken(userId, email) {
+  return jwt.sign(
+    { sub: userId.toString(), email, purpose: "email_verification" },
+    process.env.JWT_ACCESS_SECRET,
+    { expiresIn: "24h" }
+  );
+}
+
+export function verifyEmailVerificationToken(token) {
+  const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+  if (payload.purpose !== "email_verification") {
+    throw new Error("Invalid token purpose");
+  }
+  return payload;
+}

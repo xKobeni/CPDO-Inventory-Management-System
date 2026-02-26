@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 import { 
   sendWelcomeEmail, 
-  sendVerificationOtpEmail, 
+  sendVerificationEmail, 
   sendPasswordResetOtpEmail,
   sendPasswordResetNotification,
   isEmailConfigured
@@ -10,7 +10,7 @@ import {
 dotenv.config();
 
 // Change this to your email address for testing
-const TEST_EMAIL = "admin@cpdo.gov.ph"; 
+const TEST_EMAIL = "cpdc.systems@gmail.com"; 
 
 console.log("🧪 Email Service Test\n");
 console.log("=".repeat(50));
@@ -18,8 +18,7 @@ console.log("=".repeat(50));
 // Check if email is configured
 if (!isEmailConfigured()) {
   console.log("\n❌ Email service not configured!");
-  console.log("   Please add RESEND_API_KEY to your .env file");
-  console.log("   Get your API key from: https://resend.com/api-keys");
+  console.log("   Please add SMTP configuration to your .env file");
   process.exit(1);
 }
 
@@ -39,11 +38,12 @@ async function runTests() {
       console.log(`   ✅ Welcome email sent! (ID: ${result1.messageId})`);
     }
 
-    console.log("\n2️⃣  Testing Verification OTP Email...");
-    const result2 = await sendVerificationOtpEmail(
+    console.log("\n2️⃣  Testing Verification Email...");
+    const mockToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+    const result2 = await sendVerificationEmail(
       TEST_EMAIL,
       "John Doe",
-      "123456"
+      mockToken
     );
     if (result2) {
       console.log(`   ✅ Verification email sent! (ID: ${result2.messageId})`);
@@ -77,18 +77,8 @@ async function runTests() {
     console.error("\n❌ Error sending emails:");
     console.error(`   ${error.message}`);
     
-    if (error.message.includes("RESEND_API_KEY")) {
-      console.log("\n💡 Tip: Make sure you have a valid Resend API key");
-    }
-    
-    if (error.message.includes("401")) {
-      console.log("\n💡 Tip: Your API key might be invalid");
-      console.log("   Get a new one from: https://resend.com/api-keys");
-    }
-    
-    if (error.message.includes("sender")) {
-      console.log("\n💡 Tip: Verify your sender email in Resend dashboard");
-      console.log("   Or use the default: noreply@cpdc-inventory.resend.dev");
+    if (error.message.includes("SMTP")) {
+      console.log("\n💡 Tip: Check your SMTP configuration in .env");
     }
     
     process.exit(1);

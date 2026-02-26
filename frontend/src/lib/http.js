@@ -12,6 +12,7 @@ let failedQueue = []
 
 // Store CSRF token
 let csrfToken = null
+let lastCsrfFetch = null
 
 // Fetch CSRF token from server
 export async function fetchCsrfToken() {
@@ -21,6 +22,7 @@ export async function fetchCsrfToken() {
       { withCredentials: true }
     )
     csrfToken = data.csrfToken
+    lastCsrfFetch = Date.now()
     return csrfToken
   } catch (err) {
     console.error("Failed to fetch CSRF token:", err)
@@ -46,8 +48,9 @@ http.interceptors.request.use(async (config) => {
   
   // Add CSRF token for non-GET requests
   if (!["GET", "HEAD", "OPTIONS"].includes(config.method?.toUpperCase())) {
-    if (!csrfToken) {
-      // Fetch CSRF token if we don't have one
+    // Refresh CSRF token if we don't have one or if it's older than 12 hours
+    const tokenAge = lastCsrfFetch ? Date.now() - lastCsrfFetch : Infinity
+    if (!csrfToken || tokenAge > 12 * 60 * 60 * 1000) {
       await fetchCsrfToken()
     }
     if (csrfToken) {
@@ -63,8 +66,8 @@ http.interceptors.response.use(
   async (err) => {
     const originalRequest = err.config
 
-    // If CSRF token is invalid, fetch a new one and retry
-    if (err?.response?.status === 403 && err?.response?.data?.code === "CSRF_TOKEN_INVALID") {
+    // If CSRF token is invalid or missing, fetch a new one and retry
+    if (err?.response?.status === 403 && (err?.response?.data?.code === "CSRF_TOKEN_INVALID" || err?.response?.data?.code === "CSRF_TOKEN_MISSING")) {
       csrfToken = null
       await fetchCsrfToken()
       if (csrfToken && originalRequest.headers) {

@@ -39,6 +39,11 @@ export async function resetPassword(id, body) {
   return data
 }
 
+export async function resendVerificationEmail(id) {
+  const { data } = await http.post(API_PATHS.userResendVerification(id))
+  return data
+}
+
 export async function deactivateUser(id) {
   const { data } = await http.post(API_PATHS.userDeactivate(id))
   return data

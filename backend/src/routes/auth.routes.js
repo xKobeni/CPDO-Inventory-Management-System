@@ -7,7 +7,6 @@ import {
   login,
   refresh,
   logout,
-  verifyEmailSchema,
   verifyEmail,
   resendVerificationSchema,
   resendVerification,
@@ -28,7 +27,7 @@ r.post("/login", authLimiter, validateBody(loginSchema), login);
 r.post("/refresh", authLimiter, refresh);
 r.post("/logout", requireAuth, logout);
 
-r.post("/verify-email", authLimiter, validateBody(verifyEmailSchema), verifyEmail);
+r.get("/verify-email", verifyEmail);
 r.post("/resend-verification", authLimiter, validateBody(resendVerificationSchema), resendVerification);
 r.post("/forgot-password", authLimiter, validateBody(forgotPasswordSchema), forgotPassword);
 r.post("/reset-password", authLimiter, validateBody(resetPasswordSchema), resetPassword);

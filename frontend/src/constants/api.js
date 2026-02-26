@@ -34,6 +34,7 @@ export const API_PATHS = {
   users: "/users",
   user: (id) => `/users/${id}`,
   userResetPassword: (id) => `/users/${id}/reset-password`,
+  userResendVerification: (id) => `/users/${id}/resend-verification`,
   userDeactivate: (id) => `/users/${id}/deactivate`,
   userActivate: (id) => `/users/${id}/activate`,
   dashboard: {

@@ -21,11 +21,11 @@ export async function logout() {
 }
 
 /**
- * @param {{ email: string, otp: string }} payload
+ * @param {string} token - Verification token from email link
  * @returns {Promise<{ ok: boolean, message?: string }>}
  */
-export async function verifyEmail(payload) {
-  const { data } = await http.post(API_PATHS.auth.verifyEmail, payload)
+export async function verifyEmail(token) {
+  const { data } = await http.get(`${API_PATHS.auth.verifyEmail}?token=${encodeURIComponent(token)}`)
   return data
 }
 

@@ -2,7 +2,8 @@ import { z } from "zod";
 import User from "../models/User.js";
 import AuditLog from "../models/AuditLog.js";
 import { hashPassword, hashToken } from "../utils/hash.js";
-import { sendPasswordResetNotification, sendVerificationOtpEmail } from "../services/email.service.js";
+import { sendPasswordResetNotification, sendVerificationEmail } from "../services/email.service.js";
+import { signEmailVerificationToken } from "../utils/jwt.js";
 
 export const adminCreateUserSchema = z.object({
   name: z.string().min(2),
@@ -50,9 +51,6 @@ export async function adminCreateUser(req, res) {
   const exists = await User.findOne({ email });
   if (exists) return res.status(409).json({ message: "Email already in use" });
 
-  const otp = String(Math.floor(100000 + Math.random() * 900000));
-  const otpExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-
   const user = await User.create({
     name,
     email,
@@ -60,9 +58,12 @@ export async function adminCreateUser(req, res) {
     role,
     isActive: true,
     isVerified: false,
-    emailVerificationOtpHash: await hashToken(otp),
-    emailVerificationOtpExpires: otpExpires,
   });
+
+  const verificationToken = signEmailVerificationToken(user._id, user.email);
+  user.emailVerificationToken = verificationToken;
+  user.emailVerificationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+  await user.save();
 
   await AuditLog.create({
     actorId: req.user._id,
@@ -73,7 +74,7 @@ export async function adminCreateUser(req, res) {
   });
 
   try {
-    await sendVerificationOtpEmail(user.email, user.name, otp);
+    await sendVerificationEmail(user.email, user.name, verificationToken);
   } catch (err) {
     console.error("Verification email failed:", err?.message || err);
     // User is created; they can use "Resend verification" later
@@ -229,4 +230,38 @@ export async function adminDeleteUser(req, res) {
   await User.findByIdAndDelete(id);
 
   res.json({ ok: true });
+}
+
+export async function adminResendVerificationEmail(req, res) {
+  const { id } = req.params;
+
+  const user = await User.findById(id);
+  if (!user) return res.status(404).json({ message: "User not found" });
+
+  if (user.isVerified) {
+    return res.status(400).json({ message: "User is already verified" });
+  }
+
+  // Generate new verification token
+  const verificationToken = signEmailVerificationToken(user._id, user.email);
+  user.emailVerificationToken = verificationToken;
+  user.emailVerificationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+  await user.save();
+
+  await AuditLog.create({
+    actorId: req.user._id,
+    action: "ADMIN_RESEND_VERIFICATION_EMAIL",
+    targetType: "User",
+    targetId: user._id.toString(),
+    meta: { email: user.email },
+  });
+
+  try {
+    await sendVerificationEmail(user.email, user.name, verificationToken);
+  } catch (err) {
+    console.error("Verification email failed:", err?.message || err);
+    return res.status(500).json({ message: "Failed to send verification email" });
+  }
+
+  res.json({ ok: true, message: "Verification email sent" });
 }

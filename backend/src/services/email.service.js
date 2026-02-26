@@ -1,15 +1,22 @@
 /**
- * Resend transactional email service.
- * Uses Resend API: https://resend.com
+ * Nodemailer transactional email service.
+ * Uses SMTP for email delivery via Nodemailer: https://nodemailer.com
  *
- * Required env: RESEND_API_KEY
- * Optional env: EMAIL_FROM_EMAIL, EMAIL_FROM_NAME (sender shown in emails)
+ * Required env: 
+ * - SMTP_HOST: SMTP server host (e.g., smtp.gmail.com)
+ * - SMTP_PORT: SMTP port (587 for TLS, 465 for SSL, 25 for non-secure)
+ * - SMTP_USER: SMTP username/email
+ * - SMTP_PASS: SMTP password or app password
+ * - EMAIL_FROM_EMAIL: Sender email address
  *
- * Free tier: 100 emails/day
- * Sign up at: https://resend.com
+ * Optional env:
+ * - SMTP_SECURE: true for port 465, false for other ports (default: false)
+ * - EMAIL_FROM_NAME: Sender display name (default: "CPDC Inventory")
+ *
+ * For Gmail: Use App Passwords (https://support.google.com/accounts/answer/185833)
  */
 
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -18,21 +25,37 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const templateDir = path.join(__dirname, "../templates");
 
-let resendClient = null;
+let transporter = null;
 
-function getResendClient() {
-  if (!resendClient && process.env.RESEND_API_KEY) {
-    resendClient = new Resend(process.env.RESEND_API_KEY);
+function getTransporter() {
+  if (!transporter && isConfigured()) {
+    const smtpConfig = {
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT || "587", 10),
+      secure: process.env.SMTP_SECURE === "true", // true for 465, false for other ports
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    };
+
+    transporter = nodemailer.createTransport(smtpConfig);
   }
-  return resendClient;
+  return transporter;
 }
 
 function isConfigured() {
-  return Boolean(process.env.RESEND_API_KEY);
+  return Boolean(
+    process.env.SMTP_HOST &&
+    process.env.SMTP_PORT &&
+    process.env.SMTP_USER &&
+    process.env.SMTP_PASS &&
+    process.env.EMAIL_FROM_EMAIL
+  );
 }
 
 function getSender() {
-  const email = process.env.EMAIL_FROM_EMAIL || "noreply@cpdc-inventory.resend.dev";
+  const email = process.env.EMAIL_FROM_EMAIL || "noreply@example.com";
   const name = process.env.EMAIL_FROM_NAME || "CPDC Inventory";
   return `${name} <${email}>`;
 }
@@ -69,10 +92,10 @@ function loadTemplate(templateName, variables = {}) {
 }
 
 /**
- * Send a transactional email via Resend.
+ * Send a transactional email via Nodemailer (SMTP).
  * @param {Object} options
  * @param {string} options.to - Recipient email
- * @param {string} [options.toName] - Recipient name (for reference only)
+ * @param {string} [options.toName] - Recipient name (for display purposes)
  * @param {string} options.subject - Subject line
  * @param {string} [options.htmlContent] - HTML body
  * @param {string} [options.textContent] - Plain text body
@@ -80,33 +103,35 @@ function loadTemplate(templateName, variables = {}) {
  */
 export async function sendEmail({ to, toName, subject, htmlContent, textContent }) {
   if (!isConfigured()) {
-    console.warn("Email not sent: RESEND_API_KEY is not set.");
+    console.warn("Email not sent: SMTP configuration is incomplete.");
+    console.warn("Required: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_FROM_EMAIL");
     return null;
   }
 
-  const client = getResendClient();
-  if (!client) {
-    console.error("Resend client not initialized");
+  const transporter = getTransporter();
+  if (!transporter) {
+    console.error("Nodemailer transporter not initialized");
     return null;
   }
 
   try {
-    const result = await client.emails.send({
+    const mailOptions = {
       from: getSender(),
-      to,
+      to: toName ? `${toName} <${to}>` : to,
       subject,
       html: htmlContent,
       text: textContent,
-    });
+    };
 
-    if (result.error) {
-      console.error(`Resend error: ${result.error.message}`);
-      return null;
-    }
-
-    return { messageId: result.data.id };
+    const info = await transporter.sendMail(mailOptions);
+    
+    console.log(`Email sent successfully: ${info.messageId}`);
+    return { messageId: info.messageId };
   } catch (error) {
-    console.error(`Failed to send email via Resend: ${error.message}`);
+    console.error(`Failed to send email via Nodemailer: ${error.message}`);
+    if (error.code) {
+      console.error(`Error code: ${error.code}`);
+    }
     return null;
   }
 }
@@ -162,18 +187,18 @@ const RESET_OTP_MINUTES = 15;
 const VERIFICATION_EXPIRY_HOURS = VERIFICATION_OTP_MINUTES / 60;
 
 /**
- * Send email verification OTP (admin-created account must verify before login).
+ * Send email verification link (admin-created account must verify before login).
  */
-export async function sendVerificationOtpEmail(to, userName, otp) {
+export async function sendVerificationEmail(to, userName, token) {
+  const verificationUrl = `${process.env.CLIENT_ORIGIN}/verify-email?token=${token}`;
   const subject = "Verify your CPDC Inventory account";
-  const htmlContent = loadTemplate("verification-otp-email.html", {
+  const htmlContent = loadTemplate("verification-email.html", {
     NAME: userName || "User",
-    OTP: otp,
-    EXPIRY_HOURS: String(VERIFICATION_EXPIRY_HOURS),
+    VERIFICATION_URL: verificationUrl,
   });
 
   if (!htmlContent) {
-    console.error("Failed to load verification OTP email template");
+    console.error("Failed to load verification email template");
     return null;
   }
 

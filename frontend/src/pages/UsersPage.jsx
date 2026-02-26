@@ -77,6 +77,8 @@ export default function UsersPage() {
   const [editUser, setEditUser] = useState(null)
   const [resetOpen, setResetOpen] = useState(false)
   const [resetUser, setResetUser] = useState(null)
+  const [resendOpen, setResendOpen] = useState(false)
+  const [resendUser, setResendUser] = useState(null)
   const [actionConfirm, setActionConfirm] = useState(null) // { type: 'deactivate'|'activate', user }
 
   const [peopleOpen, setPeopleOpen] = useState(false)
@@ -217,6 +219,22 @@ export default function UsersPage() {
     }
   }
 
+  const handleResendVerification = async () => {
+    if (!resendUser) return
+    setSubmitting(true)
+    try {
+      await usersService.resendVerificationEmail(resendUser._id)
+      toast.success("Verification email sent.")
+      setResendOpen(false)
+      setResendUser(null)
+      fetchUsers()
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const handleDeactivate = async () => {
     if (!actionConfirm?.user) return
     setSubmitting(true)
@@ -331,6 +349,11 @@ export default function UsersPage() {
     setResetUser(user)
     setResetForm({ newPassword: "" })
     setResetOpen(true)
+  }
+
+  const openResend = (user) => {
+    setResendUser(user)
+    setResendOpen(true)
   }
 
   return (
@@ -461,6 +484,7 @@ export default function UsersPage() {
                     user={user}
                     onEdit={() => openEdit(user)}
                     onResetPassword={() => openReset(user)}
+                    onResendVerification={() => openResend(user)}
                     onDeactivate={() => setActionConfirm({ type: "deactivate", user })}
                     onActivate={() => setActionConfirm({ type: "activate", user })}
                     onDelete={() => setActionConfirm({ type: "delete", user })}
@@ -671,6 +695,26 @@ export default function UsersPage() {
             </Button>
             <Button onClick={handleResetPassword} disabled={submitting || !resetForm.newPassword?.trim()}>
               {submitting ? "Resetting…" : "Reset"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Resend Verification Email Dialog */}
+      <Dialog open={resendOpen} onOpenChange={setResendOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Resend Verification Email</DialogTitle>
+            <DialogDescription>
+              Send a verification email to {resendUser?.email}. They will receive a new OTP to verify their email.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResendOpen(false)} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button onClick={handleResendVerification} disabled={submitting}>
+              {submitting ? "Sending…" : "Send Verification Email"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -928,7 +972,7 @@ export default function UsersPage() {
   )
 }
 
-function UserRow({ user, onEdit, onResetPassword, onDeactivate, onActivate, onDelete }) {
+function UserRow({ user, onEdit, onResetPassword, onResendVerification, onDeactivate, onActivate, onDelete }) {
   const roleLabel = user.role === "ADMIN" ? "Admin" : user.role === "STAFF" ? "Staff" : user.role ?? "—"
   const status = user.isActive !== false ? "Active" : "Inactive"
   const created = user.createdAt
@@ -975,6 +1019,9 @@ function UserRow({ user, onEdit, onResetPassword, onDeactivate, onActivate, onDe
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={onEdit}>Edit</DropdownMenuItem>
             <DropdownMenuItem onClick={onResetPassword}>Reset password</DropdownMenuItem>
+            {user.isVerified === false && (
+              <DropdownMenuItem onClick={onResendVerification}>Resend verification email</DropdownMenuItem>
+            )}
             {user.isActive !== false ? (
               <DropdownMenuItem onClick={onDeactivate} className="text-destructive">
                 Deactivate

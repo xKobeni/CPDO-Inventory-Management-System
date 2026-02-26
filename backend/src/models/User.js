@@ -16,10 +16,10 @@ const UserSchema = new mongoose.Schema(
     refreshTokenHash: { type: String, default: null },
     isActive: { type: Boolean, default: true },
 
-    // Email verification (OTP) – required for new admin-created accounts before first login
+    // Email verification (Token) – required for new admin-created accounts before first login
     isVerified: { type: Boolean, default: true },
-    emailVerificationOtpHash: { type: String, default: null },
-    emailVerificationOtpExpires: { type: Date, default: null },
+    emailVerificationToken: { type: String, default: null },
+    emailVerificationTokenExpires: { type: Date, default: null },
 
     // User-initiated password reset (forgot password flow, OTP)
     passwordResetOtpHash: { type: String, default: null },

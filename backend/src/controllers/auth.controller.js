@@ -2,9 +2,9 @@ import { z } from "zod";
 import User from "../models/User.js";
 import AuditLog from "../models/AuditLog.js";
 import { hashPassword, verifyPassword, hashToken, verifyTokenHash } from "../utils/hash.js";
-import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../utils/jwt.js";
+import { signAccessToken, signRefreshToken, verifyRefreshToken, signEmailVerificationToken, verifyEmailVerificationToken } from "../utils/jwt.js";
 import {
-  sendVerificationOtpEmail,
+  sendVerificationEmail,
   sendPasswordResetOtpEmail,
 } from "../services/email.service.js";
 import { verifyTurnstile } from "../utils/turnstile.js";
@@ -27,11 +27,6 @@ export const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
   turnstileToken: z.string().min(1).optional(),
-});
-
-export const verifyEmailSchema = z.object({
-  email: z.string().email().transform((v) => v.toLowerCase().trim()),
-  otp: z.string().length(6).regex(/^\d+$/),
 });
 
 export const resendVerificationSchema = z.object({
@@ -218,30 +213,40 @@ export async function logout(req, res) {
 }
 
 export async function verifyEmail(req, res) {
-  const { email, otp } = req.body;
+  const { token } = req.query;
 
-  const user = await User.findOne({ email });
-  if (!user) return res.status(400).json({ message: "Invalid email or OTP." });
-
-  if (!user.emailVerificationOtpHash || !user.emailVerificationOtpExpires) {
-    return res.status(400).json({ message: "No pending verification. You may already be verified—try logging in." });
-  }
-  if (new Date() > user.emailVerificationOtpExpires) {
-    user.emailVerificationOtpHash = null;
-    user.emailVerificationOtpExpires = null;
-    await user.save();
-    return res.status(400).json({ message: "Verification code expired. Please request a new one." });
+  if (!token) {
+    return res.status(400).json({ message: "Verification token is required." });
   }
 
-  const ok = await verifyTokenHash(otp, user.emailVerificationOtpHash);
-  if (!ok) return res.status(400).json({ message: "Invalid email or OTP." });
+  let payload;
+  try {
+    payload = verifyEmailVerificationToken(token);
+  } catch (err) {
+    if (err.name === "TokenExpiredError") {
+      return res.status(400).json({ message: "Verification link expired. Please request a new one." });
+    }
+    return res.status(400).json({ message: "Invalid verification link." });
+  }
+
+  const user = await User.findById(payload.sub);
+  if (!user) return res.status(400).json({ message: "User not found." });
+
+  if (user.isVerified) {
+    return res.status(200).json({ ok: true, message: "Email already verified. You can now sign in." });
+  }
+
+  // Verify the stored token matches (optional extra security check)
+  if (user.emailVerificationToken && user.emailVerificationToken !== token) {
+    return res.status(400).json({ message: "Invalid verification link." });
+  }
 
   user.isVerified = true;
-  user.emailVerificationOtpHash = null;
-  user.emailVerificationOtpExpires = null;
+  user.emailVerificationToken = null;
+  user.emailVerificationTokenExpires = null;
   await user.save();
 
-  res.json({ ok: true, message: "Email verified. You can now sign in." });
+  res.json({ ok: true, message: "Email verified successfully. You can now sign in." });
 }
 
 export async function resendVerification(req, res) {
@@ -250,25 +255,25 @@ export async function resendVerification(req, res) {
   const user = await User.findOne({ email });
   if (!user) {
     // Same response for security: don't reveal if email exists
-    return res.json({ ok: true, message: "If that email is registered, a new code was sent." });
+    return res.json({ ok: true, message: "If that email is registered, a new verification link was sent." });
   }
   if (user.isVerified) {
     return res.json({ ok: true, message: "Account is already verified. You can sign in." });
   }
 
-  const otp = generateOtp();
-  user.emailVerificationOtpHash = await hashToken(otp);
-  user.emailVerificationOtpExpires = new Date(Date.now() + VERIFICATION_OTP_EXPIRY_MS);
+  const verificationToken = signEmailVerificationToken(user._id, user.email);
+  user.emailVerificationToken = verificationToken;
+  user.emailVerificationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
   await user.save();
 
   try {
-    await sendVerificationOtpEmail(user.email, user.name, otp);
+    await sendVerificationEmail(user.email, user.name, verificationToken);
   } catch (err) {
     console.error("Resend verification email failed:", err?.message || err);
     return res.status(500).json({ message: "Failed to send email. Try again later." });
   }
 
-  res.json({ ok: true, message: "A new verification code was sent to your email." });
+  res.json({ ok: true, message: "A new verification link was sent to your email." });
 }
 
 export async function forgotPassword(req, res) {
