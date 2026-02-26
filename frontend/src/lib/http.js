@@ -10,6 +10,24 @@ export const http = axios.create({
 let isRefreshing = false
 let failedQueue = []
 
+// Store CSRF token
+let csrfToken = null
+
+// Fetch CSRF token from server
+export async function fetchCsrfToken() {
+  try {
+    const { data } = await axios.get(
+      `${import.meta.env.VITE_API_BASE_URL}/csrf-token`,
+      { withCredentials: true }
+    )
+    csrfToken = data.csrfToken
+    return csrfToken
+  } catch (err) {
+    console.error("Failed to fetch CSRF token:", err)
+    return null
+  }
+}
+
 const processQueue = (error, token = null) => {
   failedQueue.forEach((prom) => {
     if (error) {
@@ -21,9 +39,22 @@ const processQueue = (error, token = null) => {
   failedQueue = []
 }
 
-http.interceptors.request.use((config) => {
+http.interceptors.request.use(async (config) => {
+  // Add access token
   const token = getToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
+  
+  // Add CSRF token for non-GET requests
+  if (!["GET", "HEAD", "OPTIONS"].includes(config.method?.toUpperCase())) {
+    if (!csrfToken) {
+      // Fetch CSRF token if we don't have one
+      await fetchCsrfToken()
+    }
+    if (csrfToken) {
+      config.headers["X-CSRF-Token"] = csrfToken
+    }
+  }
+  
   return config
 })
 
@@ -31,6 +62,16 @@ http.interceptors.response.use(
   (res) => res,
   async (err) => {
     const originalRequest = err.config
+
+    // If CSRF token is invalid, fetch a new one and retry
+    if (err?.response?.status === 403 && err?.response?.data?.code === "CSRF_TOKEN_INVALID") {
+      csrfToken = null
+      await fetchCsrfToken()
+      if (csrfToken && originalRequest.headers) {
+        originalRequest.headers["X-CSRF-Token"] = csrfToken
+        return http(originalRequest)
+      }
+    }
 
     // If error is 401 and we haven't tried to refresh yet
     if (err?.response?.status === 401 && !originalRequest._retry) {

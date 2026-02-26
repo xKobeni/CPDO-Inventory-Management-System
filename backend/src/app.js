@@ -4,6 +4,12 @@ import helmet from "helmet";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
 import mongoSanitize from "express-mongo-sanitize";
+import { setCsrfToken, verifyCsrfToken, addCsrfToResponse } from "./middleware/csrf.js";
+import { 
+  getSentryRequestHandler, 
+  getSentryTracingHandler, 
+  getSentryErrorHandler 
+} from "./config/sentry.js";
 
 import usersRoutes from "./routes/users.routes.js";
 import healthRoutes from "./routes/health.routes.js";
@@ -20,6 +26,10 @@ const app = express();
 
 // IMPORTANT when deploying behind proxies (Render/Nginx)
 app.set("trust proxy", 1);
+
+// Sentry request handler must be the first middleware
+app.use(getSentryRequestHandler());
+app.use(getSentryTracingHandler());
 
 app.use(helmet());
 app.use(morgan("dev"));
@@ -39,24 +49,32 @@ app.use((req, _res, next) => {
 
 app.use(
   cors({
-    origin: process.env.CLIENT_ORIGIN || "http://localhost:5173",
+    origin: process.env.CLIENT_URL || process.env.CLIENT_ORIGIN || "http://localhost:5173",
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token"],
   })
 );
+
+// CSRF token endpoint - client calls this to get initial token
+app.get("/api/csrf-token", setCsrfToken, addCsrfToResponse, (req, res) => {
+  res.json({ csrfToken: req.csrfToken });
+});
 
 app.get("/", (req, res) => res.json({ ok: true, name: "CPDC Inventory API" }));
 
 app.use("/api/health", healthRoutes);
-app.use("/api/auth", authRoutes);
-app.use("/api/items", itemsRoutes);
-app.use("/api/transactions", txRoutes);
-app.use("/api/users", usersRoutes);
-app.use("/api/people", peopleRoutes);
+app.use("/api/auth", verifyCsrfToken, authRoutes);
+app.use("/api/items", verifyCsrfToken, itemsRoutes);
+app.use("/api/transactions", verifyCsrfToken, txRoutes);
+app.use("/api/users", verifyCsrfToken, usersRoutes);
+app.use("/api/people", verifyCsrfToken, peopleRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/export", exportRoutes);
-app.use("/api/import", importRoutes);
+app.use("/api/import", verifyCsrfToken, importRoutes);
+
+// Sentry error handler must be before other error handlers
+app.use(getSentryErrorHandler());
 
 app.use(notFound);
 app.use(errorHandler);

@@ -98,6 +98,16 @@ export async function login(req, res) {
   const user = await User.findOne({ email });
   if (!user || !user.isActive) return res.status(401).json({ message: "Invalid credentials" });
 
+  // Check if account is locked
+  if (user.isLocked) {
+    const remainingTime = Math.ceil((user.lockUntil - Date.now()) / 60000);
+    return res.status(423).json({
+      message: `Account is temporarily locked due to multiple failed login attempts. Please try again in ${remainingTime} minute(s).`,
+      code: "ACCOUNT_LOCKED",
+      remainingTime,
+    });
+  }
+
   if (!user.isVerified) {
     return res.status(403).json({
       message: "Please verify your email before signing in.",
@@ -107,7 +117,32 @@ export async function login(req, res) {
   }
 
   const ok = await verifyPassword(password, user.passwordHash);
-  if (!ok) return res.status(401).json({ message: "Invalid credentials" });
+  if (!ok) {
+    // Increment login attempts and potentially lock account
+    await user.incLoginAttempts();
+    
+    // Reload user to get updated loginAttempts and lockUntil
+    await user.reload();
+    
+    const attemptsLeft = 5 - user.loginAttempts;
+    if (user.isLocked) {
+      return res.status(423).json({
+        message: "Too many failed login attempts. Your account has been temporarily locked for 15 minutes.",
+        code: "ACCOUNT_LOCKED",
+      });
+    }
+    
+    if (attemptsLeft > 0 && attemptsLeft <= 2) {
+      return res.status(401).json({
+        message: `Invalid credentials. ${attemptsLeft} attempt(s) remaining before account lockout.`,
+      });
+    }
+    
+    return res.status(401).json({ message: "Invalid credentials" });
+  }
+
+  // Reset login attempts on successful login
+  await user.resetLoginAttempts();
 
   const accessToken = signAccessToken(user);
   const refreshToken = signRefreshToken(user);

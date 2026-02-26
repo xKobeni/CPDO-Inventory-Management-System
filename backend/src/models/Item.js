@@ -66,4 +66,12 @@ const ItemSchema = new mongoose.Schema(
 
 // Uniqueness for propertyNumber/serialNumber enforced in controller to avoid E11000 on null
 
+// Additional indexes for performance
+ItemSchema.index({ name: "text", category: "text" }); // Text search
+ItemSchema.index({ propertyNumber: 1 }, { sparse: true }); // Sparse index for assets
+ItemSchema.index({ serialNumber: 1 }, { sparse: true });
+ItemSchema.index({ quantityOnHand: 1, itemType: 1 }); // For low stock queries
+ItemSchema.index({ createdAt: -1 });
+ItemSchema.index({ updatedAt: -1 });
+
 export default mongoose.model("Item", ItemSchema);

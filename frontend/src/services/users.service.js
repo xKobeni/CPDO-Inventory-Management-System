@@ -48,3 +48,8 @@ export async function activateUser(id) {
   const { data } = await http.post(API_PATHS.userActivate(id))
   return data
 }
+
+export async function deleteUser(id) {
+  const { data } = await http.delete(API_PATHS.user(id))
+  return data
+}

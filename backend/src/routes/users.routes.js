@@ -9,6 +9,7 @@ import {
   adminResetPassword,
   adminDeactivateUser,
   adminActivateUser,
+  adminDeleteUser,
   adminCreateUserSchema,
   adminUpdateUserSchema,
   adminResetPasswordSchema,
@@ -27,5 +28,6 @@ r.post("/:id/reset-password", validateBody(adminResetPasswordSchema), adminReset
 
 r.post("/:id/deactivate", adminDeactivateUser);
 r.post("/:id/activate", adminActivateUser);
+r.delete("/:id", adminDeleteUser);
 
 export default r;

@@ -45,4 +45,10 @@ const TransactionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Indexes for performance
+TransactionSchema.index({ createdBy: 1, createdAt: -1 });
+TransactionSchema.index({ "items.itemId": 1 });
+TransactionSchema.index({ createdAt: -1 });
+TransactionSchema.index({ type: 1, createdAt: -1 });
+
 export default mongoose.model("Transaction", TransactionSchema);

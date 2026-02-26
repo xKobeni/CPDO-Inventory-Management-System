@@ -201,3 +201,32 @@ export async function adminActivateUser(req, res) {
 
   res.json({ ok: true });
 }
+
+export async function adminDeleteUser(req, res) {
+  const { id } = req.params;
+
+  // Prevent self-deletion
+  if (id === req.user._id.toString()) {
+    return res.status(400).json({ message: "You cannot delete your own account." });
+  }
+
+  const user = await User.findById(id);
+  if (!user) return res.status(404).json({ message: "User not found" });
+
+  // Only allow deletion of deactivated users
+  if (user.isActive !== false) {
+    return res.status(400).json({ message: "Only deactivated users can be deleted. Please deactivate the user first." });
+  }
+
+  await AuditLog.create({
+    actorId: req.user._id,
+    action: "ADMIN_USER_DELETE",
+    targetType: "User",
+    targetId: user._id.toString(),
+    meta: { email: user.email, name: user.name, role: user.role },
+  });
+
+  await User.findByIdAndDelete(id);
+
+  res.json({ ok: true });
+}

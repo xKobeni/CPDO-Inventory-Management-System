@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Templates Preview - CPDC Inventory System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+        
+        .header h1 {
+            font-size: 36px;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .tab {
+            background: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            flex: 1;
+            min-width: 150px;
+        }
+        
+        .tab:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        
+        .tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .preview-container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            min-height: 600px;
+        }
+        
+        .template-content {
+            display: none;
+        }
+        
+        .template-content.active {
+            display: block;
+        }
+        
+        .template-info {
+            background: #f0f9ff;
+            border-left: 4px solid #3b82f6;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        
+        .template-info h3 {
+            color: #1e40af;
+            margin-bottom: 8px;
+        }
+        
+        .template-info p {
+            color: #1e40af;
+            font-size: 14px;
+            margin: 5px 0;
+        }
+        
+        .preview-frame {
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            background: #f9fafb;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        iframe {
+            width: 100%;
+            border: none;
+            border-radius: 4px;
+            background: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background: #2563eb;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #1e40af;
+        }
+        
+        .btn-secondary {
+            background: #e5e7eb;
+            color: #374151;
+        }
+        
+        .btn-secondary:hover {
+            background: #d1d5db;
+        }
+        
+        .device-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            align-items: center;
+        }
+        
+        .device-btn {
+            padding: 8px 16px;
+            border: 2px solid #e5e7eb;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.3s ease;
+        }
+        
+        .device-btn.active {
+            border-color: #2563eb;
+            background: #eff6ff;
+            color: #2563eb;
+        }
+        
+        .device-label {
+            font-weight: 600;
+            color: #374151;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📧 Email Templates Preview</h1>
+            <p>CPDC Inventory System - Test & Review Email Designs</p>
+        </div>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="showTemplate('welcome')">
+                Welcome Email
+            </button>
+            <button class="tab" onclick="showTemplate('verification')">
+                Verification OTP
+            </button>
+            <button class="tab" onclick="showTemplate('reset')">
+                Password Reset OTP
+            </button>
+            <button class="tab" onclick="showTemplate('admin-reset')">
+                Admin Reset Notification
+            </button>
+        </div>
+        
+        <div class="preview-container">
+            <!-- Welcome Email -->
+            <div id="welcome" class="template-content active">
+                <div class="template-info">
+                    <h3>🎉 Welcome Email</h3>
+                    <p><strong>Purpose:</strong> Sent when a new user account is created</p>
+                    <p><strong>Includes:</strong> Welcome message, temporary password (optional), security notice</p>
+                </div>
+                
+                <div class="device-selector">
+                    <span class="device-label">Preview:</span>
+                    <button class="device-btn active" onclick="setDevice('welcome', 'desktop')">🖥️ Desktop</button>
+                    <button class="device-btn" onclick="setDevice('welcome', 'mobile')">📱 Mobile</button>
+                </div>
+                
+                <div class="preview-frame">
+                    <iframe id="iframe-welcome" src="welcome-email.html" style="height: 800px;"></iframe>
+                </div>
+            </div>
+            
+            <!-- Verification Email -->
+            <div id="verification" class="template-content">
+                <div class="template-info">
+                    <h3>✉️ Email Verification OTP</h3>
+                    <p><strong>Purpose:</strong> Sent for email verification before first login</p>
+                    <p><strong>Includes:</strong> 6-digit OTP code, expiry time (24 hours), security warnings</p>
+                </div>
+                
+                <div class="device-selector">
+                    <span class="device-label">Preview:</span>
+                    <button class="device-btn active" onclick="setDevice('verification', 'desktop')">🖥️ Desktop</button>
+                    <button class="device-btn" onclick="setDevice('verification', 'mobile')">📱 Mobile</button>
+                </div>
+                
+                <div class="preview-frame">
+                    <iframe id="iframe-verification" src="verification-otp-email.html" style="height: 800px;"></iframe>
+                </div>
+            </div>
+            
+            <!-- Password Reset Email -->
+            <div id="reset" class="template-content">
+                <div class="template-info">
+                    <h3>🔑 Password Reset OTP</h3>
+                    <p><strong>Purpose:</strong> Sent when user requests password reset</p>
+                    <p><strong>Includes:</strong> 6-digit reset code, expiry time (15 minutes), step-by-step instructions</p>
+                </div>
+                
+                <div class="device-selector">
+                    <span class="device-label">Preview:</span>
+                    <button class="device-btn active" onclick="setDevice('reset', 'desktop')">🖥️ Desktop</button>
+                    <button class="device-btn" onclick="setDevice('reset', 'mobile')">📱 Mobile</button>
+                </div>
+                
+                <div class="preview-frame">
+                    <iframe id="iframe-reset" src="password-reset-otp-email.html" style="height: 800px;"></iframe>
+                </div>
+            </div>
+            
+            <!-- Admin Reset Notification -->
+            <div id="admin-reset" class="template-content">
+                <div class="template-info">
+                    <h3>🔐 Admin Password Reset Notification</h3>
+                    <p><strong>Purpose:</strong> Sent when admin manually resets a user's password</p>
+                    <p><strong>Includes:</strong> Admin action notice, next steps, security alert</p>
+                </div>
+                
+                <div class="device-selector">
+                    <span class="device-label">Preview:</span>
+                    <button class="device-btn active" onclick="setDevice('admin-reset', 'desktop')">🖥️ Desktop</button>
+                    <button class="device-btn" onclick="setDevice('admin-reset', 'mobile')">📱 Mobile</button>
+                </div>
+                
+                <div class="preview-frame">
+                    <iframe id="iframe-admin-reset" src="admin-password-reset-notification.html" style="height: 800px;"></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function showTemplate(templateId) {
+            // Hide all templates
+            document.querySelectorAll('.template-content').forEach(el => {
+                el.classList.remove('active');
+            });
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected template
+            document.getElementById(templateId).classList.add('active');
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+        }
+        
+        function setDevice(templateId, device) {
+            const iframe = document.getElementById('iframe-' + templateId);
+            const buttons = document.getElementById(templateId).querySelectorAll('.device-btn');
+            
+            // Update button states
+            buttons.forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Update iframe width
+            if (device === 'mobile') {
+                iframe.style.width = '375px';
+                iframe.style.margin = '0 auto';
+                iframe.style.display = 'block';
+            } else {
+                iframe.style.width = '100%';
+                iframe.style.margin = '0';
+            }
+        }
+        
+        // Replace template variables on load
+        window.addEventListener('load', function() {
+            setTimeout(() => {
+                const iframes = document.querySelectorAll('iframe');
+                iframes.forEach(iframe => {
+                    try {
+                        let content = iframe.contentDocument.body.innerHTML;
+                        
+                        // Replace common variables with sample data
+                        content = content.replace(/{{NAME}}/g, 'John Doe');
+                        content = content.replace(/{{OTP}}/g, '123456');
+                        content = content.replace(/{{TEMP_PASSWORD}}/g, 'TempPass123!');
+                        content = content.replace(/{{EXPIRY_HOURS}}/g, '24');
+                        content = content.replace(/{{EXPIRY_MINUTES}}/g, '15');
+                        
+                        iframe.contentDocument.body.innerHTML = content;
+                    } catch(e) {
+                        console.log('Could not access iframe content (this is normal for file:// protocol)');
+                    }
+                });
+            }, 500);
+        });
+    </script>
+</body>
+</html>

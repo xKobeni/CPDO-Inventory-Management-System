@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to CPDC Inventory System</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            background-color: #f9fafb;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e4e4e7;
+        }
+        .header {
+            background: #3f3f46;
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+            border-bottom: 4px solid #52525b;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+        }
+        .content {
+            padding: 40px 30px;
+        }
+        .greeting {
+            font-size: 16px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .message {
+            font-size: 14px;
+            line-height: 1.8;
+            color: #666;
+            margin: 15px 0;
+        }
+        .credentials {
+            background-color: #fafafa;
+            border-left: 4px solid #52525b;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 8px;
+            border: 1px solid #e4e4e7;
+        }
+        .credentials-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #666;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .password-box {
+            background-color: #ffffff;
+            border: 1px solid #e5e7eb;
+            padding: 12px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            letter-spacing: 0.05em;
+            color: #000;
+            font-weight: 600;
+            text-align: center;
+            word-break: break-all;
+        }
+        .warning {
+            background-color: #fafafa;
+            border-left: 4px solid #52525b;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #3f3f46;
+            border: 1px solid #e4e4e7;
+        }
+        .button-container {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .button {
+            display: inline-block;
+            padding: 12px 32px;
+            background-color: #3f3f46;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        .button:hover {
+            background-color: #52525b;
+        }
+        .footer {
+            background-color: #fafafa;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e4e4e7;
+            font-size: 12px;
+            color: #71717a;
+        }
+        .divider {
+            border: none;
+            border-top: 1px solid #e5e7eb;
+            margin: 20px 0;
+        }
+        @media (max-width: 600px) {
+            .container {
+                border-radius: 0;
+            }
+            .content {
+                padding: 30px 20px;
+            }
+            .header {
+                padding: 30px 20px;
+            }
+            .header h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div style="display: inline-block; padding: 8px 16px; background: rgba(255,255,255,0.1); border-radius: 6px; margin-bottom: 12px;">
+                <span style="font-size: 14px; font-weight: 600; letter-spacing: 0.05em;">CPDC</span>
+            </div>
+            <h1>Welcome to CPDC Inventory System</h1>
+        </div>
+        
+        <div class="content">
+            <p class="greeting">Hello {{NAME}},</p>
+            
+            <p class="message">Your account for the <strong>CPDC Inventory System</strong> has been successfully created. You're all set to start managing your inventory!</p>
+            
+            {{#if TEMP_PASSWORD}}
+            <div class="credentials">
+                <div class="credentials-label">Your Temporary Password</div>
+                <div class="password-box">{{TEMP_PASSWORD}}</div>
+            </div>
+            
+            <div class="warning">
+                <strong>⚠️ Important:</strong> Please change this password immediately after your first login for security reasons.
+            </div>
+            {{/if}}
+            
+            <p class="message">
+                <strong>Getting started:</strong>
+            </p>
+            <ul style="font-size: 14px; color: #666; padding-left: 20px; margin: 10px 0;">
+                <li>Log in to your account</li>
+                <li>Update your profile information</li>
+                <li>Start managing your inventory</li>
+            </ul>
+            
+            <div class="button-container">
+                <a href="https://cpdc-inventory.local" class="button">Access System</a>
+            </div>
+            
+            <p class="message" style="font-size: 13px; color: #999;">
+                If you have any questions or need assistance, please contact your administrator.
+            </p>
+        </div>
+        
+        <div class="footer">
+            <p style="margin: 0 0 5px 0; font-weight: 600; color: #3f3f46;">CPDC Inventory System</p>
+            <p style="margin: 0; color: #a1a1aa;">© 2026 CPDC. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

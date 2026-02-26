@@ -16,6 +16,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@hookform/resolvers": "^5.2.2",
+    "@sentry/react": "^10.40.0",
     "@tabler/icons-react": "^3.36.1",
     "@tanstack/react-query": "^5.90.21",
     "@tanstack/react-table": "^8.21.3",
@@ -33,11 +34,11 @@
     "react-hook-form": "^7.71.1",
     "react-resizable-panels": "^4.6.4",
     "react-router-dom": "^7.13.0",
+    "react-window": "^1.8.8",
     "recharts": "^2.15.4",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.1",
     "vaul": "^1.1.2",
-    "react-window": "^1.8.8",
     "zod": "^4.3.6"
   },
   "devDependencies": {

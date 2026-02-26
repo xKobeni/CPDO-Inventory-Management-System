@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
-import { Users, Search, MoreHorizontal, RefreshCw } from "lucide-react"
+import { Users, Search, MoreHorizontal, RefreshCw, Copy, KeyRound } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -8,6 +8,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Table,
   TableBody,
@@ -95,9 +96,33 @@ export default function UsersPage() {
   ]
 
   const [addForm, setAddForm] = useState({ name: "", email: "", password: "", role: "STAFF" })
+  const [useGeneratedPassword, setUseGeneratedPassword] = useState(false)
   const [editForm, setEditForm] = useState({ name: "", role: "STAFF", isActive: true })
   const [resetForm, setResetForm] = useState({ newPassword: "" })
   const [submitting, setSubmitting] = useState(false)
+
+  const generateRandomPassword = () => {
+    const length = 12
+    const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
+    let password = ""
+    for (let i = 0; i < length; i++) {
+      password += charset.charAt(Math.floor(Math.random() * charset.length))
+    }
+    return password
+  }
+
+  const handleGeneratePassword = () => {
+    const newPassword = generateRandomPassword()
+    setAddForm((p) => ({ ...p, password: newPassword }))
+    toast.success("Temporary password generated")
+  }
+
+  const handleCopyPassword = () => {
+    if (addForm.password) {
+      navigator.clipboard.writeText(addForm.password)
+      toast.success("Password copied to clipboard")
+    }
+  }
 
   const fetchUsers = useCallback(async (showToast = false) => {
     setLoading(true)
@@ -144,6 +169,7 @@ export default function UsersPage() {
       toast.success("User created. A verification email was sent—they must verify before signing in.")
       setAddOpen(false)
       setAddForm({ name: "", email: "", password: "", role: "STAFF" })
+      setUseGeneratedPassword(false)
       fetchUsers()
     } catch (err) {
       toast.error(getErrorMessage(err))
@@ -212,6 +238,21 @@ export default function UsersPage() {
     try {
       await usersService.activateUser(actionConfirm.user._id)
       toast.success("User activated.")
+      setActionConfirm(null)
+      fetchUsers()
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!actionConfirm?.user) return
+    setSubmitting(true)
+    try {
+      await usersService.deleteUser(actionConfirm.user._id)
+      toast.success("User deleted successfully.")
       setActionConfirm(null)
       fetchUsers()
     } catch (err) {
@@ -422,6 +463,7 @@ export default function UsersPage() {
                     onResetPassword={() => openReset(user)}
                     onDeactivate={() => setActionConfirm({ type: "deactivate", user })}
                     onActivate={() => setActionConfirm({ type: "activate", user })}
+                    onDelete={() => setActionConfirm({ type: "delete", user })}
                   />
                 ))
               )}
@@ -461,14 +503,64 @@ export default function UsersPage() {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="add-password">Password</Label>
-              <Input
-                id="add-password"
-                type="password"
-                value={addForm.password}
-                onChange={(e) => setAddForm((p) => ({ ...p, password: e.target.value }))}
-                placeholder="Min 8 characters"
-              />
+              <div className="flex items-center justify-between">
+                <Label htmlFor="add-password">Password</Label>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="use-generated"
+                    checked={useGeneratedPassword}
+                    onCheckedChange={(checked) => {
+                      setUseGeneratedPassword(checked)
+                      if (checked) {
+                        handleGeneratePassword()
+                      } else {
+                        setAddForm((p) => ({ ...p, password: "" }))
+                      }
+                    }}
+                  />
+                  <Label htmlFor="use-generated" className="text-sm font-normal cursor-pointer">
+                    Generate temp password
+                  </Label>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  id="add-password"
+                  type={useGeneratedPassword ? "text" : "password"}
+                  value={addForm.password}
+                  onChange={(e) => setAddForm((p) => ({ ...p, password: e.target.value }))}
+                  placeholder="Min 8 characters"
+                  readOnly={useGeneratedPassword}
+                  className={useGeneratedPassword ? "font-mono" : ""}
+                />
+                {useGeneratedPassword && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={handleGeneratePassword}
+                      title="Generate new password"
+                    >
+                      <KeyRound className="size-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={handleCopyPassword}
+                      title="Copy password"
+                    >
+                      <Copy className="size-4" />
+                    </Button>
+                  </>
+                )}
+              </div>
+              {useGeneratedPassword && addForm.password && (
+                <p className="text-xs text-muted-foreground">
+                  ⚠️ Save this password - it won't be shown again after creation.
+                </p>
+              )}
             </div>
             <div className="grid gap-2">
               <Label>Role</Label>
@@ -584,7 +676,7 @@ export default function UsersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Deactivate / Activate confirm */}
+      {/* Deactivate / Activate / Delete confirm */}
       <AlertDialog
         open={!!actionConfirm}
         onOpenChange={(open) => !open && setActionConfirm(null)}
@@ -592,22 +684,33 @@ export default function UsersPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {actionConfirm?.type === "deactivate" ? "Deactivate user?" : "Activate user?"}
+              {actionConfirm?.type === "deactivate" 
+                ? "Deactivate user?" 
+                : actionConfirm?.type === "delete" 
+                ? "Delete user?" 
+                : "Activate user?"}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {actionConfirm?.type === "deactivate"
                 ? `Deactivating ${actionConfirm?.user?.name ?? actionConfirm?.user?.email} will prevent them from logging in.`
+                : actionConfirm?.type === "delete"
+                ? (
+                  <div className="space-y-2">
+                    <p>Are you sure you want to permanently delete <strong>{actionConfirm?.user?.name ?? actionConfirm?.user?.email}</strong>?</p>
+                    <p className="text-destructive font-semibold">⚠️ This action cannot be undone. All user data will be permanently removed.</p>
+                  </div>
+                )
                 : `Reactivate ${actionConfirm?.user?.name ?? actionConfirm?.user?.email} so they can log in again.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={actionConfirm?.type === "deactivate" ? handleDeactivate : handleActivate}
+              onClick={actionConfirm?.type === "deactivate" ? handleDeactivate : actionConfirm?.type === "delete" ? handleDelete : handleActivate}
               disabled={submitting}
-              className={actionConfirm?.type === "deactivate" ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}
+              className={(actionConfirm?.type === "deactivate" || actionConfirm?.type === "delete") ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}
             >
-              {submitting ? "…" : actionConfirm?.type === "deactivate" ? "Deactivate" : "Activate"}
+              {submitting ? "…" : actionConfirm?.type === "deactivate" ? "Deactivate" : actionConfirm?.type === "delete" ? "Delete" : "Activate"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -825,7 +928,7 @@ export default function UsersPage() {
   )
 }
 
-function UserRow({ user, onEdit, onResetPassword, onDeactivate, onActivate }) {
+function UserRow({ user, onEdit, onResetPassword, onDeactivate, onActivate, onDelete }) {
   const roleLabel = user.role === "ADMIN" ? "Admin" : user.role === "STAFF" ? "Staff" : user.role ?? "—"
   const status = user.isActive !== false ? "Active" : "Inactive"
   const created = user.createdAt
@@ -877,7 +980,12 @@ function UserRow({ user, onEdit, onResetPassword, onDeactivate, onActivate }) {
                 Deactivate
               </DropdownMenuItem>
             ) : (
-              <DropdownMenuItem onClick={onActivate}>Activate</DropdownMenuItem>
+              <>
+                <DropdownMenuItem onClick={onActivate}>Activate</DropdownMenuItem>
+                <DropdownMenuItem onClick={onDelete} className="text-destructive">
+                  Delete User
+                </DropdownMenuItem>
+              </>
             )}
           </DropdownMenuContent>
         </DropdownMenu>
