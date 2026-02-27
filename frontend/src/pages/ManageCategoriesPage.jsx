@@ -38,6 +38,8 @@ import {
 } from "@/components/ui/select"
 import { useCategories, slugFromName } from "@/contexts/CategoriesContext"
 import { toast } from "sonner"
+import { FloatingHelpButton } from "@/components/HelpButton"
+import { manageCategoriesTutorialSteps } from "@/constants/tutorialSteps"
 
 export default function ManageCategoriesPage() {
   const { categories, loading, error, refreshCategories, setIconOverride, ICON_MAP, ICON_OPTIONS } = useCategories()
@@ -89,7 +91,10 @@ export default function ManageCategoriesPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      {/* Floating Help Button for Tutorial */}
+      <FloatingHelpButton steps={manageCategoriesTutorialSteps} pageId="manageCategories" />
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between" data-tutorial="manage-header">
         <div className="min-w-0">
           <Breadcrumb>
             <BreadcrumbList>
@@ -118,7 +123,7 @@ export default function ManageCategoriesPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={openAdd}>
+          <Button onClick={openAdd} data-tutorial="add-category-btn">
             <Plus className="size-4" />
             Add Category
           </Button>
@@ -127,6 +132,7 @@ export default function ManageCategoriesPage() {
             size="icon"
             onClick={() => refreshCategories()?.then(() => toast.success("Categories refreshed."))?.catch(() => {})}
             disabled={loading}
+            data-tutorial="refresh-categories-btn"
           >
             <RefreshCw className="size-4" />
             <span className="sr-only">Refresh</span>
@@ -145,7 +151,7 @@ export default function ManageCategoriesPage() {
 
       <section className="min-w-0 overflow-hidden rounded-xl border bg-white">
         <div className="flex flex-col gap-3 border-b px-4 py-3 lg:px-6 md:flex-row md:items-center md:justify-between">
-          <div className="relative max-w-sm flex-1">
+          <div className="relative max-w-sm flex-1" data-tutorial="categories-search">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="text"
@@ -156,7 +162,7 @@ export default function ManageCategoriesPage() {
             />
           </div>
         </div>
-        <div className="w-full min-w-0 overflow-x-auto px-4 lg:px-6">
+        <div className="w-full min-w-0 overflow-x-auto px-4 lg:px-6" data-tutorial="categories-table">
           <div className="inline-block min-w-full rounded-lg border">
             <Table className="w-full table-auto">
               <TableHeader className="bg-muted sticky top-0 z-10">
@@ -167,7 +173,7 @@ export default function ManageCategoriesPage() {
                   <TableHead className="px-3 whitespace-nowrap">Type</TableHead>
                   <TableHead className="px-3 whitespace-nowrap">Icon</TableHead>
                   <TableHead className="px-3 text-right whitespace-nowrap">Items</TableHead>
-                  <TableHead className="px-3 w-12 whitespace-nowrap">Actions</TableHead>
+                  <TableHead className="px-3 w-12 whitespace-nowrap" data-tutorial="category-actions">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

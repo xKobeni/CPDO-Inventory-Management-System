@@ -31,6 +31,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { FloatingHelpButton } from "@/components/HelpButton"
+import { inventoryMovementsTutorialSteps } from "@/constants/tutorialSteps"
 import { itemsService, transactionsService } from "@/services"
 import { getErrorMessage } from "@/utils/api"
 
@@ -220,7 +222,7 @@ export default function InventoryMovementsPage() {
 
   return (
     <div className="mx-auto flex min-w-0 w-full max-w-[1400px] flex-col gap-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between" data-tutorial="movements-header">
         <div className="min-w-0">
           <Breadcrumb>
             <BreadcrumbList>
@@ -242,8 +244,14 @@ export default function InventoryMovementsPage() {
             Track quantity changes for supplies across stock in and stock out.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="icon" onClick={() => fetchTransactions(true)} disabled={txLoading}>
+        <div className="flex flex-wrap gap-2" data-tutorial="action-buttons">
+          <Button 
+            variant="outline" 
+            size="icon" 
+            onClick={() => fetchTransactions(true)} 
+            disabled={txLoading}
+            data-tutorial="refresh-movements-btn"
+          >
             <RefreshCw className="size-4" />
             <span className="sr-only">Refresh</span>
           </Button>
@@ -262,7 +270,7 @@ export default function InventoryMovementsPage() {
         </div>
       )}
 
-      <section className="@container/main grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <section className="@container/main grid grid-cols-1 gap-4 sm:grid-cols-3" data-tutorial="summary-cards">
         <Card>
           <CardHeader>
             <CardDescription>Total In</CardDescription>
@@ -286,7 +294,7 @@ export default function InventoryMovementsPage() {
       <section className="min-w-0 overflow-hidden rounded-xl border bg-white">
         <div className="flex flex-col gap-3 border-b px-4 py-3 lg:px-6">
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative max-w-sm flex-1 min-w-[180px]">
+            <div className="relative max-w-sm flex-1 min-w-[180px]" data-tutorial="search-input">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="text"
@@ -296,7 +304,7 @@ export default function InventoryMovementsPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <div className="min-w-[150px]">
+            <div className="min-w-[150px]" data-tutorial="type-filter">
               <Select value={typeFilter} onValueChange={setTypeFilter}>
                 <SelectTrigger>
                   <SelectValue placeholder="Type" />
@@ -308,7 +316,7 @@ export default function InventoryMovementsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2" data-tutorial="date-filters">
               <Label htmlFor="date-from-mv" className="text-muted-foreground text-xs whitespace-nowrap">From</Label>
               <Input
                 id="date-from-mv"
@@ -328,7 +336,7 @@ export default function InventoryMovementsPage() {
                 className="w-[140px]"
               />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2" data-tutorial="page-size">
               <Label className="text-muted-foreground text-xs whitespace-nowrap">Rows</Label>
               <Select value={String(pageSize)} onValueChange={(v) => setPageSize(parseInt(v, 10))}>
                 <SelectTrigger className="w-[90px]">
@@ -346,7 +354,7 @@ export default function InventoryMovementsPage() {
 
         <div className="w-full min-w-0 overflow-x-auto px-4 lg:px-6">
           <div className="inline-block min-w-full rounded-lg border">
-            <Table className="w-max min-w-full table-auto">
+            <Table className="w-max min-w-full table-auto" data-tutorial="movements-table">
               <TableHeader className="bg-muted sticky top-0 z-10">
                 <TableRow>
                   <TableHead className="px-3 whitespace-nowrap">Date</TableHead>
@@ -424,7 +432,7 @@ export default function InventoryMovementsPage() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between" data-tutorial="pagination">
           <span>Showing {startRow}–{endRow} of {totalFiltered} movement entries</span>
           <div className="flex items-center gap-2">
             <Button
@@ -449,6 +457,8 @@ export default function InventoryMovementsPage() {
           </div>
         </div>
       </section>
+      
+      <FloatingHelpButton steps={inventoryMovementsTutorialSteps} pageId="inventoryMovements" />
     </div>
   )
 }

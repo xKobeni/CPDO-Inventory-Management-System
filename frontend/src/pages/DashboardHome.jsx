@@ -45,6 +45,8 @@ import { dashboardService } from "@/services"
 import { peopleService } from "@/services"
 import { itemsService } from "@/services"
 import { getErrorMessage } from "@/utils/api"
+import { FloatingHelpButton } from "@/components/HelpButton"
+import { dashboardTutorialSteps } from "@/constants/tutorialSteps"
 
 const CHART_COLORS = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4"]
 
@@ -388,8 +390,11 @@ export default function DashboardHome() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-8 pb-8">
+      {/* Floating Help Button for Tutorial */}
+      <FloatingHelpButton steps={dashboardTutorialSteps} pageId="dashboard" />
+
       {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between" data-tutorial="dashboard-header">
         <div className="min-w-0">
           <h1 className="truncate text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
             Dashboard
@@ -399,10 +404,10 @@ export default function DashboardHome() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button asChild>
+          <Button asChild data-tutorial="view-inventory-btn">
             <Link to="/items">View inventory</Link>
           </Button>
-          <Button asChild variant="outline">
+          <Button asChild variant="outline" data-tutorial="reports-btn">
             <Link to="/reports">Reports</Link>
           </Button>
         </div>
@@ -415,45 +420,55 @@ export default function DashboardHome() {
       )}
 
       {/* KPI Cards */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-        <StatCard
-          title="Total items"
-          value={loading ? "…" : kpis.activeItems}
-          description="Active supplies + assets"
-          icon={Boxes}
-        />
-        <StatCard
-          title="Supplies"
-          value={loading ? "…" : kpis.totalSupplies}
-          description="Consumable items"
-          icon={Package}
-        />
-        <StatCard
-          title="Assets"
-          value={loading ? "…" : kpis.totalAssets}
-          description={`${kpis.deployedAssets ?? 0} deployed`}
-          icon={Cpu}
-        />
-        <StatCard
-          title="Out of stock"
-          value={loading ? "…" : kpis.outOfStockCount}
-          description="Supplies with zero quantity"
-          icon={AlertTriangle}
-          variant="danger"
-          href="/items/out-of-stock"
-        />
-        <StatCard
-          title="Low stock"
-          value={loading ? "…" : kpis.lowStockCount}
-          description="At or below reorder level"
-          icon={TrendingDown}
-          variant="warning"
-          href="/items/low-stock"
-        />
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5" data-tutorial="kpi-cards">
+        <div data-tutorial="total-items-card">
+          <StatCard
+            title="Total items"
+            value={loading ? "…" : kpis.activeItems}
+            description="Active supplies + assets"
+            icon={Boxes}
+          />
+        </div>
+        <div data-tutorial="supplies-card">
+          <StatCard
+            title="Supplies"
+            value={loading ? "…" : kpis.totalSupplies}
+            description="Consumable items"
+            icon={Package}
+          />
+        </div>
+        <div data-tutorial="assets-card">
+          <StatCard
+            title="Assets"
+            value={loading ? "…" : kpis.totalAssets}
+            description={`${kpis.deployedAssets ?? 0} deployed`}
+            icon={Cpu}
+          />
+        </div>
+        <div data-tutorial="out-of-stock-card">
+          <StatCard
+            title="Out of stock"
+            value={loading ? "…" : kpis.outOfStockCount}
+            description="Supplies with zero quantity"
+            icon={AlertTriangle}
+            variant="danger"
+            href="/items/out-of-stock"
+          />
+        </div>
+        <div data-tutorial="low-stock-card">
+          <StatCard
+            title="Low stock"
+            value={loading ? "…" : kpis.lowStockCount}
+            description="At or below reorder level"
+            icon={TrendingDown}
+            variant="warning"
+            href="/items/low-stock"
+          />
+        </div>
       </section>
 
       {/* People stats (only total) */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tutorial="people-stats">
         <div className="lg:col-span-2">
           <StatCard
             title="People — Total"
@@ -466,7 +481,7 @@ export default function DashboardHome() {
       </section>
 
       {/* Second row: Transactions today / month */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tutorial="transaction-cards">
         <StatCard
           title="Transactions today"
           value={loading ? "…" : kpis.txToday}
@@ -482,7 +497,7 @@ export default function DashboardHome() {
       </section>
 
       {/* Charts + Quick actions */}
-      <section className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <section className="grid grid-cols-1 gap-6 lg:grid-cols-12" data-tutorial="charts-section">
         <div className="space-y-6 lg:col-span-12">
           <TransactionsChart data={charts.transactionsByDay} />
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -493,7 +508,7 @@ export default function DashboardHome() {
       </section>
 
       {/* Recent activity */}
-      <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900" data-tutorial="recent-activity">
         <div className="border-b border-zinc-200 px-4 py-4 dark:border-zinc-800 lg:px-6">
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Recent activity</h2>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">

@@ -48,6 +48,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { FloatingHelpButton } from "@/components/HelpButton"
+import { userManagementTutorialSteps } from "@/constants/tutorialSteps"
 import { usersService, peopleService } from "@/services"
 import { getErrorMessage } from "@/utils/api"
 import { usePeople } from "@/contexts/PeopleContext"
@@ -358,7 +360,7 @@ export default function UsersPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between" data-tutorial="users-header">
         <div className="min-w-0">
           <h1 className="truncate text-xl font-semibold tracking-tight text-zinc-900">
             User Management
@@ -368,12 +370,18 @@ export default function UsersPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="icon" onClick={() => fetchUsers(true)} disabled={loading}>
+          <Button 
+            variant="outline" 
+            size="icon" 
+            onClick={() => fetchUsers(true)} 
+            disabled={loading}
+            data-tutorial="refresh-users-btn"
+          >
             <RefreshCw className="size-4" />
             <span className="sr-only">Refresh</span>
           </Button>
-          <Button onClick={() => setAddOpen(true)}>Add User</Button>
-          <Button variant="outline" onClick={() => setPeopleOpen(true)}>People Management</Button>
+          <Button onClick={() => setAddOpen(true)} data-tutorial="add-user-btn">Add User</Button>
+          <Button variant="outline" onClick={() => setPeopleOpen(true)} data-tutorial="people-management-btn">People Management</Button>
           <Button asChild variant="outline">
             <Link to="/items">View inventory</Link>
           </Button>
@@ -386,7 +394,7 @@ export default function UsersPage() {
         </div>
       )}
 
-      <section className="@container/main grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="@container/main grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tutorial="user-stats">
         <Card>
           <CardHeader>
             <CardDescription>Total Users</CardDescription>
@@ -415,7 +423,7 @@ export default function UsersPage() {
 
       <section className="overflow-hidden rounded-xl border bg-white">
         <div className="flex flex-col gap-3 border-b px-4 py-3 lg:px-6 md:flex-row md:items-center md:justify-between">
-          <div className="relative w-full md:max-w-sm">
+          <div className="relative w-full md:max-w-sm" data-tutorial="users-search">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="text"
@@ -427,7 +435,7 @@ export default function UsersPage() {
           </div>
           <div className="flex gap-2">
             <Select value={roleFilter || "_"} onValueChange={(v) => setRoleFilter(v === "_" ? "" : v)}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-[140px]" data-tutorial="role-filter">
                 <SelectValue placeholder="All Roles" />
               </SelectTrigger>
               <SelectContent>
@@ -439,7 +447,7 @@ export default function UsersPage() {
               </SelectContent>
             </Select>
             <Select value={activeFilter || "_"} onValueChange={(v) => setActiveFilter(v === "_" ? "" : v)}>
-              <SelectTrigger className="w-[120px]">
+              <SelectTrigger className="w-[120px]" data-tutorial="status-filter">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -453,7 +461,7 @@ export default function UsersPage() {
           </div>
         </div>
         <div className="overflow-x-auto">
-          <Table>
+          <Table data-tutorial="users-table">
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -461,7 +469,7 @@ export default function UsersPage() {
                 <TableHead>Role</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Created</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="text-right" data-tutorial="user-actions">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -968,6 +976,8 @@ export default function UsersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      <FloatingHelpButton steps={userManagementTutorialSteps} pageId="userManagement" />
     </div>
   )
 }

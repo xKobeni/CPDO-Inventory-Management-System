@@ -121,14 +121,15 @@ export default function StockOutPage() {
     setSubmitting(true)
     try {
       const payload = {
-        type: "ISSUANCE",
         items: lines.map((line) => ({
           itemId: line.itemId,
           qty: parseInt(line.qty, 10),
         })),
-        purpose: `${purpose}${remarks.trim() ? ": " + remarks.trim() : ""}`,
+        issuedToOffice: "INVENTORY ADJUSTMENT",
+        issuedToPerson: "System",
+        purpose: `Stock Out - ${purpose}${remarks.trim() ? ": " + remarks.trim() : ""}`,
       }
-      await transactionsService.createTransaction(payload)
+      await transactionsService.createIssuance(payload)
       toast.success("Stock out recorded successfully")
       setLines([{ itemId: "", qty: 1 }])
       setPurpose("usage")

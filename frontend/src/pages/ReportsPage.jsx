@@ -36,6 +36,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { FloatingHelpButton } from "@/components/HelpButton"
+import { reportsTutorialSteps } from "@/constants/tutorialSteps"
 import { itemsService, transactionsService, exportService } from "@/services"
 import { getErrorMessage } from "@/utils/api"
 import { useCategories } from "@/contexts/CategoriesContext"
@@ -262,7 +264,7 @@ export default function ReportsPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between" data-tutorial="reports-header">
         <div className="min-w-0">
           <Breadcrumb>
             <BreadcrumbList>
@@ -306,7 +308,7 @@ export default function ReportsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
+              <div className="space-y-2" data-tutorial="report-type-selector">
                 <Label htmlFor="report-type">Report Type</Label>
                 <Select value={reportType} onValueChange={handleReportTypeChange}>
                   <SelectTrigger id="report-type">
@@ -321,7 +323,7 @@ export default function ReportsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2" data-tutorial="date-range-controls">
                 <Label>Date Range</Label>
                 <Select
                   value={dateRangePreset}
@@ -355,7 +357,7 @@ export default function ReportsPage() {
             </div>
 
             {reportType === "issuance" && (
-              <div className="space-y-2">
+              <div className="space-y-2" data-tutorial="issuance-item-filter">
                 <Label htmlFor="issuance-item-type">Item type</Label>
                 <Select
                   id="issuance-item-type"
@@ -375,7 +377,7 @@ export default function ReportsPage() {
             )}
 
             {reportType && (
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2" data-tutorial="report-filters">
                 <div className="space-y-2">
                   <Label htmlFor="filter-category">Category</Label>
                   <Select value={filterCategory || "_all"} onValueChange={(v) => setFilterCategory(v === "_all" ? "" : v)}>
@@ -415,14 +417,14 @@ export default function ReportsPage() {
             )}
 
             <div className="flex flex-wrap gap-2">
-              <Button onClick={handleGenerate} disabled={loading}>
+              <Button onClick={handleGenerate} disabled={loading} data-tutorial="generate-report-btn">
                 <BarChart3 className="size-4" />
                 {loading ? "Loading…" : "Generate Report"}
               </Button>
               {hasResults && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline">
+                    <Button variant="outline" data-tutorial="export-dropdown">
                       <Download className="size-4" />
                       Export
                     </Button>
@@ -444,7 +446,7 @@ export default function ReportsPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card data-tutorial="report-summary">
           <CardHeader>
             <CardDescription>Summary</CardDescription>
             <CardTitle className="text-2xl font-semibold tabular-nums">
@@ -462,7 +464,7 @@ export default function ReportsPage() {
       </section>
 
       {hasResults && (
-        <section className="overflow-hidden rounded-xl border bg-white">
+        <section className="overflow-hidden rounded-xl border bg-white" data-tutorial="results-table">
           <div className="border-b px-4 py-3 lg:px-6">
             <h2 className="text-sm font-semibold text-zinc-900">Report Results</h2>
             <p className="text-xs text-muted-foreground">
@@ -680,6 +682,8 @@ export default function ReportsPage() {
           </div>
         </section>
       )}
+      
+      <FloatingHelpButton steps={reportsTutorialSteps} pageId="reports" />
     </div>
   )
 }

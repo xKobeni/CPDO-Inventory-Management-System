@@ -22,6 +22,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { FloatingHelpButton } from "@/components/HelpButton"
+import { auditLogsTutorialSteps } from "@/constants/tutorialSteps"
 import { dashboardService, exportService } from "@/services"
 import { getErrorMessage } from "@/utils/api"
 
@@ -151,7 +153,7 @@ export default function AuditLogsPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between" data-tutorial="audit-header">
         <div className="min-w-0">
           <h1 className="truncate text-xl font-semibold tracking-tight text-zinc-900">
             Audit Logs
@@ -161,11 +163,23 @@ export default function AuditLogsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="icon" onClick={fetchLogs} disabled={loading}>
+          <Button 
+            variant="outline" 
+            size="icon" 
+            onClick={fetchLogs} 
+            disabled={loading}
+            data-tutorial="refresh-logs-btn"
+          >
             <RefreshCw className="size-4" />
             <span className="sr-only">Refresh</span>
           </Button>
-          <Button variant="outline" size="icon" onClick={handleDownload} disabled={downloading}>
+          <Button 
+            variant="outline" 
+            size="icon" 
+            onClick={handleDownload} 
+            disabled={downloading}
+            data-tutorial="download-logs-btn"
+          >
             <Download className="size-4" />
             <span className="sr-only">Download</span>
           </Button>
@@ -184,7 +198,7 @@ export default function AuditLogsPage() {
       <section className="overflow-hidden rounded-xl border bg-white">
         <div className="flex flex-col gap-3 border-b px-4 py-3 lg:px-6">
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative max-w-sm flex-1 min-w-[180px]">
+            <div className="relative max-w-sm flex-1 min-w-[180px]" data-tutorial="logs-search">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="text"
@@ -194,7 +208,7 @@ export default function AuditLogsPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2" data-tutorial="date-filters">
               <Label htmlFor="date-from-audit" className="text-muted-foreground text-xs whitespace-nowrap">From</Label>
               <Input
                 id="date-from-audit"
@@ -217,7 +231,7 @@ export default function AuditLogsPage() {
           </div>
         </div>
         <div className="overflow-x-auto">
-          <Table>
+          <Table data-tutorial="logs-table">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[40px]"></TableHead>
@@ -243,7 +257,7 @@ export default function AuditLogsPage() {
                 </TableRow>
               ) : (
                 <>
-                  {paginated.map((log) => {
+                  {paginated.map((log, index) => {
                     const isExpanded = expandedRows.has(log._id)
                     const hasMeta = log.meta && Object.keys(log.meta).length > 0
                     return (
@@ -253,7 +267,7 @@ export default function AuditLogsPage() {
                           className={`${isExpanded ? "border-b-0" : ""} ${hasMeta ? "cursor-pointer hover:bg-muted/50" : ""}`}
                           onClick={() => hasMeta && toggleRow(log._id)}
                         >
-                          <TableCell>
+                          <TableCell {...(index === 0 && hasMeta ? { 'data-tutorial': 'expandable-row' } : {})}>
                             {hasMeta && (
                               isExpanded ? (
                                 <ChevronUp className="size-4 text-muted-foreground" />
@@ -320,7 +334,7 @@ export default function AuditLogsPage() {
             <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
               <span>Showing {startRow}–{endRow} of {totalFiltered}</span>
               <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1) }}>
-                <SelectTrigger className="h-8 w-[70px]">
+                <SelectTrigger className="h-8 w-[70px]" data-tutorial="page-size-selector">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -331,7 +345,7 @@ export default function AuditLogsPage() {
               </Select>
               <span>per page</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2" data-tutorial="pagination">
               <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
                 <ChevronLeft className="size-4" /> Previous
               </Button>
@@ -343,6 +357,8 @@ export default function AuditLogsPage() {
           </div>
         )}
       </section>
+      
+      <FloatingHelpButton steps={auditLogsTutorialSteps} pageId="auditLogs" />
     </div>
   )
 }

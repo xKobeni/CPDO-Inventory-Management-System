@@ -87,6 +87,8 @@ import { usePeople } from "@/contexts/PeopleContext"
 import { itemsService } from "@/services"
 import { getErrorMessage } from "@/utils/api"
 import { toast } from "sonner"
+import { FloatingHelpButton } from "@/components/HelpButton"
+import { categoryItemsTutorialSteps } from "@/constants/tutorialSteps"
 
 const UNIT_OPTIONS = ["pcs", "boxes", "units", "sets"]
 
@@ -1116,7 +1118,10 @@ export default function CategoryItemsPage() {
   return (
     <>
     <div className="mx-auto flex min-w-0 w-full max-w-[1400px] flex-col gap-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      {/* Floating Help Button for Tutorial */}
+      <FloatingHelpButton steps={categoryItemsTutorialSteps} pageId="categoryItems" />
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between" data-tutorial="category-header">
         <div className="min-w-0">
           <Breadcrumb>
             <BreadcrumbList>
@@ -1145,11 +1150,11 @@ export default function CategoryItemsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={openAdd}>
+          <Button onClick={openAdd} data-tutorial="add-item-btn">
             <Plus className="size-4" />
             Add Item
           </Button>
-          <Button variant="outline" size="icon" onClick={() => loadItems(true)} disabled={loading}>
+          <Button variant="outline" size="icon" onClick={() => loadItems(true)} disabled={loading} data-tutorial="refresh-items-btn">
             <RefreshCw className="size-4" />
             <span className="sr-only">Refresh</span>
           </Button>
@@ -1163,7 +1168,7 @@ export default function CategoryItemsPage() {
       )}
 
       <section className="@container/main grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="sm:col-span-2">
+        <div className="sm:col-span-2" data-tutorial="value-card">
           <Card>
             <CardHeader>
               <CardDescription>Total Asset Value</CardDescription>
@@ -1172,7 +1177,7 @@ export default function CategoryItemsPage() {
             </CardHeader>
           </Card>
         </div>
-        <div className="sm:col-span-1">
+        <div className="sm:col-span-1" data-tutorial="summary-card">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -1213,10 +1218,10 @@ export default function CategoryItemsPage() {
         </div>
       </section>
 
-      <section className="min-w-0 overflow-hidden rounded-xl border bg-white">
+      <section className="min-w-0 overflow-hidden rounded-xl border bg-white" data-tutorial="items-table">
         <div className="flex flex-col gap-3 border-b px-4 py-3 lg:px-6 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-1 flex-wrap items-center gap-3">
-            <div className="relative max-w-sm flex-1 min-w-[200px]">
+            <div className="relative max-w-sm flex-1 min-w-[200px]" data-tutorial="items-search">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="text"
@@ -1227,7 +1232,7 @@ export default function CategoryItemsPage() {
               />
             </div>
             <Select value={statusFilter || "_"} onValueChange={(v) => setStatusFilter(v === "_" ? "" : v)}>
-              <SelectTrigger className="w-[160px]">
+              <SelectTrigger className="w-[160px]" data-tutorial="status-filter">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -1239,7 +1244,7 @@ export default function CategoryItemsPage() {
               </SelectContent>
             </Select>
             <Select value={archiveFilter} onValueChange={setArchiveFilter}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-[140px]" data-tutorial="archive-filter">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1250,7 +1255,7 @@ export default function CategoryItemsPage() {
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" data-tutorial="customize-columns-btn">
                 <IconLayoutColumns className="size-4" />
                 <span className="hidden lg:inline">Customize Columns</span>
                 <span className="lg:hidden">Columns</span>
@@ -1365,7 +1370,7 @@ export default function CategoryItemsPage() {
             </div>
           </DndContext>
           {(items.length > 0 || totalFiltered > 0) && (
-            <div className="flex flex-col gap-3 border-t px-4 py-3 lg:px-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 border-t px-4 py-3 lg:px-6 sm:flex-row sm:items-center sm:justify-between" data-tutorial="pagination">
               <div className="flex flex-wrap items-center gap-4 text-sm">
                 <span className="text-muted-foreground">
                   {selectedIds.size > 0 && (

@@ -68,6 +68,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { FloatingHelpButton } from "@/components/HelpButton"
+import { issuanceTutorialSteps } from "@/constants/tutorialSteps"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { getErrorMessage } from "@/utils/api"
 import { usePeople } from "@/contexts/PeopleContext"
@@ -572,7 +574,7 @@ export default function IssuancePage() {
 
   return (
     <div className="mx-auto flex min-w-0 w-full max-w-[1400px] flex-col gap-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between" data-tutorial="issuance-header">
         <div className="min-w-0">
           <Breadcrumb>
             <BreadcrumbList>
@@ -595,11 +597,17 @@ export default function IssuancePage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="icon" onClick={() => fetchTransactions(true)} disabled={txLoading}>
+          <Button 
+            variant="outline" 
+            size="icon" 
+            onClick={() => fetchTransactions(true)} 
+            disabled={txLoading}
+            data-tutorial="refresh-issuance-btn"
+          >
             <RefreshCw className="size-4" />
             <span className="sr-only">Refresh</span>
           </Button>
-          <Button onClick={() => setDrawerOpen(true)}>New Issuance</Button>
+          <Button onClick={() => setDrawerOpen(true)} data-tutorial="new-issuance-btn">New Issuance</Button>
           <Button asChild>
             <Link to="/items">View inventory</Link>
           </Button>
@@ -632,7 +640,7 @@ export default function IssuancePage() {
             </DrawerHeader>
 
             <div className="p-4 space-y-4 overflow-auto flex-1">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2" data-tutorial="issuance-mode-tabs">
                 <Button
                   type="button"
                   variant={issueMode === ISSUE_MODE_SUPPLY ? "secondary" : "ghost"}
@@ -655,6 +663,7 @@ export default function IssuancePage() {
 
               {issueMode === ISSUE_MODE_SUPPLY ? (
                 <>
+                  <div data-tutorial="supply-item-selector">
                   {lines.map((line, idx) => (
                     <div key={idx} className="flex gap-2 items-end">
                       <div className="flex-1 grid gap-2">
@@ -702,8 +711,9 @@ export default function IssuancePage() {
                     <Plus className="size-4" />
                     Add line
                   </Button>
+                  </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-2" data-tutorial="issued-to-person">
                     <Label>Issued to Person *</Label>
                     <Select
                       value={issuedToPerson || ""}
@@ -896,7 +906,7 @@ export default function IssuancePage() {
         <section className="lg:col-span-3 min-w-0 overflow-hidden rounded-xl border bg-white">
           <div className="flex flex-col gap-3 border-b px-4 py-3 lg:px-6">
             <div className="flex flex-wrap items-center gap-3">
-              <div className="relative max-w-sm flex-1 min-w-[200px]">
+              <div className="relative max-w-sm flex-1 min-w-[200px]" data-tutorial="search-issuance">
                 <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   type="text"
@@ -906,7 +916,7 @@ export default function IssuancePage() {
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2" data-tutorial="issuance-filters">
                 <Label htmlFor="date-from-iss" className="text-muted-foreground text-xs whitespace-nowrap">From</Label>
                 <Input
                   id="date-from-iss"
@@ -983,7 +993,7 @@ export default function IssuancePage() {
           </div>
           <div className="w-full min-w-0 overflow-x-auto px-4 lg:px-6">
             <div className="inline-block min-w-full rounded-lg border">
-              <Table className="w-max min-w-full table-auto">
+              <Table className="w-max min-w-full table-auto" data-tutorial="issuance-table">
                 <TableHeader className="bg-muted sticky top-0 z-10">
                   <TableRow>
                     <TableHead className="px-3 whitespace-nowrap">Type</TableHead>
@@ -1149,7 +1159,7 @@ export default function IssuancePage() {
             </div>
           </div>
           {filteredRows.length > 0 && (
-            <div className="flex flex-col gap-3 border-t px-4 py-3 lg:px-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 border-t px-4 py-3 lg:px-6 sm:flex-row sm:items-center sm:justify-between" data-tutorial="issuance-pagination">
               <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                 <span>Showing {startRow}–{endRow} of {totalFiltered}</span>
                 <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1) }}>
@@ -1177,6 +1187,8 @@ export default function IssuancePage() {
           )}
         </section>
       </section>
+      
+      <FloatingHelpButton steps={issuanceTutorialSteps} pageId="issuance" />
     </div>
   )
 }

@@ -14,6 +14,8 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
 import { useCategories } from "@/contexts/CategoriesContext"
+import { FloatingHelpButton } from "@/components/HelpButton"
+import { itemsPageTutorialSteps } from "@/constants/tutorialSteps"
 
 export default function ItemsPage() {
   const { getCategoriesWithIcons, loading, error } = useCategories()
@@ -39,7 +41,10 @@ export default function ItemsPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      {/* Floating Help Button for Tutorial */}
+      <FloatingHelpButton steps={itemsPageTutorialSteps} pageId="items" />
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between" data-tutorial="items-header">
         <div className="min-w-0">
           <Breadcrumb>
             <BreadcrumbList>
@@ -62,13 +67,13 @@ export default function ItemsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline">
+          <Button asChild variant="outline" data-tutorial="low-stock-btn">
             <Link to="/items/low-stock">Low stock</Link>
           </Button>
-          <Button asChild variant="outline">
+          <Button asChild variant="outline" data-tutorial="out-of-stock-btn">
             <Link to="/items/out-of-stock">Out of stock</Link>
           </Button>
-          <Button asChild>
+          <Button asChild data-tutorial="manage-categories-btn">
             <Link to="/items/manage-categories">Manage Categories</Link>
           </Button>
           <Button asChild variant="outline">
@@ -85,7 +90,7 @@ export default function ItemsPage() {
 
       <section className="overflow-hidden rounded-xl border bg-white">
         <div className="flex flex-col gap-4 border-b px-4 py-3 lg:px-6 md:flex-row md:items-center md:justify-between">
-          <div className="relative max-w-sm flex-1">
+          <div className="relative max-w-sm flex-1" data-tutorial="categories-search">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="text"
@@ -95,7 +100,7 @@ export default function ItemsPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2" data-tutorial="category-filters">
             <Button
               variant={filterType === null ? "default" : "outline"}
               onClick={() => setFilterType(null)}
@@ -116,7 +121,7 @@ export default function ItemsPage() {
             </Button>
           </div>
         </div>
-        <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 lg:p-6">
+        <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 lg:p-6" data-tutorial="category-grid">
           {loading ? (
             <div className="col-span-full py-8 text-center text-sm text-muted-foreground">
               Loading categories…
