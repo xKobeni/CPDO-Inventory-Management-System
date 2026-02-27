@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react"
-import { Search, RefreshCw, ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react"
+import { useState, useEffect, useCallback, useMemo } from "react"
+import { Search, RefreshCw, ChevronLeft, ChevronRight, Plus, Trash2, TrendingDown, AlertTriangle, Package } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -14,6 +14,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxValue,
+} from "@/components/ui/combobox"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -55,7 +64,7 @@ export default function StockOutPage() {
   // Stock out form state
   const [supplies, setSupplies] = useState([])
   const [suppliesLoading, setSuppliesLoading] = useState(false)
-  const [lines, setLines] = useState([{ itemId: "", qty: 1 }])
+  const [lines, setLines] = useState([{ itemId: "", qty: 1, searchQuery: "" }])
   const [purpose, setPurpose] = useState("usage")
   const [remarks, setRemarks] = useState("")
   const [submitting, setSubmitting] = useState(false)
@@ -98,12 +107,31 @@ export default function StockOutPage() {
   const setLine = (idx, field, value) => {
     const updated = [...lines]
     updated[idx] = { ...updated[idx], [field]: value }
+    // Reset search query when item changes
+    if (field === "itemId" && value !== updated[idx].itemId) {
+      updated[idx].searchQuery = ""
+    }
     setLines(updated)
   }
 
   const addLine = () => {
-    setLines([...lines, { itemId: "", qty: 1 }])
+    setLines([...lines, { itemId: "", qty: 1, searchQuery: "" }])
   }
+
+  // Get supply item by ID
+  const getSupplyItem = useCallback((itemId) => {
+    return supplies.find((item) => item._id === itemId)
+  }, [supplies])
+
+  // Get filtered supplies for search
+  const getFilteredSupplies = useCallback((query) => {
+    if (!query.trim()) return supplies
+    return supplies.filter((item) => 
+      item.name.toLowerCase().includes(query.toLowerCase()) ||
+      (item.description && item.description.toLowerCase().includes(query.toLowerCase())) ||
+      (item.brand && item.brand.toLowerCase().includes(query.toLowerCase()))
+    )
+  }, [supplies])
 
   const removeLine = (idx) => {
     if (lines.length > 1) {
@@ -131,7 +159,7 @@ export default function StockOutPage() {
       }
       await transactionsService.createIssuance(payload)
       toast.success("Stock out recorded successfully")
-      setLines([{ itemId: "", qty: 1 }])
+      setLines([{ itemId: "", qty: 1, searchQuery: "" }])
       setPurpose("usage")
       setRemarks("")
       fetchTransactions(false)
@@ -264,51 +292,105 @@ export default function StockOutPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {lines.map((line, idx) => (
-              <div key={idx} className="flex gap-2 items-end">
-                <div className="flex-1 grid gap-2">
-                  <Label className="text-xs">Item</Label>
-                  <Select
-                    value={line.itemId}
-                    onValueChange={(v) => setLine(idx, "itemId", v)}
-                  >
-                    <SelectTrigger className="h-8">
-                      <SelectValue placeholder="Select item" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {supplies.map((item) => (
-                        <SelectItem key={item._id} value={item._id}>
-                          {item.name}
-                        </SelectItem>
-                      ))}
-                      {supplies.length === 0 && !suppliesLoading && (
-                        <SelectItem value="_" disabled>No supplies</SelectItem>
+            {lines.map((line, idx) => {
+              const selectedItem = line.itemId ? getSupplyItem(line.itemId) : null
+              const currentStock = selectedItem ? Number(selectedItem.quantityOnHand ?? selectedItem.quantity ?? 0) : 0
+              const isOverStock = line.qty > currentStock
+              const filteredItems = getFilteredSupplies(line.searchQuery)
+              
+              return (
+                <div key={idx} className="space-y-2">
+                  <div className="flex gap-2 items-end">
+                    <div className="flex-1 grid gap-2">
+                      <Label className="text-xs">Item</Label>
+                      <Combobox
+                        value={line.itemId}
+                        onValueChange={(value) => setLine(idx, "itemId", value)}
+                      >
+                        <ComboboxInput
+                          placeholder="Search for an item..."
+                          className="h-8"
+                          value={selectedItem ? selectedItem.name : line.searchQuery}
+                          onValueChange={(value) => setLine(idx, "searchQuery", value)}
+                        />
+                        <ComboboxContent>
+                          <ComboboxList>
+                            <ComboboxEmpty>No items found</ComboboxEmpty>
+                            {filteredItems.map((item) => (
+                              <ComboboxItem key={item._id} value={item._id}>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between">
+                                    <span className="truncate">{item.name}</span>
+                                    <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0 ml-2">
+                                      <Package className="size-3" />
+                                      <span className={`font-medium ${
+                                        Number(item.quantityOnHand ?? item.quantity ?? 0) <= 0 ? 'text-red-500' : 
+                                        Number(item.quantityOnHand ?? item.quantity ?? 0) <= 10 ? 'text-orange-500' : 'text-green-600'
+                                      }`}>
+                                        {Number(item.quantityOnHand ?? item.quantity ?? 0)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  {item.description && (
+                                    <div className="text-xs text-muted-foreground truncate">
+                                      {item.description}
+                                    </div>
+                                  )}
+                                </div>
+                              </ComboboxItem>
+                            ))}
+                          </ComboboxList>
+                        </ComboboxContent>
+                      </Combobox>
+                    </div>
+                    <div className="w-20 grid gap-2">
+                      <Label className="text-xs">Qty</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={currentStock}
+                        className={`h-8 ${
+                          isOverStock && selectedItem ? 'border-red-500 focus-visible:ring-red-500' : ''
+                        }`}
+                        value={line.qty}
+                        onChange={(e) => setLine(idx, "qty", e.target.value)}
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => removeLine(idx)}
+                      disabled={lines.length <= 1}
+                    >
+                      <Trash2 className="size-3" />
+                    </Button>
+                  </div>
+                  
+                  {selectedItem && (
+                    <div className="flex items-center justify-between text-xs px-2 py-1 bg-muted/30 rounded">
+                      <div className="flex items-center gap-2">
+                        <Package className="size-3" />
+                        <span>Available stock:</span>
+                        <span className={`font-medium ${
+                          currentStock <= 0 ? 'text-red-500' : 
+                          currentStock <= 10 ? 'text-orange-500' : 'text-green-600'
+                        }`}>
+                          {currentStock}
+                        </span>
+                      </div>
+                      {isOverStock && (
+                        <div className="flex items-center gap-1 text-red-500">
+                          <AlertTriangle className="size-3" />
+                          <span>Exceeds available stock</span>
+                        </div>
                       )}
-                    </SelectContent>
-                  </Select>
+                    </div>
+                  )}
                 </div>
-                <div className="w-20 grid gap-2">
-                  <Label className="text-xs">Qty</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    className="h-8"
-                    value={line.qty}
-                    onChange={(e) => setLine(idx, "qty", e.target.value)}
-                  />
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => removeLine(idx)}
-                  disabled={lines.length <= 1}
-                >
-                  <Trash2 className="size-3" />
-                </Button>
-              </div>
-            ))}
+              )
+            })}
             <Button type="button" variant="outline" size="sm" className="w-full h-8" onClick={addLine}>
               <Plus className="size-3" />
               Add line
@@ -345,7 +427,15 @@ export default function StockOutPage() {
               <Button 
                 className="flex-1 h-8" 
                 onClick={handleSubmit} 
-                disabled={submitting || lines.some((line) => !line.itemId || line.qty < 1)}
+                disabled={
+                  submitting || 
+                  lines.some((line) => {
+                    if (!line.itemId || line.qty < 1) return true
+                    const item = getSupplyItem(line.itemId)
+                    const stock = item ? Number(item.quantityOnHand ?? item.quantity ?? 0) : 0
+                    return line.qty > stock
+                  })
+                }
               >
                 {submitting ? "Recording…" : "Record Stock Out"}
               </Button>
@@ -394,7 +484,7 @@ export default function StockOutPage() {
                 <TableHeader className="bg-muted sticky top-0 z-10">
                   <TableRow>
                     <TableHead className="px-3 whitespace-nowrap">Date</TableHead>
-                    <TableHead className="px-3 whitespace-nowrap">Items</TableHead>
+                    <TableHead className="px-3 whitespace-nowrap">Items Reduced</TableHead>
                     <TableHead className="px-3 whitespace-nowrap">Department</TableHead>
                     <TableHead className="px-3 whitespace-nowrap">Released By</TableHead>
                   </TableRow>
@@ -416,10 +506,13 @@ export default function StockOutPage() {
                     paginatedTx.map((tx) => (
                       <TableRow key={tx._id}>
                         <TableCell className="px-3 tabular-nums">
-                          {tx.createdAt ? new Date(tx.createdAt).toLocaleString() : "—"}
+                          {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString() : "—"}
                         </TableCell>
                         <TableCell className="px-3 text-sm">
-                          {(tx.items ?? []).map((i) => `${i.qty}× ${i.itemId?.name ?? "—"}`).join(", ")}
+                          <div className="flex items-center gap-2">
+                            <TrendingDown className="size-4 text-red-500 shrink-0" />
+                            <span>{(tx.items ?? []).map((i) => `${i.qty}× ${i.itemId?.name ?? "—"}`).join(", ")}</span>
+                          </div>
                         </TableCell>
                         <TableCell className="px-3">{tx.issuedToOffice ?? "—"}</TableCell>
                         <TableCell className="px-3">{tx.createdBy?.name ?? "—"}</TableCell>

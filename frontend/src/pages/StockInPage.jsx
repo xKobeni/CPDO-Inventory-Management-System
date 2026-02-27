@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react"
-import { Search, Plus, Trash2, Package, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react"
+import { useState, useEffect, useCallback, useMemo } from "react"
+import { Search, Plus, Trash2, Package, RefreshCw, ChevronLeft, ChevronRight, TrendingUp, AlertCircle } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -30,6 +30,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxValue,
+} from "@/components/ui/combobox"
 import { itemsService, transactionsService } from "@/services"
 import { getErrorMessage } from "@/utils/api"
 
@@ -59,9 +68,8 @@ export default function StockInPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
-  const [lines, setLines] = useState([{ itemId: "", qty: 1 }])
-  const [supplier, setSupplier] = useState("")
-  const [referenceNo, setReferenceNo] = useState("")
+  const [lines, setLines] = useState([{ itemId: "", qty: 1, searchQuery: "" }])
+  const [remarks, setRemarks] = useState("")
   const [submitting, setSubmitting] = useState(false)
 
   const fetchSupplies = useCallback(async () => {
@@ -112,15 +120,34 @@ export default function StockInPage() {
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
   }).length
 
-  const addLine = () => setLines((prev) => [...prev, { itemId: "", qty: 1 }])
+  const addLine = () => setLines((prev) => [...prev, { itemId: "", qty: 1, searchQuery: "" }])
   const removeLine = (idx) => setLines((prev) => prev.filter((_, i) => i !== idx))
   const setLine = (idx, field, value) => {
     setLines((prev) => {
       const next = [...prev]
       next[idx] = { ...next[idx], [field]: field === "qty" ? (parseInt(value, 10) || 0) : value }
+      // Reset search query when item changes
+      if (field === "itemId" && value !== next[idx].itemId) {
+        next[idx].searchQuery = ""
+      }
       return next
     })
   }
+
+  // Get supply item by ID
+  const getSupplyItem = useCallback((itemId) => {
+    return supplies.find((item) => item._id === itemId)
+  }, [supplies])
+
+  // Get filtered supplies for search
+  const getFilteredSupplies = useCallback((query) => {
+    if (!query.trim()) return supplies
+    return supplies.filter((item) => 
+      item.name.toLowerCase().includes(query.toLowerCase()) ||
+      (item.description && item.description.toLowerCase().includes(query.toLowerCase())) ||
+      (item.brand && item.brand.toLowerCase().includes(query.toLowerCase()))
+    )
+  }, [supplies])
 
   const handleSubmit = async () => {
     const items = lines
@@ -134,13 +161,11 @@ export default function StockInPage() {
     try {
       await transactionsService.createStockIn({
         items,
-        supplier: supplier.trim() || undefined,
-        referenceNo: referenceNo.trim() || undefined,
+        referenceNo: remarks.trim() || undefined,
       })
       toast.success("Stock In recorded.")
-      setLines([{ itemId: "", qty: 1 }])
-      setSupplier("")
-      setReferenceNo("")
+      setLines([{ itemId: "", qty: 1, searchQuery: "" }])
+      setRemarks("")
       fetchTransactions()
     } catch (err) {
       toast.error(getErrorMessage(err))
@@ -162,10 +187,9 @@ export default function StockInPage() {
     if (search.trim()) {
       const s = search.toLowerCase()
       const by = (t.createdBy?.name ?? "").toLowerCase()
-      const sup = (t.supplier ?? "").toLowerCase()
-      const ref = (t.referenceNo ?? "").toLowerCase()
+      const ref = (t.referenceNo ?? "").toLowerCase() 
       const itemNames = (t.items ?? []).map((i) => (i.itemId?.name ?? "").toLowerCase()).join(" ")
-      if (!by.includes(s) && !sup.includes(s) && !ref.includes(s) && !itemNames.includes(s)) return false
+      if (!by.includes(s) && !ref.includes(s) && !itemNames.includes(s)) return false
     }
     return true
   })
@@ -283,69 +307,107 @@ export default function StockInPage() {
           <CardContent className="space-y-4">
             {mode === STOCK_IN_MODE_SUPPLY ? (
               <>
-            {lines.map((line, idx) => (
-              <div key={idx} className="flex gap-2 items-end">
-                <div className="flex-1 grid gap-2">
-                  <Label>Item</Label>
-                  <Select
-                    value={line.itemId}
-                    onValueChange={(v) => setLine(idx, "itemId", v)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select supply" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {supplies.map((item) => (
-                        <SelectItem key={item._id} value={item._id}>
-                          {item.name}
-                        </SelectItem>
-                      ))}
-                      {supplies.length === 0 && !loading && (
-                        <SelectItem value="_" disabled>No supplies</SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
+            {lines.map((line, idx) => {
+              const selectedItem = line.itemId ? getSupplyItem(line.itemId) : null
+              const currentStock = selectedItem ? Number(selectedItem.quantityOnHand ?? selectedItem.quantity ?? 0) : 0
+              const filteredItems = getFilteredSupplies(line.searchQuery)
+              
+              return (
+                <div key={idx} className="space-y-2">
+                  <div key={idx} className="flex gap-2 items-end">
+                    <div className="flex-1 grid gap-2">
+                      <Label>Item</Label>
+                      <Combobox
+                        value={line.itemId}
+                        onValueChange={(value) => setLine(idx, "itemId", value)}
+                      >
+                        <ComboboxInput
+                          placeholder="Search for an item..."
+                          value={selectedItem ? selectedItem.name : line.searchQuery}
+                          onValueChange={(value) => setLine(idx, "searchQuery", value)}
+                        />
+                        <ComboboxContent>
+                          <ComboboxList>
+                            <ComboboxEmpty>No items found</ComboboxEmpty>
+                            {filteredItems.map((item) => (
+                              <ComboboxItem key={item._id} value={item._id}>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between">
+                                    <span className="truncate">{item.name}</span>
+                                    <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0 ml-2">
+                                      <Package className="size-3" />
+                                      <span className={`font-medium ${
+                                        Number(item.quantityOnHand ?? item.quantity ?? 0) <= 0 ? 'text-red-500' : 
+                                        Number(item.quantityOnHand ?? item.quantity ?? 0) <= 10 ? 'text-orange-500' : 'text-green-600'
+                                      }`}>
+                                        {Number(item.quantityOnHand ?? item.quantity ?? 0)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  {item.description && (
+                                    <div className="text-xs text-muted-foreground truncate">
+                                      {item.description}
+                                    </div>
+                                  )}
+                                </div>
+                              </ComboboxItem>
+                            ))}
+                          </ComboboxList>
+                        </ComboboxContent>
+                      </Combobox>
+                    </div>
+                    <div className="w-24 grid gap-2">
+                      <Label>Qty</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={line.qty}
+                        onChange={(e) => setLine(idx, "qty", e.target.value)}
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeLine(idx)}
+                      disabled={lines.length <= 1}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                  
+                  {selectedItem && (
+                    <div className="flex items-center justify-between text-xs px-2 py-1 bg-muted/30 rounded">
+                      <div className="flex items-center gap-2">
+                        <Package className="size-3" />
+                        <span>Current stock:</span>
+                        <span className={`font-medium ${
+                          currentStock <= 0 ? 'text-red-500' : 
+                          currentStock <= 10 ? 'text-orange-500' : 'text-green-600'
+                        }`}>
+                          {currentStock}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 text-green-600">
+                        <TrendingUp className="size-3" />
+                        <span>Adding stock</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="w-24 grid gap-2">
-                  <Label>Qty</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={line.qty}
-                    onChange={(e) => setLine(idx, "qty", e.target.value)}
-                  />
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeLine(idx)}
-                  disabled={lines.length <= 1}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </div>
-            ))}
+              )
+            })}
             <Button type="button" variant="outline" size="sm" onClick={addLine}>
               <Plus className="size-4" />
               Add line
             </Button>
             <div className="space-y-2">
-              <Label htmlFor="supplier-in">Supplier (optional)</Label>
+              <Label htmlFor="remarks-in">Remarks (optional)</Label>
               <Input
-                id="supplier-in"
-                value={supplier}
-                onChange={(e) => setSupplier(e.target.value)}
-                placeholder="Supplier"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="ref-in">Reference No. (optional)</Label>
-              <Input
-                id="ref-in"
-                value={referenceNo}
-                onChange={(e) => setReferenceNo(e.target.value)}
-                placeholder="Reference"
+                id="remarks-in"
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                placeholder="Additional notes or reference"
               />
             </div>
             <Button className="w-full" onClick={handleSubmit} disabled={submitting || loading}>
@@ -404,8 +466,8 @@ export default function StockInPage() {
                 <TableHeader className="bg-muted sticky top-0 z-10">
                   <TableRow>
                     <TableHead className="px-3 whitespace-nowrap">Date</TableHead>
-                    <TableHead className="px-3 whitespace-nowrap">Items</TableHead>
-                    <TableHead className="px-3 whitespace-nowrap">Supplier</TableHead>
+                    <TableHead className="px-3 whitespace-nowrap">Items Added</TableHead>
+                    <TableHead className="px-3 whitespace-nowrap">Remarks</TableHead>
                     <TableHead className="px-3 whitespace-nowrap">Recorded By</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -426,12 +488,15 @@ export default function StockInPage() {
                     paginatedTx.map((tx) => (
                       <TableRow key={tx._id}>
                         <TableCell className="px-3 tabular-nums">
-                          {tx.createdAt ? new Date(tx.createdAt).toLocaleString() : "—"}
+                          {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString() : "—"}
                         </TableCell>
                         <TableCell className="px-3 text-sm">
-                          {(tx.items ?? []).map((i) => `${i.qty}× ${i.itemId?.name ?? "—"}`).join(", ")}
+                          <div className="flex items-center gap-2">
+                            <TrendingUp className="size-4 text-green-500 shrink-0" />
+                            <span>{(tx.items ?? []).map((i) => `${i.qty}× ${i.itemId?.name ?? "—"}`).join(", ")}</span>
+                          </div>
                         </TableCell>
-                        <TableCell className="px-3">{tx.supplier ?? "—"}</TableCell>
+                        <TableCell className="px-3">{tx.referenceNo ?? "—"}</TableCell>
                         <TableCell className="px-3">{tx.createdBy?.name ?? "—"}</TableCell>
                       </TableRow>
                     ))
