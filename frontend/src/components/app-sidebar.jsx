@@ -5,6 +5,7 @@ import {
   Package,
   ArrowDownToLine,
   ArrowUpFromLine,
+  ArrowLeftRight,
   ClipboardList,
   FileBarChart2,
   Users,
@@ -32,6 +33,7 @@ const mainNav = [
   { to: "/items", label: "Inventory", icon: Package },
   { to: "/stock/in", label: "Stock In", icon: ArrowDownToLine },
   { to: "/stock/out", label: "Stock Out", icon: ArrowUpFromLine },
+  { to: "/inventory/movements", label: "Movements", icon: ArrowLeftRight },
   { to: "/issuance", label: "Issuance", icon: ClipboardList },
   { to: "/reports", label: "Reports", icon: FileBarChart2 },
 ]
@@ -41,8 +43,12 @@ const adminNav = [
   { to: "/admin/audit-logs", label: "Audit Logs", icon: Shield },
 ]
 
+const staffNav = [
+  { to: "/staff/settings", label: "Staff Settings", icon: Settings },
+]
+
 const secondaryNav = [
-  { to: "/settings", label: "Settings", icon: Settings },
+  { to: "/settings", label: "Account Settings", icon: Settings },
 ]
 
 export function AppSidebar(props) {
@@ -106,6 +112,29 @@ export function AppSidebar(props) {
               <SidebarGroupContent>
                 <SidebarMenu>
                   {adminNav.map((item) => (
+                    <SidebarMenuItem key={item.to}>
+                      <SidebarMenuButton asChild isActive={location.pathname === item.to}>
+                        <Link to={item.to}>
+                          <item.icon className="size-4" />
+                          <span>{item.label}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </>
+        )}
+
+        {user?.role === "staff" && (
+          <>
+            <SidebarSeparator />
+            <SidebarGroup>
+              <SidebarGroupLabel>Staff</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {staffNav.map((item) => (
                     <SidebarMenuItem key={item.to}>
                       <SidebarMenuButton asChild isActive={location.pathname === item.to}>
                         <Link to={item.to}>

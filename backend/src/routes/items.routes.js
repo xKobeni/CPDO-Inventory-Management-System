@@ -8,6 +8,8 @@ import {
   createItem,
   updateItem,
   archiveItem,
+  restoreItem,
+  deleteItem,
   lowStock,
   assignAsset,
   returnAsset,
@@ -115,6 +117,8 @@ r.get("/low-stock", requireAuth, requireRole("ADMIN", "STAFF"), lowStock);
 r.post("/", requireAuth, requireRole("ADMIN", "STAFF"), validateBody(itemSchema), createItem);
 r.put("/:id", requireAuth, requireRole("ADMIN", "STAFF"), validateBody(itemUpdateSchema), updateItem);
 r.post("/:id/archive", requireAuth, requireRole("ADMIN", "STAFF"), archiveItem);
+r.post("/:id/restore", requireAuth, requireRole("ADMIN", "STAFF"), restoreItem);
+r.delete("/:id", requireAuth, requireRole("ADMIN", "STAFF"), deleteItem);
 
 // ASSET actions
 r.post("/:id/assign", requireAuth, requireRole("ADMIN", "STAFF"), validateBody(assignSchema), assignAsset);

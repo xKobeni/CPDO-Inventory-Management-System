@@ -21,6 +21,8 @@ import StockOutPage from "@/pages/StockOutPage"
 import IssuancePage from "@/pages/IssuancePage"
 import ReportsPage from "@/pages/ReportsPage"
 import SettingsPage from "@/pages/SettingsPage"
+import StaffSettingsPage from "@/pages/StaffSettingsPage"
+import InventoryMovementsPage from "@/pages/InventoryMovementsPage"
 
 // admin:
 import UsersPage from "@/pages/UsersPage"
@@ -52,8 +54,17 @@ export const router = createBrowserRouter([
           { path: "/stock/in", element: <StockInPage /> },
           { path: "/stock/out", element: <StockOutPage /> },
           { path: "/issuance", element: <IssuancePage /> },
+          { path: "/inventory/movements", element: <InventoryMovementsPage /> },
           { path: "/reports", element: <ReportsPage /> },
           { path: "/settings", element: <SettingsPage /> },
+
+          // Staff-only routes
+          {
+            element: <ProtectedRoute allowRoles={[ROLES.STAFF]} />,
+            children: [
+              { path: "/staff/settings", element: <StaffSettingsPage /> },
+            ],
+          },
 
           // Admin-only routes
           {

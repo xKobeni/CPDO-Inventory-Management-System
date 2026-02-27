@@ -4,6 +4,8 @@ import { AlertTriangle, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -27,6 +29,27 @@ export default function LowStockPage() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [search, setSearch] = useState("")
+  const [categoryFilter, setCategoryFilter] = useState("all")
+
+  const categories = Array.from(
+    new Set((items || []).map((item) => item.category || "Uncategorized"))
+  ).sort((a, b) => a.localeCompare(b))
+
+  const filteredItems = (items || []).filter((item) => {
+    const name = (item.name || "").toLowerCase()
+    const category = (item.category || "Uncategorized").toLowerCase()
+    const matchesCategory = categoryFilter === "all"
+      ? true
+      : (item.category || "Uncategorized") === categoryFilter
+    const q = search.trim().toLowerCase()
+    const matchesSearch = q ? name.includes(q) || category.includes(q) : true
+    return matchesCategory && matchesSearch
+  })
+
+  const totalQuantity = (items || []).reduce((sum, item) => {
+    return sum + Number(item.quantityOnHand ?? item.quantity ?? 0)
+  }, 0)
 
   const load = async (showToast = false) => {
     setLoading(true)
@@ -96,6 +119,57 @@ export default function LowStockPage() {
         </div>
       )}
 
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardDescription>Low stock items</CardDescription>
+            <CardTitle className="text-2xl font-semibold tabular-nums">
+              {items.length}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Categories affected</CardDescription>
+            <CardTitle className="text-2xl font-semibold tabular-nums">
+              {categories.length}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Total on-hand qty</CardDescription>
+            <CardTitle className="text-2xl font-semibold tabular-nums">
+              {totalQuantity.toLocaleString()}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+      </section>
+
+      <section className="flex flex-col gap-3 rounded-xl border bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-1 items-center gap-3">
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search items or categories"
+            className="max-w-sm"
+          />
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="all">All categories</option>
+            {categories.map((cat) => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
+        </div>
+        <div className="text-sm text-muted-foreground">
+          Showing {filteredItems.length} of {items.length}
+        </div>
+      </section>
+
       <section className="min-w-0 overflow-hidden rounded-xl border bg-white">
         <div className="w-full min-w-0 overflow-x-auto">
           <Table className="w-full table-auto">
@@ -115,14 +189,14 @@ export default function LowStockPage() {
                     Loading…
                   </TableCell>
                 </TableRow>
-              ) : items.length === 0 ? (
+              ) : filteredItems.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                    No low stock items. All supply quantities are above reorder level.
+                    No low stock items match your filters.
                   </TableCell>
                 </TableRow>
               ) : (
-                items.map((item, i) => (
+                filteredItems.map((item, i) => (
                   <TableRow key={item._id ?? item.id ?? i}>
                     <TableCell className="px-3 py-2 font-medium">
                       <Link

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
-import { Search, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react"
+import { Search, RefreshCw, ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -30,7 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { transactionsService } from "@/services"
+import { itemsService, transactionsService } from "@/services"
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50]
 function todayStr() {
@@ -52,6 +52,14 @@ export default function StockOutPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
+  // Stock out form state
+  const [supplies, setSupplies] = useState([])
+  const [suppliesLoading, setSuppliesLoading] = useState(false)
+  const [lines, setLines] = useState([{ itemId: "", qty: 1 }])
+  const [purpose, setPurpose] = useState("usage")
+  const [remarks, setRemarks] = useState("")
+  const [submitting, setSubmitting] = useState(false)
+
   const fetchTransactions = useCallback(async (showToast = false) => {
     setTxLoading(true)
     setError(null)
@@ -69,9 +77,70 @@ export default function StockOutPage() {
     }
   }, [])
 
+  const fetchSupplies = useCallback(async () => {
+    setSuppliesLoading(true)
+    try {
+      const data = await itemsService.listItems({ type: "SUPPLY", archived: "false" })
+      setSupplies(data)
+    } catch (err) {
+      toast.error("Failed to load supplies")
+      setSupplies([])
+    } finally {
+      setSuppliesLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     fetchTransactions()
-  }, [fetchTransactions])
+    fetchSupplies()
+  }, [fetchTransactions, fetchSupplies])
+
+  const setLine = (idx, field, value) => {
+    const updated = [...lines]
+    updated[idx] = { ...updated[idx], [field]: value }
+    setLines(updated)
+  }
+
+  const addLine = () => {
+    setLines([...lines, { itemId: "", qty: 1 }])
+  }
+
+  const removeLine = (idx) => {
+    if (lines.length > 1) {
+      setLines(lines.filter((_, i) => i !== idx))
+    }
+  }
+
+  const handleSubmit = async () => {
+    // Validate form
+    if (lines.some((line) => !line.itemId || line.qty < 1)) {
+      toast.error("Please fill in all items and quantities")
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const payload = {
+        type: "ISSUANCE",
+        items: lines.map((line) => ({
+          itemId: line.itemId,
+          qty: parseInt(line.qty, 10),
+        })),
+        purpose: `${purpose}${remarks.trim() ? ": " + remarks.trim() : ""}`,
+      }
+      await transactionsService.createTransaction(payload)
+      toast.success("Stock out recorded successfully")
+      setLines([{ itemId: "", qty: 1 }])
+      setPurpose("usage")
+      setRemarks("")
+      fetchTransactions(false)
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.message || "Failed to record stock out"
+      toast.error(msg)
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   const outToday = transactions.filter((t) => {
     const d = t.createdAt ? new Date(t.createdAt) : null
@@ -190,13 +259,96 @@ export default function StockOutPage() {
           <CardHeader>
             <CardTitle className="text-base">Record stock out</CardTitle>
             <CardDescription>
-              Supply releases are recorded on the Issuance page. Use the button below to add a new issuance.
+              Record supply reduction with reason
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <Button asChild className="w-full">
-              <Link to="/issuance">Go to Issuance</Link>
+          <CardContent className="space-y-4">
+            {lines.map((line, idx) => (
+              <div key={idx} className="flex gap-2 items-end">
+                <div className="flex-1 grid gap-2">
+                  <Label className="text-xs">Item</Label>
+                  <Select
+                    value={line.itemId}
+                    onValueChange={(v) => setLine(idx, "itemId", v)}
+                  >
+                    <SelectTrigger className="h-8">
+                      <SelectValue placeholder="Select item" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {supplies.map((item) => (
+                        <SelectItem key={item._id} value={item._id}>
+                          {item.name}
+                        </SelectItem>
+                      ))}
+                      {supplies.length === 0 && !suppliesLoading && (
+                        <SelectItem value="_" disabled>No supplies</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="w-20 grid gap-2">
+                  <Label className="text-xs">Qty</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    className="h-8"
+                    value={line.qty}
+                    onChange={(e) => setLine(idx, "qty", e.target.value)}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => removeLine(idx)}
+                  disabled={lines.length <= 1}
+                >
+                  <Trash2 className="size-3" />
+                </Button>
+              </div>
+            ))}
+            <Button type="button" variant="outline" size="sm" className="w-full h-8" onClick={addLine}>
+              <Plus className="size-3" />
+              Add line
             </Button>
+
+            <div className="grid gap-2">
+              <Label htmlFor="purpose-so" className="text-xs">Reason *</Label>
+              <Select value={purpose} onValueChange={setPurpose}>
+                <SelectTrigger id="purpose-so" className="h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="usage">Usage</SelectItem>
+                  <SelectItem value="missing">Missing</SelectItem>
+                  <SelectItem value="damaged">Damaged</SelectItem>
+                  <SelectItem value="disposal">Disposal</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="remarks-so" className="text-xs">Notes (optional)</Label>
+              <Input
+                id="remarks-so"
+                className="h-8"
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                placeholder="Additional details"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <Button 
+                className="flex-1 h-8" 
+                onClick={handleSubmit} 
+                disabled={submitting || lines.some((line) => !line.itemId || line.qty < 1)}
+              >
+                {submitting ? "Recording…" : "Record Stock Out"}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 

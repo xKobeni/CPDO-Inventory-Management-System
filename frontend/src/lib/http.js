@@ -10,9 +10,35 @@ export const http = axios.create({
 let isRefreshing = false
 let failedQueue = []
 
-// Store CSRF token
+// Store CSRF token & last fetch time
 let csrfToken = null
 let lastCsrfFetch = null
+
+// Get CSRF token from memory or sessionStorage
+function getCsrfToken() {
+  if (csrfToken) return csrfToken
+  
+  // Try to recover from sessionStorage
+  const stored = sessionStorage.getItem("csrfToken")
+  const storedTime = sessionStorage.getItem("csrfTokenTime")
+  if (stored && storedTime) {
+    const age = Date.now() - parseInt(storedTime)
+    if (age < 24 * 60 * 60 * 1000) { // Still valid (24 hours)
+      csrfToken = stored
+      lastCsrfFetch = parseInt(storedTime)
+      return csrfToken
+    }
+  }
+  return null
+}
+
+// Set CSRF token in memory and sessionStorage
+function setCsrfToken(token) {
+  csrfToken = token
+  lastCsrfFetch = Date.now()
+  sessionStorage.setItem("csrfToken", token)
+  sessionStorage.setItem("csrfTokenTime", lastCsrfFetch.toString())
+}
 
 // Fetch CSRF token from server
 export async function fetchCsrfToken() {
@@ -21,12 +47,11 @@ export async function fetchCsrfToken() {
       `${import.meta.env.VITE_API_BASE_URL}/csrf-token`,
       { withCredentials: true }
     )
-    csrfToken = data.csrfToken
-    lastCsrfFetch = Date.now()
+    setCsrfToken(data.csrfToken)
     return csrfToken
   } catch (err) {
     console.error("Failed to fetch CSRF token:", err)
-    return null
+    return getCsrfToken()
   }
 }
 
@@ -48,13 +73,15 @@ http.interceptors.request.use(async (config) => {
   
   // Add CSRF token for non-GET requests
   if (!["GET", "HEAD", "OPTIONS"].includes(config.method?.toUpperCase())) {
-    // Refresh CSRF token if we don't have one or if it's older than 12 hours
+    // Refresh CSRF token if we don't have one or if it's older than 24 hours (matches backend expire time)
+    let currentToken = getCsrfToken()
     const tokenAge = lastCsrfFetch ? Date.now() - lastCsrfFetch : Infinity
-    if (!csrfToken || tokenAge > 12 * 60 * 60 * 1000) {
+    if (!currentToken || tokenAge > 24 * 60 * 60 * 1000) {
       await fetchCsrfToken()
+      currentToken = getCsrfToken()
     }
-    if (csrfToken) {
-      config.headers["X-CSRF-Token"] = csrfToken
+    if (currentToken) {
+      config.headers["X-CSRF-Token"] = currentToken
     }
   }
   
@@ -70,8 +97,9 @@ http.interceptors.response.use(
     if (err?.response?.status === 403 && (err?.response?.data?.code === "CSRF_TOKEN_INVALID" || err?.response?.data?.code === "CSRF_TOKEN_MISSING")) {
       csrfToken = null
       await fetchCsrfToken()
-      if (csrfToken && originalRequest.headers) {
-        originalRequest.headers["X-CSRF-Token"] = csrfToken
+      const newToken = getCsrfToken()
+      if (newToken && originalRequest.headers) {
+        originalRequest.headers["X-CSRF-Token"] = newToken
         return http(originalRequest)
       }
     }

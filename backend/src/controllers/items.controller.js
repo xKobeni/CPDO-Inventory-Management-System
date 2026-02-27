@@ -76,8 +76,6 @@ export async function createItem(req, res) {
   body.dateAcquired = toDateOrNull(body.dateAcquired);
 
   if (body.itemType === "ASSET") {
-    body.quantityOnHand = 1;
-    body.reorderLevel = 0;
     const pn = body.propertyNumber?.trim();
     if (pn) {
       const existing = await Item.findOne({ propertyNumber: pn });
@@ -185,6 +183,10 @@ export async function updateItem(req, res) {
   const item = await Item.findById(id);
   if (!item) return res.status(404).json({ message: "Item not found" });
 
+  // Track quantity change for SUPPLY items
+  const oldQty = item.itemType === "SUPPLY" ? Number(item.quantityOnHand || 0) : null;
+  const newQty = patch.quantityOnHand != null && item.itemType === "SUPPLY" ? Number(patch.quantityOnHand) : null;
+
   // Prevent changing type in a messy way (simple rule)
   if (patch.itemType && patch.itemType !== item.itemType) {
     // Allow but normalize:
@@ -196,10 +198,8 @@ export async function updateItem(req, res) {
     item[k] = patch[k];
   });
 
-  if (item.itemType === "ASSET") {
-    item.quantityOnHand = 1;
-    item.reorderLevel = 0;
-  }
+  // Assets can now have quantity > 1 (no forced constraints)
+
 
   if (item.itemType === "SUPPLY") {
     item.propertyNumber = null;
@@ -220,16 +220,41 @@ export async function updateItem(req, res) {
     }
   }
 
-  await item.save();
+  const session = await mongoose.startSession();
+  try {
+    session.startTransaction();
 
-  await AuditLog.create({
-    actorId: req.user._id,
-    action: "ITEM_UPDATE",
-    targetType: "Item",
-    targetId: item._id.toString(),
-  });
+    await item.save({ session });
 
-  res.json(item);
+    // Create adjustment transaction if quantity changed for SUPPLY items
+    if (oldQty !== null && newQty !== null && oldQty !== newQty) {
+      const delta = newQty - oldQty;
+      const absDelta = Math.abs(delta);
+      
+      await Transaction.create([{
+        type: "ADJUSTMENT",
+        items: [{ itemId: item._id, qty: absDelta }],
+        purpose: `Manual quantity adjustment: ${oldQty} → ${newQty} (${delta > 0 ? '+' : ''}${delta})`,
+        createdBy: req.user._id,
+      }], { session });
+    }
+
+    await AuditLog.create([{
+      actorId: req.user._id,
+      action: "ITEM_UPDATE",
+      targetType: "Item",
+      targetId: item._id.toString(),
+      meta: oldQty !== null && newQty !== null && oldQty !== newQty ? { qtyChange: { from: oldQty, to: newQty } } : {},
+    }], { session });
+
+    await session.commitTransaction();
+    res.json(item);
+  } catch (e) {
+    await session.abortTransaction();
+    throw e;
+  } finally {
+    session.endSession();
+  }
 }
 
 export async function archiveItem(req, res) {
@@ -245,6 +270,73 @@ export async function archiveItem(req, res) {
   });
 
   res.json(item);
+}
+
+export async function restoreItem(req, res) {
+  const { id } = req.params;
+  const item = await Item.findByIdAndUpdate(id, { isArchived: false }, { new: true });
+  if (!item) return res.status(404).json({ message: "Item not found" });
+
+  await AuditLog.create({
+    actorId: req.user._id,
+    action: "ITEM_RESTORE",
+    targetType: "Item",
+    targetId: item._id.toString(),
+  });
+
+  res.json(item);
+}
+
+export async function deleteItem(req, res) {
+  const session = await mongoose.startSession();
+  try {
+    session.startTransaction();
+
+    const { id } = req.params;
+    const item = await Item.findById(id).session(session);
+    if (!item) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: "Item not found" });
+    }
+
+    // Delete all related transactions
+    const Transaction = (await import("../models/Transaction.js")).default;
+    const deletedTxs = await Transaction.deleteMany(
+      { "items.itemId": id },
+      { session }
+    );
+
+    // Delete the item
+    await item.deleteOne({ session });
+
+    // Log the deletion
+    await AuditLog.create(
+      [{
+        actorId: req.user._id,
+        action: "ITEM_DELETE",
+        targetType: "Item",
+        targetId: item._id.toString(),
+        meta: { 
+          name: item.name, 
+          category: item.category,
+          deletedTransactions: deletedTxs.deletedCount 
+        },
+      }],
+      { session }
+    );
+
+    await session.commitTransaction();
+    res.json({ 
+      message: "Item permanently deleted", 
+      item,
+      deletedTransactions: deletedTxs.deletedCount 
+    });
+  } catch (err) {
+    await session.abortTransaction();
+    throw err;
+  } finally {
+    session.endSession();
+  }
 }
 
 // -------------------- ASSET ACTIONS --------------------

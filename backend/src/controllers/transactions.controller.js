@@ -14,12 +14,6 @@ async function applyStockChange(session, items, direction) {
 
     item.quantityOnHand = nextQty;
     await item.save({ session });
-
-    if (item.itemType === "ASSET") {
-      throw Object.assign(new Error(`Cannot change stock for ASSET item ${item.name}. Use assign/transfer/return.`), {
-        status: 400,
-      });
-    }
   }
 }
 

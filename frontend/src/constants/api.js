@@ -19,6 +19,8 @@ export const API_PATHS = {
   item: (id) => `/items/${id}`,
   itemsLowStock: "/items/low-stock",
   itemArchive: (id) => `/items/${id}/archive`,
+  itemRestore: (id) => `/items/${id}/restore`,
+  itemDelete: (id) => `/items/${id}`,
   itemAssign: (id) => `/items/${id}/assign`,
   itemReturn: (id) => `/items/${id}/return`,
   itemTransfer: (id) => `/items/${id}/transfer`,

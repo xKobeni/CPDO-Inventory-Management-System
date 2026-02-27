@@ -21,7 +21,7 @@ const TransactionSchema = new mongoose.Schema(
   {
     type: {
       type: String,
-      enum: ["STOCK_IN", "ISSUANCE", "ASSET_ASSIGN", "ASSET_RETURN", "ASSET_TRANSFER"],
+      enum: ["STOCK_IN", "ISSUANCE", "ADJUSTMENT", "ASSET_ASSIGN", "ASSET_RETURN", "ASSET_TRANSFER"],
       required: true,
       index: true
     },

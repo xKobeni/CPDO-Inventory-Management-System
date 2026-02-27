@@ -121,10 +121,10 @@ export async function importItems(req, res) {
       if (parsed.itemType === "SUPPLY") {
         patch.quantityOnHand = parsed.quantityOnHand;
         patch.reorderLevel = parsed.reorderLevel;
-        // clear asset-only identifiers if blank is fine; we keep if provided
       } else {
-        patch.quantityOnHand = 1;
-        patch.reorderLevel = 0;
+        // Assets can now have quantity > 1
+        patch.quantityOnHand = parsed.quantityOnHand || 1;
+        patch.reorderLevel = parsed.reorderLevel || 0;
       }
 
       // Determine matching key: ASSET by propertyNumber, SUPPLY by name+category
@@ -156,10 +156,7 @@ export async function importItems(req, res) {
         });
       } else {
         Object.assign(existing, patch);
-        if (existing.itemType === "ASSET") {
-          existing.quantityOnHand = 1;
-          existing.reorderLevel = 0;
-        }
+        // Assets can now have quantity > 1 (no forced constraints)
         await existing.save();
         report.updated++;
 

@@ -17,7 +17,6 @@ import { CSS } from "@dnd-kit/utilities"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
@@ -119,6 +118,7 @@ function displayNA(value) {
   return s === "" ? "N/A" : s
 }
 
+ 
 const defaultAccountablePerson = () => ({ name: "", position: "", office: "CPDC" })
 
 function getEmptyForm(isSupply, categoryName = "General") {
@@ -143,6 +143,7 @@ function getEmptyForm(isSupply, categoryName = "General") {
   }
   return {
     ...base,
+    quantityOnHand: "1",
     propertyNumber: "",
     serialNumber: "",
     brand: "",
@@ -227,6 +228,7 @@ function itemToForm(item, isSupply) {
   }
   return {
     ...base,
+    quantityOnHand: item.quantityOnHand != null && item.quantityOnHand !== "" ? String(item.quantityOnHand) : "1",
     propertyNumber: item.propertyNumber ?? "",
     serialNumber: item.serialNumber ?? "",
     brand: item.brand ?? "",
@@ -242,7 +244,8 @@ const SUPPLY_COLUMNS = [
   { id: "propertyNo", label: "Property No." },
   { id: "name", label: "Name" },
   { id: "category", label: "Category" },
-  { id: "quantity", label: "Quantity" },
+  { id: "quantity", label: "On-Hand Qty" },
+  { id: "reorderLevel", label: "Reorder Level" },
   { id: "unit", label: "Unit" },
   { id: "serialNo", label: "Serial No." },
   { id: "status", label: "Status" },
@@ -255,15 +258,16 @@ const ASSET_COLUMNS = [
   { id: "category", label: "Category" },
   { id: "propertyNo", label: "Property No." },
   { id: "serialNo", label: "Serial No." },
+  { id: "quantity", label: "Quantity" },
   { id: "details", label: "Details" },
   { id: "status", label: "Status" },
   { id: "condition", label: "Condition" },
   { id: "accountability", label: "Accountability" },
   { id: "remarks", label: "Remarks" },
 ]
-const SUPPLY_COL_ORDER = ["drag", "propertyNo", "name", "category", "quantity", "unit", "serialNo", "status", "condition", "accountablePerson", "dateAcquired", "actions"]
-const ASSET_COL_ORDER = ["drag", "name", "category", "propertyNo", "serialNo", "details", "status", "condition", "accountability", "remarks", "actions"]
-const FIXED_COLUMNS = new Set(["drag", "actions"])
+const SUPPLY_COL_ORDER = ["drag", "propertyNo", "name", "category", "quantity", "reorderLevel", "unit", "serialNo", "status", "condition", "accountablePerson", "dateAcquired", "actions"]
+const ASSET_COL_ORDER = ["drag", "name", "category", "propertyNo", "serialNo", "quantity", "details", "status", "condition", "accountability", "remarks", "actions"]
+const FIXED_COLUMNS = new Set(["drag", "actions", "name", "quantity"])
 const isColVisible = (id, visibility) => FIXED_COLUMNS.has(id) || visibility[id] === true
 
 // Column width mappings (in rem or auto).
@@ -274,6 +278,7 @@ const COLUMN_WIDTHS = {
   name: "auto",
   category: "6rem",
   quantity: "5rem",
+  reorderLevel: "5rem",
   unit: "4rem",
   serialNo: "6rem",
   status: "7rem",
@@ -291,6 +296,7 @@ const COLUMN_ALIGNMENT = {
   name: "text-left",
   category: "text-left",
   quantity: "text-right tabular-nums",
+  reorderLevel: "text-right tabular-nums",
   unit: "text-left",
   serialNo: "text-left",
   status: "text-center",
@@ -327,7 +333,7 @@ function StatusBadge({ status }) {
   )
 }
 
-function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, onArchive, columnVisibility, onRowClick }) {
+function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, onArchive, onRestore, onDelete, columnVisibility, onRowClick }) {
   const { attributes, listeners, transform, transition, setNodeRef, isDragging } = useSortable({ id: item.id })
   const nodeRef = React.useRef(null)
   React.useLayoutEffect(() => {
@@ -370,6 +376,14 @@ function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, onArchive, 
             {item.itemType === "SUPPLY"
               ? (Number(item.quantityOnHand) || 0).toLocaleString()
               : "1"}
+          </TableCell>
+        )
+      case "reorderLevel":
+        return (
+          <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>
+            {item.itemType === "SUPPLY" && item.reorderLevel
+              ? (Number(item.reorderLevel) || 0).toLocaleString()
+              : "—"}
           </TableCell>
         )
       case "unit":
@@ -417,13 +431,15 @@ function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, onArchive, 
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-40">
-                <DropdownMenuItem>View</DropdownMenuItem>
-                <DropdownMenuItem>Assign</DropdownMenuItem>
-                <DropdownMenuItem>Transfer</DropdownMenuItem>
-                <DropdownMenuItem>Return</DropdownMenuItem>
-                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => openEdit(item)}>Edit</DropdownMenuItem>
-                <DropdownMenuItem variant="destructive" onClick={() => onArchive?.(item)}>Archive</DropdownMenuItem>
+                {item.isArchived ? (
+                  <>
+                    <DropdownMenuItem onClick={() => onRestore?.(item)}>Restore</DropdownMenuItem>
+                    <DropdownMenuItem variant="destructive" onClick={() => onDelete?.(item)}>Delete Permanently</DropdownMenuItem>
+                  </>
+                ) : (
+                  <DropdownMenuItem variant="destructive" onClick={() => onArchive?.(item)}>Archive</DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </TableCell>
@@ -450,7 +466,7 @@ function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, onArchive, 
   )
 }
 
-function SortableRowAsset({ item, selectedIds, toggleRow, openEdit, onArchive, columnVisibility, onRowClick }) {
+function SortableRowAsset({ item, selectedIds, toggleRow, openEdit, onArchive, onRestore, onDelete, columnVisibility, onRowClick }) {
   const { attributes, listeners, transform, transition, setNodeRef, isDragging } = useSortable({ id: item.id })
   const nodeRef = React.useRef(null)
   React.useLayoutEffect(() => {
@@ -495,6 +511,12 @@ function SortableRowAsset({ item, selectedIds, toggleRow, openEdit, onArchive, c
       case "serialNo":
         return (
           <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>{displayNA(item.serialNumber)}</TableCell>
+        )
+      case "quantity":
+        return (
+          <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>
+            {Number(item.quantityOnHand) || 1}
+          </TableCell>
         )
       case "details":
         return (
@@ -546,13 +568,15 @@ function SortableRowAsset({ item, selectedIds, toggleRow, openEdit, onArchive, c
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-40">
-                <DropdownMenuItem>View</DropdownMenuItem>
-                <DropdownMenuItem>Assign</DropdownMenuItem>
-                <DropdownMenuItem>Transfer</DropdownMenuItem>
-                <DropdownMenuItem>Return</DropdownMenuItem>
-                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => openEdit(item)}>Edit</DropdownMenuItem>
-                <DropdownMenuItem variant="destructive" onClick={() => onArchive?.(item)}>Archive</DropdownMenuItem>
+                {item.isArchived ? (
+                  <>
+                    <DropdownMenuItem onClick={() => onRestore?.(item)}>Restore</DropdownMenuItem>
+                    <DropdownMenuItem variant="destructive" onClick={() => onDelete?.(item)}>Delete Permanently</DropdownMenuItem>
+                  </>
+                ) : (
+                  <DropdownMenuItem variant="destructive" onClick={() => onArchive?.(item)}>Archive</DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </TableCell>
@@ -694,6 +718,37 @@ function formToApiPayload(form, isSupply) {
   }
 }
 
+// Build update payload with protected fields excluded
+function formToUpdatePayload(form, isSupply) {
+  const dateAcquired = form.dateAcquired ? new Date(form.dateAcquired).toISOString() : null
+  const unitCost = Number(form.unitCost) || 0
+  const base = {
+    name: (form.name || "").trim(),
+    category: (form.category || "General").trim(),
+    unit: form.unit || "pc",
+    dateAcquired,
+    unitCost,
+    remarks: (form.remarks || "").trim(),
+  }
+  if (isSupply) {
+    return {
+      ...base,
+      quantityOnHand: parseInt(form.quantityOnHand, 10) || 0,
+      reorderLevel: parseInt(form.reorderLevel, 10) || 0,
+      serialNumber: (form.serialNumber || "").trim() || null,
+    }
+  }
+  return {
+    ...base,
+    propertyNumber: (form.propertyNumber || "").trim() || null,
+    serialNumber: (form.serialNumber || "").trim() || null,
+    brand: (form.brand || "").trim(),
+    model: (form.model || "").trim(),
+    division: (form.division || "").trim(),
+    condition: form.condition || "GOOD",
+  }
+}
+
 export default function CategoryItemsPage() {
   const { categorySlug } = useParams()
   const location = useLocation()
@@ -722,7 +777,7 @@ export default function CategoryItemsPage() {
     Object.fromEntries(SUPPLY_COLUMNS.map((c) => [c.id, true]))
   )
   const [assetColumnVisibility, setAssetColumnVisibility] = useState(() => {
-    const defaultHidden = new Set(["serialNo", "accountability"])
+    const defaultHidden = new Set(["serialNo", "accountability", "category"])
     return Object.fromEntries(
       ASSET_COLUMNS.map((c) => [c.id, !defaultHidden.has(c.id)])
     )
@@ -731,6 +786,9 @@ export default function CategoryItemsPage() {
   const [drawerItem, setDrawerItem] = useState(null)
   const [tableSearch, setTableSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("")
+  const [archiveFilter, setArchiveFilter] = useState("active") // "active" | "archived"
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [itemToDelete, setItemToDelete] = useState(null)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const dndId = useId()
@@ -771,6 +829,7 @@ export default function CategoryItemsPage() {
     }
   }
 
+
   const loadItems = useCallback(async (fromRefresh = false) => {
     if (!category?.name) {
       setItems([])
@@ -781,7 +840,7 @@ export default function CategoryItemsPage() {
     try {
       const data = await itemsService.listItems({
         category: category.name,
-        archived: "false",
+        archived: archiveFilter === "archived" ? "true" : "false",
       })
       setItems(data.map((i) => ({ ...i, id: i._id?.toString() ?? i.id ?? i._id })))
       if (fromRefresh) toast.success("Items refreshed.")
@@ -791,7 +850,7 @@ export default function CategoryItemsPage() {
     } finally {
       setLoading(false)
     }
-  }, [category?.name])
+  }, [category?.name, archiveFilter])
 
   useEffect(() => {
     loadItems()
@@ -906,7 +965,46 @@ export default function CategoryItemsPage() {
   const handleEdit = async () => {
     if (!editingItem || !category) return
     const isSupply = category.itemType === "SUPPLY"
-    const payload = formToApiPayload(form, isSupply)
+    
+    // Build ONLY the editable fields - never include protected fields
+    const dateAcquired = form.dateAcquired ? new Date(form.dateAcquired).toISOString() : null
+    const unitCost = Number(form.unitCost) || 0
+    
+    let payload = {
+      name: (form.name || "").trim(),
+      category: (form.category || "General").trim(),
+      unit: form.unit || "pc",
+      dateAcquired,
+      unitCost,
+      remarks: (form.remarks || "").trim(),
+    }
+    
+    if (isSupply) {
+      payload = {
+        ...payload,
+        quantityOnHand: parseInt(form.quantityOnHand, 10) || 0,
+        reorderLevel: parseInt(form.reorderLevel, 10) || 0,
+        serialNumber: (form.serialNumber || "").trim() || null,
+        status: form.status || "IN_STOCK",
+        condition: form.condition || "GOOD",
+      }
+    } else {
+      payload = {
+        ...payload,
+        propertyNumber: (form.propertyNumber || "").trim() || null,
+        serialNumber: (form.serialNumber || "").trim() || null,
+        brand: (form.brand || "").trim(),
+        model: (form.model || "").trim(),
+        division: (form.division || "").trim(),
+        status: form.status || "IN_STOCK",
+        condition: form.condition || "GOOD",
+      }
+    }
+    
+    // FINAL SAFEGUARD: Remove any protected fields that shouldn't exist
+    const protectedFields = ["accountablePerson", "transferredTo", "assignedDate", "returnedDate", "itemType"]
+    protectedFields.forEach(field => delete payload[field])
+    
     const id = editingItem.id ?? editingItem._id
     setSubmitting(true)
     try {
@@ -930,12 +1028,52 @@ export default function CategoryItemsPage() {
     setSubmitting(true)
     try {
       await itemsService.archiveItem(id)
+      // Also update status to DISPOSED
+      await itemsService.updateItem(id, { status: "DISPOSED" })
       setItems((prev) => prev.filter((i) => String(i.id) !== String(id)))
-      toast.success("Item archived.")
+      toast.success("Item archived and marked as disposed.")
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleRestore = async (item) => {
+    const id = item.id ?? item._id
+    setSubmitting(true)
+    try {
+      await itemsService.restoreItem(id)
+      // Also update status to IN_STOCK
+      await itemsService.updateItem(id, { status: "IN_STOCK" })
+      setItems((prev) => prev.filter((i) => String(i.id) !== String(id)))
+      toast.success("Item restored with status set to in stock.")
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleDelete = async (item) => {
+    setItemToDelete(item)
+    setDeleteConfirmOpen(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!itemToDelete) return
+    const id = itemToDelete.id ?? itemToDelete._id
+    setSubmitting(true)
+    try {
+      await itemsService.deleteItem(id)
+      setItems((prev) => prev.filter((i) => String(i.id) !== String(id)))
+      toast.success("Item permanently deleted.")
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setSubmitting(false)
+      setDeleteConfirmOpen(false)
+      setItemToDelete(null)
     }
   }
 
@@ -1007,16 +1145,13 @@ export default function CategoryItemsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="icon" onClick={() => loadItems(true)} disabled={loading}>
-            <RefreshCw className="size-4" />
-            <span className="sr-only">Refresh</span>
-          </Button>
           <Button onClick={openAdd}>
             <Plus className="size-4" />
             Add Item
           </Button>
-          <Button asChild variant="outline">
-            <Link to="/items">All categories</Link>
+          <Button variant="outline" size="icon" onClick={() => loadItems(true)} disabled={loading}>
+            <RefreshCw className="size-4" />
+            <span className="sr-only">Refresh</span>
           </Button>
         </div>
       </div>
@@ -1101,6 +1236,15 @@ export default function CategoryItemsPage() {
                     {o.label}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+            <Select value={archiveFilter} onValueChange={setArchiveFilter}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Active items</SelectItem>
+                <SelectItem value="archived">Archived items</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1194,6 +1338,8 @@ export default function CategoryItemsPage() {
                             toggleRow={toggleRow}
                             openEdit={openEdit}
                             onArchive={handleArchive}
+                            onRestore={handleRestore}
+                            onDelete={handleDelete}
                             columnVisibility={columnVisibility}
                             onRowClick={openDrawer}
                           />
@@ -1205,6 +1351,8 @@ export default function CategoryItemsPage() {
                             toggleRow={toggleRow}
                             openEdit={openEdit}
                             onArchive={handleArchive}
+                            onRestore={handleRestore}
+                            onDelete={handleDelete}
                             columnVisibility={columnVisibility}
                             onRowClick={openDrawer}
                           />
@@ -1459,9 +1607,48 @@ export default function CategoryItemsPage() {
                           placeholder="0"
                         />
                       </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="add-status">Status</Label>
+                        <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}>
+                          <SelectTrigger id="add-status">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {STATUS_OPTIONS.map((o) => (
+                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="add-condition">Condition</Label>
+                        <Select value={form.condition} onValueChange={(v) => setForm((f) => ({ ...f, condition: v }))}>
+                          <SelectTrigger id="add-condition">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {CONDITION_OPTIONS.map((o) => (
+                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </>
                   ) : (
                     <>
+                      <div className="space-y-2">
+                        <Label htmlFor="add-quantity">Quantity</Label>
+                        <Input
+                          id="add-quantity"
+                          type="number"
+                          min={1}
+                          value={form.quantityOnHand}
+                          onChange={(e) => setForm((f) => ({ ...f, quantityOnHand: e.target.value }))}
+                          placeholder="1"
+                          readOnly
+                          className="bg-muted cursor-not-allowed"
+                        />
+                      </div>
                       <div className="space-y-2">
                         <Label htmlFor="add-brand">Brand</Label>
                         <Input
@@ -1731,9 +1918,48 @@ export default function CategoryItemsPage() {
                           placeholder="0"
                         />
                       </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-status">Status</Label>
+                        <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}>
+                          <SelectTrigger id="edit-status">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {STATUS_OPTIONS.map((o) => (
+                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-condition">Condition</Label>
+                        <Select value={form.condition} onValueChange={(v) => setForm((f) => ({ ...f, condition: v }))}>
+                          <SelectTrigger id="edit-condition">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {CONDITION_OPTIONS.map((o) => (
+                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </>
                   ) : (
                     <>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-quantity">Quantity</Label>
+                        <Input
+                          id="edit-quantity"
+                          type="number"
+                          min={1}
+                          value={form.quantityOnHand}
+                          onChange={(e) => setForm((f) => ({ ...f, quantityOnHand: e.target.value }))}
+                          placeholder="1"
+                          readOnly
+                          className="bg-muted cursor-not-allowed"
+                        />
+                      </div>
                       <div className="space-y-2">
                         <Label htmlFor="edit-brand">Brand</Label>
                         <Input
@@ -1928,8 +2154,8 @@ export default function CategoryItemsPage() {
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label className="text-muted-foreground font-medium">Serial No.</Label>
-                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{displayNA(drawerItem.serialNumber)}</p>
+                          <Label className="text-muted-foreground font-medium">Quantity</Label>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm tabular-nums">{Number(drawerItem.quantityOnHand) || 1}</p>
                         </div>
                         <div className="space-y-2">
                           <Label className="text-muted-foreground font-medium">Unit Cost</Label>
@@ -1938,12 +2164,22 @@ export default function CategoryItemsPage() {
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
+                          <Label className="text-muted-foreground font-medium">Serial No.</Label>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{displayNA(drawerItem.serialNumber)}</p>
+                        </div>
+                        <div className="space-y-2">
                           <Label className="text-muted-foreground font-medium">Brand</Label>
                           <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{displayNA(drawerItem.brand)}</p>
                         </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label className="text-muted-foreground font-medium">Model</Label>
                           <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{displayNA(drawerItem.model)}</p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-muted-foreground font-medium">Unit Cost</Label>
+                          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.unitCost != null && drawerItem.unitCost > 0 ? `₱${Number(drawerItem.unitCost).toLocaleString()}` : "N/A"}</p>
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
@@ -1994,6 +2230,30 @@ export default function CategoryItemsPage() {
         </DrawerContent>
       </Drawer>
     </div>
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete item permanently?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete "{itemToDelete?.name}" from the database. This action cannot be undone.
+              {itemToDelete && (
+                <span className="block mt-2 text-red-600 font-medium">
+                  Warning: Only delete items with no transaction history.
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setDeleteConfirmOpen(false); setItemToDelete(null); }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} disabled={submitting} className="bg-red-600 hover:bg-red-700">
+              {submitting ? "Deleting..." : "Delete Permanently"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {blocker.state === "blocked" ? (
         <AlertDialog

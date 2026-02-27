@@ -39,6 +39,16 @@ export async function archiveItem(id) {
   return data
 }
 
+export async function restoreItem(id) {
+  const { data } = await http.post(API_PATHS.itemRestore(id))
+  return data
+}
+
+export async function deleteItem(id) {
+  const { data } = await http.delete(API_PATHS.itemDelete(id))
+  return data
+}
+
 /**
  * @param {string} id - Asset item ID
  * @param {{ accountablePerson?: { name?, position?, office? }, division?: string, remarks?: string, assignedDate?: string }} body

@@ -4,6 +4,7 @@ import {
   Package,
   ArrowDownToLine,
   ArrowUpFromLine,
+  ArrowLeftRight,
   ClipboardList,
   FileBarChart2,
   Users,
@@ -18,6 +19,7 @@ const nav = [
   { to: "/items", label: "Inventory", icon: Package },
   { to: "/stock/in", label: "Stock In", icon: ArrowDownToLine },
   { to: "/stock/out", label: "Stock Out", icon: ArrowUpFromLine },
+  { to: "/inventory/movements", label: "Movements", icon: ArrowLeftRight },
   { to: "/issuance", label: "Issuance", icon: ClipboardList },
   { to: "/reports", label: "Reports", icon: FileBarChart2 },
 ]
