@@ -384,12 +384,12 @@ export default function InventoryMovementsPage() {
                   paginatedRows.map((row) => {
                     const isIn = row.delta > 0
                     const itemName = row.item?.name || "Unknown item"
-                    const itemMeta = [row.item?.category, row.item?.unit].filter(Boolean).join(" • ") || "—"
-                    const remarks = row.tx?.purpose || row.tx?.remarks || "—"
+                    const itemMeta = [row.item?.category, row.item?.unit].filter(Boolean).join(" • ") || "N/A"
+                    const remarks = row.tx?.purpose || row.tx?.remarks || "N/A"
                     return (
                       <TableRow key={row.key}>
                         <TableCell className="px-3 whitespace-nowrap">
-                          {row.tx?.createdAt ? new Date(row.tx.createdAt).toLocaleDateString() : "—"}
+                          {row.tx?.createdAt ? new Date(row.tx.createdAt).toLocaleDateString() : "N/A"}
                         </TableCell>
                         <TableCell className="px-3 min-w-[220px]">
                           <div className="flex flex-col">
@@ -409,19 +409,19 @@ export default function InventoryMovementsPage() {
                         </TableCell>
                         <TableCell className="px-3 whitespace-nowrap">
                           <span className="tabular-nums">
-                            {typeof row.balanceBefore === "number" ? formatQty(row.balanceBefore) : "—"}
+                            {typeof row.balanceBefore === "number" ? formatQty(row.balanceBefore) : "N/A"}
                           </span>
                         </TableCell>
                         <TableCell className="px-3 whitespace-nowrap">
                           <span className="tabular-nums">
-                            {typeof row.balanceAfter === "number" ? formatQty(row.balanceAfter) : "—"}
+                            {typeof row.balanceAfter === "number" ? formatQty(row.balanceAfter) : "N/A"}
                           </span>
                         </TableCell>
                         <TableCell className="px-3 min-w-[200px]">
                           <span className="text-sm text-muted-foreground">{remarks}</span>
                         </TableCell>
                         <TableCell className="px-3 whitespace-nowrap">
-                          {row.tx?.createdBy?.name || "—"}
+                          {row.tx?.createdBy?.name || "N/A"}
                         </TableCell>
                       </TableRow>
                     )

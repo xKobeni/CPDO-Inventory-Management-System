@@ -113,6 +113,34 @@ export async function getDashboardSummary(req, res) {
   startOf14DaysAgo.setDate(startOf14DaysAgo.getDate() - 14);
   startOf14DaysAgo.setHours(0, 0, 0, 0);
 
+  // Supply movements (Stock In vs Stock Out) for last 14 days
+  const supplyMovementsByDay = await Transaction.aggregate([
+    { $match: { createdAt: { $gte: startOf14DaysAgo }, type: { $in: ["STOCK_IN", "ISSUANCE"] } } },
+    {
+      $group: {
+        _id: {
+          date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          type: "$type"
+        },
+        count: { $sum: 1 }
+      }
+    },
+    { $sort: { "_id.date": 1 } },
+    {
+      $group: {
+        _id: "$_id.date",
+        stockIn: {
+          $sum: { $cond: [{ $eq: ["$_id.type", "STOCK_IN"] }, "$count", 0] }
+        },
+        stockOut: {
+          $sum: { $cond: [{ $eq: ["$_id.type", "ISSUANCE"] }, "$count", 0] }
+        }
+      }
+    },
+    { $project: { date: "$_id", stockIn: 1, stockOut: 1, _id: 0 } },
+    { $sort: { date: 1 } }
+  ]);
+
   const [txToday, txThisMonth, recentTransactions, recentAuditLogs, transactionsByDay] = await Promise.all([
     Transaction.countDocuments({ createdAt: { $gte: startOfToday } }),
     Transaction.countDocuments({ createdAt: { $gte: startOfMonth } }),
@@ -181,6 +209,7 @@ export async function getDashboardSummary(req, res) {
       allItemsByCategory,
       valueByCategory,
       transactionsByDay,
+      supplyMovementsByDay,
     },
     previews: {
       lowStockPreview,

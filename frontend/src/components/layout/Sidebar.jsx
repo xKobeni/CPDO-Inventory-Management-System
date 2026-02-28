@@ -31,9 +31,9 @@ const adminNav = [
 ]
 
 const linkBase =
-  "flex items-center gap-3 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2"
-const linkActive = "bg-zinc-900 text-white"
-const linkInactive = "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+  "flex items-center gap-3 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2"
+const linkActive = "bg-sidebar-primary text-sidebar-primary-foreground"
+const linkInactive = "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
 
 function NavItem({ to, label, icon: Icon, collapsed }) {
   const content = (
@@ -74,17 +74,17 @@ export default function Sidebar({ collapsed = false }) {
 
   return (
     <TooltipProvider delayDuration={0}>
-      <aside className="flex h-full w-full flex-col border-r border-zinc-200 bg-white shadow-sm">
+      <aside className="flex h-full w-full flex-col border-r border-sidebar-border bg-sidebar shadow-sm">
         <div className="flex flex-1 flex-col overflow-y-auto">
           {/* Header */}
-          <div className={`flex items-center border-b border-zinc-100 ${collapsed ? "justify-center p-4" : "gap-3 p-3"}`}>
-            <div className={`grid shrink-0 place-items-center rounded-lg bg-zinc-900 text-sm font-semibold text-white ${collapsed ? "h-10 w-10" : "h-9 w-9"}`}>
+          <div className={`flex items-center border-b border-sidebar-border ${collapsed ? "justify-center p-4" : "gap-3 p-3"}`}>
+            <div className={`grid shrink-0 place-items-center rounded-lg bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground ${collapsed ? "h-10 w-10" : "h-9 w-9"}`}>
               CP
             </div>
             {!collapsed && (
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold text-zinc-900">CPDO Inventory</div>
-                <div className="truncate text-xs text-zinc-500">{user?.role ? `Role: ${user.role}` : "Not signed in"}</div>
+                <div className="truncate text-sm font-semibold text-sidebar-foreground">CPDO Inventory</div>
+                <div className="truncate text-xs text-sidebar-foreground/60">{user?.role ? `Role: ${user.role}` : "Not signed in"}</div>
               </div>
             )}
           </div>
@@ -100,7 +100,7 @@ export default function Sidebar({ collapsed = false }) {
             {user?.role === "admin" && (
               <>
                 {!collapsed && (
-                  <div className="mb-1 mt-4 px-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                  <div className="mb-1 mt-4 px-3 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/60">
                     Admin
                   </div>
                 )}

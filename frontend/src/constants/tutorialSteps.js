@@ -49,13 +49,8 @@ export const dashboardTutorialSteps = [
   },
   {
     target: "[data-tutorial='people-stats']",
-    title: "People Statistics",
-    description: "Shows the total number of registered people in the system who can be assigned assets or receive supplies.",
-  },
-  {
-    target: "[data-tutorial='transaction-cards']",
-    title: "Transaction Summary",
-    description: "Track daily and monthly transaction counts to monitor inventory activity and movement trends.",
+    title: "People & Transactions Overview",
+    description: "This section shows key statistics including total registered people, daily and monthly transaction counts, and a supply movements chart tracking stock in and stock out trends over the last 14 days.",
   },
   {
     target: "[data-tutorial='charts-section']",
@@ -461,6 +456,109 @@ export const reportsTutorialSteps = [
   },
 ]
 
+// Stock Out Page Tutorial Steps
+export const stockOutTutorialSteps = [
+  {
+    target: "[data-tutorial='stockout-header']",
+    title: "Stock Out Page",
+    description: "Welcome to the Stock Out page! This is where you can view the history of supply releases and reductions in your inventory.",
+  },
+  {
+    target: "[data-tutorial='refresh-btn']",
+    title: "Refresh List",
+    description: "Click to refresh the stock out transaction list and get the latest data from the server.",
+  },
+  {
+    target: "[data-tutorial='record-stockout-btn']",
+    title: "Record Stock Out",
+    description: "Click this button to record a new stock out transaction. You'll be taken to the Issuance page to complete the transaction.",
+  },
+  {
+    target: "[data-tutorial='view-inventory-btn']",
+    title: "View Inventory",
+    description: "Quick link to view all items in your inventory to check current stock levels.",
+  },
+  {
+    target: "[data-tutorial='stats-cards']",
+    title: "Stock Out Statistics",
+    description: "View key metrics: stock out transactions recorded today, this month, and total historical count.",
+  },
+  {
+    target: "[data-tutorial='stockout-form']",
+    title: "Quick Stock Out Form",
+    description: "For reference only - use the Issuance page for recording actual transactions. This shows the information captured when recording stock out.",
+  },
+  {
+    target: "[data-tutorial='transactions-section']",
+    title: "Transaction History",
+    description: "View all past stock out transactions with details including date, items, issued to, purpose, and responsible person.",
+  },
+  {
+    target: "[data-tutorial='search-filter']",
+    title: "Search & Filter",
+    description: "Search transactions by item name, issued to, or responsible person. Use date filters to narrow results by time period.",
+  },
+]
+
+// Stock In Page Tutorial Steps
+export const stockInTutorialSteps = [
+  {
+    target: "[data-tutorial='stockin-header']",
+    title: "Stock In Page",
+    description: "Welcome to the Stock In page! Record incoming inventory and track all stock in transactions for your supplies.",
+  },
+  {
+    target: "[data-tutorial='refresh-btn']",
+    title: "Refresh List",
+    description: "Click to refresh the stock in transaction list and get the latest data from the server.",
+  },
+  {
+    target: "[data-tutorial='stockout-link']",
+    title: "Go to Stock Out",
+    description: "Quick link to navigate to the Stock Out page to view supply releases and reductions.",
+  },
+  {
+    target: "[data-tutorial='view-inventory-btn']",
+    title: "View Inventory",
+    description: "Quick link to view all items in your inventory to check current stock levels.",
+  },
+  {
+    target: "[data-tutorial='stats-cards']",
+    title: "Stock In Statistics",
+    description: "View key metrics: stock in transactions recorded today, this month, and total historical count.",
+  },
+  {
+    target: "[data-tutorial='mode-toggle']",
+    title: "Entry Mode Toggle",
+    description: "Switch between Supplies mode (for consumable items) and Asset mode (for adding new property/equipment). Most restocking uses Supplies mode.",
+  },
+  {
+    target: "[data-tutorial='stockin-form']",
+    title: "Stock In Form",
+    description: "Add items to stock in: select item, enter quantity, and add optional remarks. You can add multiple items in one transaction.",
+  },
+  {
+    target: "[data-tutorial='add-line-btn']",
+    title: "Add Multiple Items",
+    description: "Click the plus button to add another line and record multiple items in a single stock in transaction.",
+  },
+  {
+    target: "[data-tutorial='submit-btn']",
+    title: "Submit Stock In",
+    description: "Click to record the stock in transaction. The quantities will be added to your inventory immediately.",
+  },
+  {
+    target: "[data-tutorial='transactions-section']",
+    title: "Transaction History",
+    description: "View all past stock in transactions with details including date, items, quantities, and remarks.",
+  },
+  {
+    target: "[data-tutorial='search-filter']",
+    title: "Search & Filter",
+    description: "Search transactions by item name or remarks. Use date filters to narrow results by time period.",
+  },
+]
+
 // Export all tutorial configurations
 export const tutorialConfigs = {
   dashboard: dashboardTutorialSteps,
@@ -472,6 +570,8 @@ export const tutorialConfigs = {
   auditLogs: auditLogsTutorialSteps,
   issuance: issuanceTutorialSteps,
   reports: reportsTutorialSteps,
+  stockOut: stockOutTutorialSteps,
+  stockIn: stockInTutorialSteps,
 }
 
 export default tutorialConfigs

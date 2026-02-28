@@ -180,7 +180,7 @@ export function LoginForm({
                 </div>
               )}
               <Field>
-                <Button type="submit" disabled={isLoading}>
+                <Button type="submit" disabled={isLoading} className="bg-zinc-900 text-white hover:bg-zinc-800">
                   {isLoading ? "Signing in…" : "Login"}
                 </Button>
               </Field>

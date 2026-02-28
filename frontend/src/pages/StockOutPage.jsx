@@ -40,6 +40,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { itemsService, transactionsService } from "@/services"
+import { FloatingHelpButton } from "@/components/HelpButton"
+import { stockOutTutorialSteps } from "@/constants/tutorialSteps"
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50]
 function todayStr() {
@@ -217,7 +219,10 @@ export default function StockOutPage() {
 
   return (
     <div className="mx-auto flex min-w-0 w-full max-w-[1400px] flex-col gap-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      {/* Floating Help Button for Tutorial */}
+      <FloatingHelpButton steps={stockOutTutorialSteps} pageId="stockOut" />
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between" data-tutorial="stockout-header">
         <div className="min-w-0">
           <Breadcrumb>
             <BreadcrumbList>
@@ -240,17 +245,17 @@ export default function StockOutPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="icon" onClick={() => fetchTransactions(true)} disabled={txLoading}>
+          <Button variant="outline" size="icon" onClick={() => fetchTransactions(true)} disabled={txLoading} data-tutorial="refresh-btn">
             <RefreshCw className="size-4" />
             <span className="sr-only">Refresh</span>
           </Button>
-          <Button asChild>
+          <Button asChild data-tutorial="record-stockout-btn">
             <Link to="/issuance">Record stock out (Issuance)</Link>
           </Button>
           <Button asChild variant="outline">
             <Link to="/stock/in">Stock In</Link>
           </Button>
-          <Button asChild variant="outline">
+          <Button asChild variant="outline" data-tutorial="view-inventory-btn">
             <Link to="/items">View inventory</Link>
           </Button>
         </div>
@@ -262,7 +267,7 @@ export default function StockOutPage() {
         </div>
       )}
 
-      <section className="@container/main grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <section className="@container/main grid grid-cols-1 gap-4 sm:grid-cols-3" data-tutorial="stats-cards">
         <Card>
           <CardHeader>
             <CardDescription>Today Released</CardDescription>
@@ -284,7 +289,7 @@ export default function StockOutPage() {
       </section>
 
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <Card>
+        <Card data-tutorial="stockout-form">
           <CardHeader>
             <CardTitle className="text-base">Record stock out</CardTitle>
             <CardDescription>
@@ -391,7 +396,7 @@ export default function StockOutPage() {
                 </div>
               )
             })}
-            <Button type="button" variant="outline" size="sm" className="w-full h-8" onClick={addLine}>
+            <Button type="button" variant="outline" size="sm" className="w-full h-8" onClick={addLine} data-tutorial="add-line-btn">
               <Plus className="size-3" />
               Add line
             </Button>
@@ -426,7 +431,8 @@ export default function StockOutPage() {
             <div className="flex gap-2 pt-2">
               <Button 
                 className="flex-1 h-8" 
-                onClick={handleSubmit} 
+                onClick={handleSubmit}
+                data-tutorial="submit-btn" 
                 disabled={
                   submitting || 
                   lines.some((line) => {
@@ -443,8 +449,8 @@ export default function StockOutPage() {
           </CardContent>
         </Card>
 
-        <section className="lg:col-span-2 min-w-0 overflow-hidden rounded-xl border bg-white">
-          <div className="flex flex-col gap-3 border-b px-4 py-3 lg:px-6">
+        <section className="lg:col-span-2 min-w-0 overflow-hidden rounded-xl border bg-white" data-tutorial="transactions-section">
+          <div className="flex flex-col gap-3 border-b px-4 py-3 lg:px-6" data-tutorial="search-filter">
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative max-w-sm flex-1 min-w-[180px]">
                 <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -485,7 +491,7 @@ export default function StockOutPage() {
                   <TableRow>
                     <TableHead className="px-3 whitespace-nowrap">Date</TableHead>
                     <TableHead className="px-3 whitespace-nowrap">Items Reduced</TableHead>
-                    <TableHead className="px-3 whitespace-nowrap">Department</TableHead>
+                    <TableHead className="px-3 whitespace-nowrap">Remarks</TableHead>
                     <TableHead className="px-3 whitespace-nowrap">Released By</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -506,16 +512,16 @@ export default function StockOutPage() {
                     paginatedTx.map((tx) => (
                       <TableRow key={tx._id}>
                         <TableCell className="px-3 tabular-nums">
-                          {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString() : "—"}
+                          {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString() : "N/A"}
                         </TableCell>
                         <TableCell className="px-3 text-sm">
                           <div className="flex items-center gap-2">
                             <TrendingDown className="size-4 text-red-500 shrink-0" />
-                            <span>{(tx.items ?? []).map((i) => `${i.qty}× ${i.itemId?.name ?? "—"}`).join(", ")}</span>
+                            <span>{(tx.items ?? []).map((i) => `${i.qty}× ${i.itemId?.name ?? "N/A"}`).join(", ")}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="px-3">{tx.issuedToOffice ?? "—"}</TableCell>
-                        <TableCell className="px-3">{tx.createdBy?.name ?? "—"}</TableCell>
+                        <TableCell className="px-3">{tx.purpose ?? "N/A"}</TableCell>
+                        <TableCell className="px-3">{tx.createdBy?.name ?? "N/A"}</TableCell>
                       </TableRow>
                     ))
                   )}

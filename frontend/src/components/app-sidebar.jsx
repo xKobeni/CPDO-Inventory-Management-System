@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import { clearAuth } from "@/lib/auth"
+import { clearCsrfToken } from "@/lib/http"
 import {
   LayoutDashboard,
   Package,
@@ -58,6 +59,7 @@ export function AppSidebar(props) {
 
   function handleLogout() {
     clearAuth()
+    clearCsrfToken()
     navigate("/login", { replace: true })
   }
 

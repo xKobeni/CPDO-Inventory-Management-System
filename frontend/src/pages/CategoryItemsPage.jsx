@@ -1030,10 +1030,8 @@ export default function CategoryItemsPage() {
     setSubmitting(true)
     try {
       await itemsService.archiveItem(id)
-      // Also update status to DISPOSED
-      await itemsService.updateItem(id, { status: "DISPOSED" })
       setItems((prev) => prev.filter((i) => String(i.id) !== String(id)))
-      toast.success("Item archived and marked as disposed.")
+      toast.success("Item archived successfully.")
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
@@ -1046,10 +1044,8 @@ export default function CategoryItemsPage() {
     setSubmitting(true)
     try {
       await itemsService.restoreItem(id)
-      // Also update status to IN_STOCK
-      await itemsService.updateItem(id, { status: "IN_STOCK" })
       setItems((prev) => prev.filter((i) => String(i.id) !== String(id)))
-      toast.success("Item restored with status set to in stock.")
+      toast.success("Item restored successfully.")
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {

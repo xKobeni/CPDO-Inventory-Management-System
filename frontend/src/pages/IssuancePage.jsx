@@ -86,7 +86,7 @@ const AssetRow = memo(function AssetRow({ index, style, data }) {
       <div className="flex-1 min-w-0">
         <div className="text-sm truncate">{a.propertyNumber ? `${a.propertyNumber} – ` : ""}{a.name}</div>
         <div className="text-xs text-muted-foreground">
-          {a.location ?? "—"}{assignedTo ? ` • Assigned to ${assignedTo}` : ""}
+          {a.location ?? "N/A"}{assignedTo ? ` • Assigned to ${assignedTo}` : ""}
         </div>
       </div>
     </div>
@@ -1023,7 +1023,7 @@ export default function IssuancePage() {
                   ) : (
                     paginatedRows.map((row, idx) => {
                       const isIssuance = row.txType === "ISSUANCE"
-                      const accName = row.item?.accountablePerson?.name ?? row.accountablePerson?.name ?? row.issuedToPerson ?? "—"
+                      const accName = row.item?.accountablePerson?.name ?? row.accountablePerson?.name ?? row.issuedToPerson ?? "N/A"
                       return (
                         <TableRow key={row._id}>
                           <TableCell className="px-3">
@@ -1034,21 +1034,21 @@ export default function IssuancePage() {
                           <TableCell className="px-3 tabular-nums text-muted-foreground">
                             {row.item?.dateAcquired
                               ? new Date(row.item.dateAcquired).toLocaleDateString()
-                              : "—"}
+                              : "N/A"}
                           </TableCell>
                           <TableCell className="px-3">
-                            {row.qty > 0 ? `${row.qty}× ` : ""}{row.item?.name ?? "—"}
+                            {row.qty > 0 ? `${row.qty}× ` : ""}{row.item?.name ?? "N/A"}
                           </TableCell>
                           <TableCell className="px-3 text-right tabular-nums">
                             {row.item?.unitCost != null && Number(row.item.unitCost) > 0
                               ? `₱${Number(row.item.unitCost).toLocaleString()}`
-                              : "—"}
+                              : "N/A"}
                           </TableCell>
-                          <TableCell className="px-3 text-muted-foreground">{row.item?.propertyNumber ?? "—"}</TableCell>
+                          <TableCell className="px-3 text-muted-foreground">{row.item?.propertyNumber ?? "N/A"}</TableCell>
                           <TableCell className="px-3">{accName}</TableCell>
-                          <TableCell className="px-3 text-muted-foreground">{row.item?.transferredTo ?? "—"}</TableCell>
+                          <TableCell className="px-3 text-muted-foreground">{row.item?.transferredTo ?? "N/A"}</TableCell>
                           <TableCell className="px-3 text-muted-foreground max-w-[200px] truncate" title={row.purpose ?? ""}>
-                            {row.purpose ?? "—"}
+                            {row.purpose ?? "N/A"}
                           </TableCell>
                           <TableCell className="px-3">
                             <DropdownMenu>

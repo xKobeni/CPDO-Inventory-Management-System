@@ -41,6 +41,8 @@ import {
 } from "@/components/ui/combobox"
 import { itemsService, transactionsService } from "@/services"
 import { getErrorMessage } from "@/utils/api"
+import { FloatingHelpButton } from "@/components/HelpButton"
+import { stockInTutorialSteps } from "@/constants/tutorialSteps"
 
 const STOCK_IN_MODE_SUPPLY = "supply"
 const STOCK_IN_MODE_ASSET = "asset"
@@ -206,7 +208,10 @@ export default function StockInPage() {
 
   return (
     <div className="mx-auto flex min-w-0 w-full max-w-[1400px] flex-col gap-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      {/* Floating Help Button for Tutorial */}
+      <FloatingHelpButton steps={stockInTutorialSteps} pageId="stockIn" />
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between" data-tutorial="stockin-header">
         <div className="min-w-0">
           <Breadcrumb>
             <BreadcrumbList>
@@ -229,14 +234,14 @@ export default function StockInPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="icon" onClick={() => fetchTransactions(true)} disabled={txLoading}>
+          <Button variant="outline" size="icon" onClick={() => fetchTransactions(true)} disabled={txLoading} data-tutorial="refresh-btn">
             <RefreshCw className="size-4" />
             <span className="sr-only">Refresh</span>
           </Button>
-          <Button asChild>
+          <Button asChild data-tutorial="stockout-link">
             <Link to="/stock/out">Stock Out</Link>
           </Button>
-          <Button asChild variant="outline">
+          <Button asChild variant="outline" data-tutorial="view-inventory-btn">
             <Link to="/items">View inventory</Link>
           </Button>
         </div>
@@ -248,7 +253,7 @@ export default function StockInPage() {
         </div>
       )}
 
-      <section className="@container/main grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <section className="@container/main grid grid-cols-1 gap-4 sm:grid-cols-3" data-tutorial="stats-cards">
         <Card>
           <CardHeader>
             <CardDescription>Today Entries</CardDescription>
@@ -270,14 +275,14 @@ export default function StockInPage() {
       </section>
 
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <Card>
+        <Card data-tutorial="stockin-form">
           <CardHeader>
             <div className="flex items-center justify-between gap-2">
               <CardTitle className="flex items-center gap-2 text-base">
                 <Package className="size-4" />
                 New Stock Entry
               </CardTitle>
-              <div className="flex rounded-md border border-input bg-muted/30 p-0.5">
+              <div className="flex rounded-md border border-input bg-muted/30 p-0.5" data-tutorial="mode-toggle">
                 <Button
                   type="button"
                   variant={mode === STOCK_IN_MODE_SUPPLY ? "secondary" : "ghost"}
@@ -397,7 +402,7 @@ export default function StockInPage() {
                 </div>
               )
             })}
-            <Button type="button" variant="outline" size="sm" onClick={addLine}>
+            <Button type="button" variant="outline" size="sm" onClick={addLine} data-tutorial="add-line-btn">
               <Plus className="size-4" />
               Add line
             </Button>
@@ -410,7 +415,7 @@ export default function StockInPage() {
                 placeholder="Additional notes or reference"
               />
             </div>
-            <Button className="w-full" onClick={handleSubmit} disabled={submitting || loading}>
+            <Button className="w-full" onClick={handleSubmit} disabled={submitting || loading} data-tutorial="submit-btn">
               {submitting ? "Saving…" : "Save Stock In"}
             </Button>
               </>
@@ -425,8 +430,8 @@ export default function StockInPage() {
           </CardContent>
         </Card>
 
-        <section className="lg:col-span-2 min-w-0 overflow-hidden rounded-xl border bg-white">
-          <div className="flex flex-col gap-3 border-b px-4 py-3 lg:px-6">
+        <section className="lg:col-span-2 overflow-hidden rounded-xl border bg-white" data-tutorial="transactions-section">
+          <div className="flex flex-col gap-3 border-b px-4 py-3 lg:px-6" data-tutorial="search-filter">
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative max-w-sm flex-1 min-w-[180px]">
                 <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -488,16 +493,16 @@ export default function StockInPage() {
                     paginatedTx.map((tx) => (
                       <TableRow key={tx._id}>
                         <TableCell className="px-3 tabular-nums">
-                          {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString() : "—"}
+                          {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString() : "N/A"}
                         </TableCell>
                         <TableCell className="px-3 text-sm">
                           <div className="flex items-center gap-2">
                             <TrendingUp className="size-4 text-green-500 shrink-0" />
-                            <span>{(tx.items ?? []).map((i) => `${i.qty}× ${i.itemId?.name ?? "—"}`).join(", ")}</span>
+                            <span>{(tx.items ?? []).map((i) => `${i.qty}× ${i.itemId?.name ?? "N/A"}`).join(", ")}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="px-3">{tx.referenceNo ?? "—"}</TableCell>
-                        <TableCell className="px-3">{tx.createdBy?.name ?? "—"}</TableCell>
+                        <TableCell className="px-3">{tx.referenceNo ?? "N/A"}</TableCell>
+                        <TableCell className="px-3">{tx.createdBy?.name ?? "N/A"}</TableCell>
                       </TableRow>
                     ))
                   )}

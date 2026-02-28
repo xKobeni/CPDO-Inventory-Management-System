@@ -6,6 +6,7 @@ import './index.css'
 import { router } from './app/router.jsx'
 import { fetchCsrfToken } from '@/lib/http'
 import { initSentry } from '@/lib/sentry'
+import { ThemeProvider } from '@/contexts/ThemeContext'
 
 // Initialize error monitoring
 initSentry().catch(err => {
@@ -19,7 +20,9 @@ fetchCsrfToken().catch(err => {
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <RouterProvider router={router} />
-    <Toaster position="top-center" closeButton />
+    <ThemeProvider>
+      <RouterProvider router={router} />
+      <Toaster position="top-center" closeButton />
+    </ThemeProvider>
   </StrictMode>,
 )

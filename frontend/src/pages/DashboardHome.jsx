@@ -325,6 +325,85 @@ function ValueByCategoryPieChart({ data }) {
   )
 }
 
+function SupplyMovementsChart({ data }) {
+  // Fill missing days with 0 for last 14 days
+  const days = 14
+  const end = new Date()
+  end.setHours(0, 0, 0, 0)
+  const map = new Map((data || []).map((d) => [d.date, { stockIn: d.stockIn || 0, stockOut: d.stockOut || 0 }]))
+  const chartData = []
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(end)
+    d.setDate(d.getDate() - i)
+    const key = d.toISOString().slice(0, 10)
+    const dayData = map.get(key) || { stockIn: 0, stockOut: 0 }
+    chartData.push({ date: key, stockIn: dayData.stockIn, stockOut: dayData.stockOut })
+  }
+
+  return (
+    <Card className="border-zinc-200 dark:border-zinc-800">
+      <CardHeader>
+        <CardTitle className="text-base">Supply Movements (last 14 days)</CardTitle>
+        <CardDescription>Daily stock in vs stock out transactions</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[260px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-zinc-200 dark:stroke-zinc-700" />
+              <XAxis
+                dataKey="date"
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                tickFormatter={(v) => {
+                  const d = new Date(v)
+                  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                }}
+                className="text-xs fill-zinc-500"
+              />
+              <YAxis 
+                tickLine={false} 
+                axisLine={false} 
+                tickMargin={8} 
+                width={30} 
+                className="text-xs fill-zinc-500"
+                allowDecimals={false}
+              />
+              <Tooltip
+                contentStyle={{ borderRadius: "8px", border: "1px solid var(--border)" }}
+                labelFormatter={(v) => new Date(v).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+              />
+              <Legend 
+                wrapperStyle={{ paddingTop: "10px" }}
+                iconType="line"
+              />
+              <Line
+                type="monotone"
+                dataKey="stockIn"
+                name="Stock In"
+                stroke="#10b981"
+                strokeWidth={2}
+                dot={{ fill: "#10b981", r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="stockOut"
+                name="Stock Out"
+                stroke="#ef4444"
+                strokeWidth={2}
+                dot={{ fill: "#ef4444", r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 function formatStatus(s) {
   if (!s) return "—"
   return String(s)
@@ -467,9 +546,9 @@ export default function DashboardHome() {
         </div>
       </section>
 
-      {/* People stats (only total) */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tutorial="people-stats">
-        <div className="lg:col-span-2">
+      {/* People + Transactions + Supply movements */}
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2" data-tutorial="people-stats">
+        <div className="space-y-4">
           <StatCard
             title="People — Total"
             value={peopleLoading ? "…" : peopleCounts.total}
@@ -477,23 +556,22 @@ export default function DashboardHome() {
             icon={Users}
             href="/users"
           />
+          <StatCard
+            title="Transactions today"
+            value={loading ? "…" : kpis.txToday}
+            description="Recorded today"
+            icon={Activity}
+          />
+          <StatCard
+            title="This month"
+            value={loading ? "…" : kpis.txThisMonth}
+            description="Total this month"
+            icon={FileText}
+          />
         </div>
-      </section>
-
-      {/* Second row: Transactions today / month */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-tutorial="transaction-cards">
-        <StatCard
-          title="Transactions today"
-          value={loading ? "…" : kpis.txToday}
-          description="Recorded today"
-          icon={Activity}
-        />
-        <StatCard
-          title="This month"
-          value={loading ? "…" : kpis.txThisMonth}
-          description="Total this month"
-          icon={FileText}
-        />
+        <div>
+          <SupplyMovementsChart data={charts?.supplyMovementsByDay || []} />
+        </div>
       </section>
 
       {/* Charts + Quick actions */}

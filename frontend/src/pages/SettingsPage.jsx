@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { User, Shield } from "lucide-react"
+import { User, Shield, Palette } from "lucide-react"
 import { Link, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -7,13 +7,16 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { authService } from "@/services"
 import { getErrorMessage } from "@/utils/api"
 import { getAuth, setAuth } from "@/lib/auth"
+import { useTheme } from "@/contexts/ThemeContext"
 
 export default function SettingsPage() {
   const navigate = useNavigate()
   const auth = getAuth()
+  const { themeColor, setThemeColor } = useTheme()
   
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState(null)
@@ -159,6 +162,34 @@ export default function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
+              <Palette className="size-4" />
+              Appearance
+            </CardTitle>
+            <CardDescription>Customize the system theme color</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="theme-color-select">System Color</Label>
+              <Select value={themeColor} onValueChange={setThemeColor}>
+                <SelectTrigger id="theme-color-select">
+                  <SelectValue placeholder="Select theme color" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="red">Red</SelectItem>
+                  <SelectItem value="black">Black</SelectItem>
+                  <SelectItem value="grey">Grey</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Changes the primary color across the entire system
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
               <User className="size-4" />
               Account
             </CardTitle>
@@ -193,7 +224,9 @@ export default function SettingsPage() {
             </form>
           </CardContent>
         </Card>
+      </section>
 
+      <section className="grid grid-cols-1 gap-6">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">

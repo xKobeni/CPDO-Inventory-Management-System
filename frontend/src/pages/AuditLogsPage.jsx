@@ -71,6 +71,7 @@ export default function AuditLogsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [search, setSearch] = useState("")
+  const [actionFilter, setActionFilter] = useState("all")
   const [dateFrom, setDateFrom] = useState(lastMonthStr())
   const [dateTo, setDateTo] = useState(todayStr())
   const [page, setPage] = useState(1)
@@ -109,6 +110,9 @@ export default function AuditLogsPage() {
     }
   }
 
+  // Get unique actions for filter dropdown
+  const availableActions = Array.from(new Set(logs.map((log) => log.action).filter(Boolean))).sort()
+
   const filtered = logs.filter((log) => {
     const logDate = log.createdAt ? new Date(log.createdAt) : null
     if (dateFrom && logDate) {
@@ -118,6 +122,9 @@ export default function AuditLogsPage() {
     if (dateTo && logDate) {
       const to = new Date(dateTo + "T23:59:59.999Z")
       if (logDate > to) return false
+    }
+    if (actionFilter !== "all" && log.action !== actionFilter) {
+      return false
     }
     if (search.trim()) {
       const s = search.toLowerCase()
@@ -137,7 +144,7 @@ export default function AuditLogsPage() {
 
   useEffect(() => {
     setPage(1)
-  }, [search, dateFrom, dateTo])
+  }, [search, dateFrom, dateTo, actionFilter])
 
   const toggleRow = (id) => {
     setExpandedRows((prev) => {
@@ -207,6 +214,22 @@ export default function AuditLogsPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="action-filter-audit" className="text-muted-foreground text-xs whitespace-nowrap">Action</Label>
+              <Select value={actionFilter} onValueChange={setActionFilter}>
+                <SelectTrigger id="action-filter-audit" className="w-[160px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Actions</SelectItem>
+                  {availableActions.map((action) => (
+                    <SelectItem key={action} value={action}>
+                      {formatAction(action)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex items-center gap-2" data-tutorial="date-filters">
               <Label htmlFor="date-from-audit" className="text-muted-foreground text-xs whitespace-nowrap">From</Label>

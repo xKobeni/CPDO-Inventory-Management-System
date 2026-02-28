@@ -14,30 +14,41 @@ let failedQueue = []
 let csrfToken = null
 let lastCsrfFetch = null
 
-// Get CSRF token from memory or sessionStorage
+// Get CSRF token from memory or localStorage
 function getCsrfToken() {
   if (csrfToken) return csrfToken
   
-  // Try to recover from sessionStorage
-  const stored = sessionStorage.getItem("csrfToken")
-  const storedTime = sessionStorage.getItem("csrfTokenTime")
+  // Try to recover from localStorage (persists across page refreshes)
+  const stored = localStorage.getItem("csrfToken")
+  const storedTime = localStorage.getItem("csrfTokenTime")
   if (stored && storedTime) {
     const age = Date.now() - parseInt(storedTime)
     if (age < 24 * 60 * 60 * 1000) { // Still valid (24 hours)
       csrfToken = stored
       lastCsrfFetch = parseInt(storedTime)
       return csrfToken
+    } else {
+      // Token expired, clear it
+      clearCsrfToken()
     }
   }
   return null
 }
 
-// Set CSRF token in memory and sessionStorage
+// Set CSRF token in memory and localStorage
 function setCsrfToken(token) {
   csrfToken = token
   lastCsrfFetch = Date.now()
-  sessionStorage.setItem("csrfToken", token)
-  sessionStorage.setItem("csrfTokenTime", lastCsrfFetch.toString())
+  localStorage.setItem("csrfToken", token)
+  localStorage.setItem("csrfTokenTime", lastCsrfFetch.toString())
+}
+
+// Clear CSRF token
+function clearCsrfToken() {
+  csrfToken = null
+  lastCsrfFetch = null
+  localStorage.removeItem("csrfToken")
+  localStorage.removeItem("csrfTokenTime")
 }
 
 // Fetch CSRF token from server
@@ -54,6 +65,9 @@ export async function fetchCsrfToken() {
     return getCsrfToken()
   }
 }
+
+// Export clearCsrfToken for use in logout flow
+export { clearCsrfToken }
 
 const processQueue = (error, token = null) => {
   failedQueue.forEach((prom) => {
@@ -89,13 +103,19 @@ http.interceptors.request.use(async (config) => {
 })
 
 http.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    // Check if response contains a new CSRF token and update it
+    if (res.data?.csrfToken) {
+      setCsrfToken(res.data.csrfToken)
+    }
+    return res
+  },
   async (err) => {
     const originalRequest = err.config
 
-    // If CSRF token is invalid or missing, fetch a new one and retry
+    // If CSRF token is invalid or missing, clear it and fetch a new one
     if (err?.response?.status === 403 && (err?.response?.data?.code === "CSRF_TOKEN_INVALID" || err?.response?.data?.code === "CSRF_TOKEN_MISSING")) {
-      csrfToken = null
+      clearCsrfToken()
       await fetchCsrfToken()
       const newToken = getCsrfToken()
       if (newToken && originalRequest.headers) {
