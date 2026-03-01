@@ -51,6 +51,9 @@ export const API_PATHS = {
     transactionsXlsx: "/export/transactions.xlsx",
     auditXlsx: "/export/audit.xlsx",
     dashboardSummaryXlsx: "/export/dashboard-summary.xlsx",
+    backupXlsx: "/export/backup.xlsx",
+    backupJson: "/export/backup.json",
+    backupCsv: "/export/backup.csv",
   },
   import: {
     items: "/import/items",

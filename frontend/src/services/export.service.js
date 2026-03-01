@@ -45,3 +45,33 @@ export async function downloadDashboardSummaryXlsx() {
   })
   return data
 }
+
+/**
+ * Download full database backup as Excel (.xlsx)
+ */
+export async function downloadBackupXlsx() {
+  const { data } = await http.get(API_PATHS.export.backupXlsx, {
+    responseType: "blob",
+  })
+  return data
+}
+
+/**
+ * Download full database backup as JSON
+ */
+export async function downloadBackupJson() {
+  const { data } = await http.get(API_PATHS.export.backupJson, {
+    responseType: "blob",
+  })
+  return data
+}
+
+/**
+ * Download full database backup as CSV
+ */
+export async function downloadBackupCsv() {
+  const { data } = await http.get(API_PATHS.export.backupCsv, {
+    responseType: "blob",
+  })
+  return data
+}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { User, Shield, Palette } from "lucide-react"
+import { User, Shield, Palette, Database, Download } from "lucide-react"
 import { Link, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { authService } from "@/services"
+import { downloadBackupXlsx, downloadBackupJson, downloadBackupCsv } from "@/services/export.service"
 import { getErrorMessage } from "@/utils/api"
 import { getAuth, setAuth } from "@/lib/auth"
 import { useTheme } from "@/contexts/ThemeContext"
@@ -27,6 +28,8 @@ export default function SettingsPage() {
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [changingPassword, setChangingPassword] = useState(false)
+
+  const [downloadingBackup, setDownloadingBackup] = useState(false)
 
   useEffect(() => {
     fetchProfile()
@@ -95,6 +98,41 @@ export default function SettingsPage() {
       toast.error(getErrorMessage(err))
     } finally {
       setChangingPassword(false)
+    }
+  }
+
+  async function handleDownloadBackup(format) {
+    setDownloadingBackup(true)
+    try {
+      let blob
+      let filename
+      
+      if (format === "xlsx") {
+        blob = await downloadBackupXlsx()
+        filename = `cpdc_backup_${new Date().toISOString().slice(0, 10)}.xlsx`
+      } else if (format === "json") {
+        blob = await downloadBackupJson()
+        filename = `cpdc_backup_${new Date().toISOString().slice(0, 10)}.json`
+      } else if (format === "csv") {
+        blob = await downloadBackupCsv()
+        filename = `cpdc_backup_${new Date().toISOString().slice(0, 10)}.csv`
+      }
+
+      // Create download link
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+
+      toast.success(`Backup downloaded successfully as ${format.toUpperCase()}`)
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setDownloadingBackup(false)
     }
   }
 
@@ -275,6 +313,75 @@ export default function SettingsPage() {
                 {changingPassword ? "Changing..." : "Change Password"}
               </Button>
             </form>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid grid-cols-1 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Database className="size-4" />
+              Data Backup & Export
+            </CardTitle>
+            <CardDescription>
+              Download a complete backup of all system data including items, transactions, and audit logs
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+                <p className="text-sm text-zinc-700 mb-4">
+                  Choose a format to export all your data. The backup includes:
+                </p>
+                <ul className="text-sm text-zinc-600 space-y-1 ml-4 mb-4">
+                  <li className="list-disc">All items (supplies and assets)</li>
+                  <li className="list-disc">All transactions (stock-in, stock-out, issuance)</li>
+                  <li className="list-disc">Complete audit log history</li>
+                </ul>
+                <p className="text-xs text-zinc-500">
+                  💡 Backups are also created automatically every day at 4:00 PM and stored in the server.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  onClick={() => handleDownloadBackup("xlsx")}
+                  disabled={downloadingBackup}
+                  className="flex items-center gap-2"
+                >
+                  <Download className="size-4" />
+                  {downloadingBackup ? "Downloading..." : "Excel (.xlsx)"}
+                </Button>
+                
+                <Button
+                  onClick={() => handleDownloadBackup("json")}
+                  disabled={downloadingBackup}
+                  variant="outline"
+                  className="flex items-center gap-2"
+                >
+                  <Download className="size-4" />
+                  {downloadingBackup ? "Downloading..." : "JSON (.json)"}
+                </Button>
+                
+                <Button
+                  onClick={() => handleDownloadBackup("csv")}
+                  disabled={downloadingBackup}
+                  variant="outline"
+                  className="flex items-center gap-2"
+                >
+                  <Download className="size-4" />
+                  {downloadingBackup ? "Downloading..." : "CSV (.csv)"}
+                </Button>
+              </div>
+
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs text-amber-800">
+                  <strong>Note:</strong> The backup file may be large depending on your data volume. 
+                  Store it securely and use it for disaster recovery or data migration purposes.
+                </p>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </section>

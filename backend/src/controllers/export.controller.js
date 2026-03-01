@@ -479,3 +479,237 @@ export async function exportDashboardSummaryXlsx(req, res) {
   await wb.xlsx.write(res);
   res.end();
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Manual Backup Exports
+// ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Export full database backup as Excel (.xlsx) with 3 sheets: Items, Transactions, Audit Logs
+ */
+export async function exportBackupXlsx(req, res) {
+  // Fetch all data
+  const [items, transactions, auditLogs] = await Promise.all([
+    Item.find({}).sort({ updatedAt: -1 }).lean(),
+    Transaction.find({}).sort({ createdAt: -1 }).lean(),
+    AuditLog.find({}).sort({ createdAt: -1 }).lean(),
+  ]);
+
+  const wb = new ExcelJS.Workbook();
+
+  // ─── Items Sheet ───────────────────────────────────────────────────
+  const itemsSheet = wb.addWorksheet("Items");
+  itemsSheet.columns = [
+    { header: "Item Type", key: "itemType", width: 12 },
+    { header: "Name", key: "name", width: 30 },
+    { header: "Category", key: "category", width: 20 },
+    { header: "Unit", key: "unit", width: 10 },
+    { header: "Quantity", key: "quantityOnHand", width: 12 },
+    { header: "Reorder Level", key: "reorderLevel", width: 14 },
+    { header: "Property Number", key: "propertyNumber", width: 18 },
+    { header: "Serial Number", key: "serialNumber", width: 18 },
+    { header: "Division", key: "division", width: 25 },
+    { header: "Status", key: "status", width: 12 },
+    { header: "Condition", key: "condition", width: 12 },
+    { header: "Date Acquired", key: "dateAcquired", width: 14 },
+    { header: "Unit Cost", key: "unitCost", width: 14 },
+    { header: "Accountable Person", key: "accountablePersonName", width: 25 },
+    { header: "Accountable Office", key: "accountablePersonOffice", width: 25 },
+    { header: "Remarks", key: "remarks", width: 35 },
+    { header: "Is Archived", key: "isArchived", width: 12 },
+    { header: "Created At", key: "createdAt", width: 20 },
+    { header: "Updated At", key: "updatedAt", width: 20 },
+  ];
+
+  items.forEach((item) => {
+    itemsSheet.addRow({
+      itemType: item.itemType || "",
+      name: item.name || "",
+      category: item.category || "",
+      unit: item.unit || "",
+      quantityOnHand: item.quantityOnHand ?? 0,
+      reorderLevel: item.reorderLevel ?? 0,
+      propertyNumber: item.propertyNumber || "",
+      serialNumber: item.serialNumber || "",
+      division: item.division || "",
+      status: item.status || "",
+      condition: item.condition || "",
+      dateAcquired: dateOnly(item.dateAcquired),
+      unitCost: item.unitCost ?? 0,
+      accountablePersonName: item.accountablePerson?.name || "",
+      accountablePersonOffice: item.accountablePerson?.office || "",
+      remarks: item.remarks || "",
+      isArchived: item.isArchived ? "Yes" : "No",
+      createdAt: item.createdAt ? new Date(item.createdAt).toISOString() : "",
+      updatedAt: item.updatedAt ? new Date(item.updatedAt).toISOString() : "",
+    });
+  });
+
+  // Freeze header row
+  itemsSheet.views = [{ state: "frozen", ySplit: 1 }];
+
+  // ─── Transactions Sheet ────────────────────────────────────────────
+  const txSheet = wb.addWorksheet("Transactions");
+  txSheet.columns = [
+    { header: "Type", key: "type", width: 14 },
+    { header: "Created At", key: "createdAt", width: 20 },
+    { header: "Created By", key: "createdBy", width: 30 },
+    { header: "Issued To Office", key: "issuedToOffice", width: 20 },
+    { header: "Issued To Person", key: "issuedToPerson", width: 25 },
+    { header: "Purpose", key: "purpose", width: 30 },
+    { header: "Supplier", key: "supplier", width: 20 },
+    { header: "Reference No", key: "referenceNo", width: 18 },
+    { header: "Items (JSON)", key: "items", width: 60 },
+  ];
+
+  transactions.forEach((tx) => {
+    txSheet.addRow({
+      type: tx.type || "",
+      createdAt: tx.createdAt ? new Date(tx.createdAt).toISOString() : "",
+      createdBy: tx.createdBy || "",
+      issuedToOffice: tx.issuedToOffice || "",
+      issuedToPerson: tx.issuedToPerson || "",
+      purpose: tx.purpose || "",
+      supplier: tx.supplier || "",
+      referenceNo: tx.referenceNo || "",
+      items: JSON.stringify(tx.items || []),
+    });
+  });
+
+  txSheet.views = [{ state: "frozen", ySplit: 1 }];
+
+  // ─── Audit Logs Sheet ──────────────────────────────────────────────
+  const auditSheet = wb.addWorksheet("Audit Logs");
+  auditSheet.columns = [
+    { header: "Created At", key: "createdAt", width: 20 },
+    { header: "Actor ID", key: "actorId", width: 30 },
+    { header: "Action", key: "action", width: 25 },
+    { header: "Target Type", key: "targetType", width: 15 },
+    { header: "Target ID", key: "targetId", width: 30 },
+    { header: "Meta (JSON)", key: "meta", width: 60 },
+  ];
+
+  auditLogs.forEach((log) => {
+    auditSheet.addRow({
+      createdAt: log.createdAt ? new Date(log.createdAt).toISOString() : "",
+      actorId: log.actorId?.toString() || "",
+      action: log.action || "",
+      targetType: log.targetType || "",
+      targetId: log.targetId || "",
+      meta: JSON.stringify(log.meta || {}),
+    });
+  });
+
+  auditSheet.views = [{ state: "frozen", ySplit: 1 }];
+
+  // Send response
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="cpdc_backup_${dateOnly(new Date())}.xlsx"`);
+
+  await wb.xlsx.write(res);
+  res.end();
+}
+
+/**
+ * Export full database backup as JSON
+ */
+export async function exportBackupJson(req, res) {
+  // Fetch all data
+  const [items, transactions, auditLogs] = await Promise.all([
+    Item.find({}).sort({ updatedAt: -1 }).lean(),
+    Transaction.find({}).sort({ createdAt: -1 }).lean(),
+    AuditLog.find({}).sort({ createdAt: -1 }).lean(),
+  ]);
+
+  const backup = {
+    exportedAt: new Date().toISOString(),
+    items,
+    transactions,
+    auditLogs,
+  };
+
+  res.setHeader("Content-Type", "application/json");
+  res.setHeader("Content-Disposition", `attachment; filename="cpdc_backup_${dateOnly(new Date())}.json"`);
+  res.json(backup);
+}
+
+/**
+ * Export full database backup as CSV (zipped with 3 CSV files)
+ * For simplicity, we'll return items CSV only for now, or you can use a zip library
+ * to bundle multiple CSVs. For this implementation, we'll return Items CSV.
+ */
+export async function exportBackupCsv(req, res) {
+  // Fetch all data
+  const [items, transactions, auditLogs] = await Promise.all([
+    Item.find({}).sort({ updatedAt: -1 }).lean(),
+    Transaction.find({}).sort({ createdAt: -1 }).lean(),
+    AuditLog.find({}).sort({ createdAt: -1 }).lean(),
+  ]);
+
+  // Prepare items data
+  const itemsData = items.map((item) => ({
+    itemType: item.itemType || "",
+    name: item.name || "",
+    category: item.category || "",
+    unit: item.unit || "",
+    quantityOnHand: item.quantityOnHand ?? 0,
+    reorderLevel: item.reorderLevel ?? 0,
+    propertyNumber: item.propertyNumber || "",
+    serialNumber: item.serialNumber || "",
+    division: item.division || "",
+    status: item.status || "",
+    condition: item.condition || "",
+    dateAcquired: dateOnly(item.dateAcquired),
+    unitCost: item.unitCost ?? 0,
+    accountablePersonName: item.accountablePerson?.name || "",
+    accountablePersonOffice: item.accountablePerson?.office || "",
+    remarks: item.remarks || "",
+    isArchived: item.isArchived ? "Yes" : "No",
+    createdAt: item.createdAt ? new Date(item.createdAt).toISOString() : "",
+    updatedAt: item.updatedAt ? new Date(item.updatedAt).toISOString() : "",
+  }));
+
+  // Prepare transactions data
+  const txData = transactions.map((tx) => ({
+    type: tx.type || "",
+    createdAt: tx.createdAt ? new Date(tx.createdAt).toISOString() : "",
+    createdBy: tx.createdBy || "",
+    issuedToOffice: tx.issuedToOffice || "",
+    issuedToPerson: tx.issuedToPerson || "",
+    purpose: tx.purpose || "",
+    supplier: tx.supplier || "",
+    referenceNo: tx.referenceNo || "",
+    items: JSON.stringify(tx.items || []),
+  }));
+
+  // Prepare audit logs data
+  const auditData = auditLogs.map((log) => ({
+    createdAt: log.createdAt ? new Date(log.createdAt).toISOString() : "",
+    actorId: log.actorId?.toString() || "",
+    action: log.action || "",
+    targetType: log.targetType || "",
+    targetId: log.targetId || "",
+    meta: JSON.stringify(log.meta || {}),
+  }));
+
+  // Create CSV parsers
+  const itemsCsv = new Json2CsvParser().parse(itemsData);
+  const txCsv = new Json2CsvParser().parse(txData);
+  const auditCsv = new Json2CsvParser().parse(auditData);
+
+  // Combine all CSVs into one file with separators
+  const combinedCsv = `
+===== ITEMS =====
+${itemsCsv}
+
+===== TRANSACTIONS =====
+${txCsv}
+
+===== AUDIT LOGS =====
+${auditCsv}
+`.trim();
+
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="cpdc_backup_${dateOnly(new Date())}.csv"`);
+  res.send(combinedCsv);
+}
