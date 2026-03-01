@@ -7,6 +7,7 @@ import {
   exportTransactionsXlsx,
   exportAuditXlsx,
   exportIssuanceXlsx,
+  exportDashboardSummaryXlsx,
 } from "../controllers/export.controller.js";
 
 const r = Router();
@@ -18,5 +19,6 @@ r.get("/items.csv", exportItemsCsv);
 r.get("/issuance.xlsx", exportIssuanceXlsx);
 r.get("/transactions.xlsx", exportTransactionsXlsx);
 r.get("/audit.xlsx", exportAuditXlsx);
+r.get("/dashboard-summary.xlsx", exportDashboardSummaryXlsx);
 
 export default r;

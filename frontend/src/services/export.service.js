@@ -38,3 +38,10 @@ export async function downloadAuditXlsx() {
   })
   return data
 }
+
+export async function downloadDashboardSummaryXlsx() {
+  const { data } = await http.get(API_PATHS.export.dashboardSummaryXlsx, {
+    responseType: "blob",
+  })
+  return data
+}

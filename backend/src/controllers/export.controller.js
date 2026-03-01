@@ -358,3 +358,124 @@ export async function exportAuditXlsx(req, res) {
   await wb.xlsx.write(res);
   res.end();
 }
+
+export async function exportDashboardSummaryXlsx(req, res) {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  // Fetch KPI data
+  const [
+    totalItems,
+    activeItems,
+    totalSupplies,
+    totalAssets,
+    archivedItems,
+    outOfStockCount,
+    deployedAssets,
+    txToday,
+    txThisMonth,
+  ] = await Promise.all([
+    Item.countDocuments({}),
+    Item.countDocuments({ isArchived: false }),
+    Item.countDocuments({ itemType: "SUPPLY", isArchived: false }),
+    Item.countDocuments({ itemType: "ASSET", isArchived: false }),
+    Item.countDocuments({ isArchived: true }),
+    Item.countDocuments({ itemType: "SUPPLY", isArchived: false, quantityOnHand: 0 }),
+    Item.countDocuments({ itemType: "ASSET", isArchived: false, status: "DEPLOYED" }),
+    Transaction.countDocuments({ createdAt: { $gte: startOfToday } }),
+    Transaction.countDocuments({ createdAt: { $gte: startOfMonth } }),
+  ]);
+
+  const lowStockCount = await Item.countDocuments({
+    itemType: "SUPPLY",
+    isArchived: false,
+    reorderLevel: { $gt: 0 },
+    $expr: { $lte: ["$quantityOnHand", "$reorderLevel"] },
+  });
+
+  // Fetch chart data
+  const [suppliesByCategory, assetsByStatus, assetsByCondition] = await Promise.all([
+    Item.aggregate([
+      { $match: { itemType: "SUPPLY", isArchived: false } },
+      { $group: { _id: "$category", count: { $sum: 1 } } },
+      { $project: { _id: 0, category: "$_id", count: 1 } },
+      { $sort: { count: -1 } },
+      { $limit: 20 },
+    ]),
+    Item.aggregate([
+      { $match: { itemType: "ASSET", isArchived: false } },
+      { $group: { _id: "$status", count: { $sum: 1 } } },
+      { $project: { _id: 0, status: "$_id", count: 1 } },
+      { $sort: { count: -1 } },
+    ]),
+    Item.aggregate([
+      { $match: { itemType: "ASSET", isArchived: false } },
+      { $group: { _id: "$condition", count: { $sum: 1 } } },
+      { $project: { _id: 0, condition: "$_id", count: 1 } },
+      { $sort: { count: -1 } },
+    ]),
+  ]);
+
+  const wb = new ExcelJS.Workbook();
+
+  // Sheet 1: KPIs
+  const kpiSheet = wb.addWorksheet("KPIs", { views: [{ state: "frozen", ySplit: 1 }] });
+  kpiSheet.columns = [
+    { header: "Metric", key: "metric", width: 30 },
+    { header: "Value", key: "value", width: 15 },
+  ];
+
+  kpiSheet.addRow({ metric: "Total Items", value: totalItems });
+  kpiSheet.addRow({ metric: "Active Items", value: activeItems });
+  kpiSheet.addRow({ metric: "Archived Items", value: archivedItems });
+  kpiSheet.addRow({ metric: "Total Supplies", value: totalSupplies });
+  kpiSheet.addRow({ metric: "Total Assets", value: totalAssets });
+  kpiSheet.addRow({ metric: "Deployed Assets", value: deployedAssets });
+  kpiSheet.addRow({ metric: "Out of Stock Items", value: outOfStockCount });
+  kpiSheet.addRow({ metric: "Low Stock Items", value: lowStockCount });
+  kpiSheet.addRow({ metric: "Transactions Today", value: txToday });
+  kpiSheet.addRow({ metric: "Transactions This Month", value: txThisMonth });
+
+  // Sheet 2: Supplies by Category
+  if (suppliesByCategory.length > 0) {
+    const suppliesSheet = wb.addWorksheet("Supplies by Category", { views: [{ state: "frozen", ySplit: 1 }] });
+    suppliesSheet.columns = [
+      { header: "Category", key: "category", width: 30 },
+      { header: "Count", key: "count", width: 15 },
+    ];
+    suppliesByCategory.forEach((item) => {
+      suppliesSheet.addRow({ category: item.category || "Uncategorized", count: item.count });
+    });
+  }
+
+  // Sheet 3: Assets by Status
+  if (assetsByStatus.length > 0) {
+    const assetsStatusSheet = wb.addWorksheet("Assets by Status", { views: [{ state: "frozen", ySplit: 1 }] });
+    assetsStatusSheet.columns = [
+      { header: "Status", key: "status", width: 30 },
+      { header: "Count", key: "count", width: 15 },
+    ];
+    assetsByStatus.forEach((item) => {
+      assetsStatusSheet.addRow({ status: item.status || "—", count: item.count });
+    });
+  }
+
+  // Sheet 4: Assets by Condition
+  if (assetsByCondition.length > 0) {
+    const assetsConditionSheet = wb.addWorksheet("Assets by Condition", { views: [{ state: "frozen", ySplit: 1 }] });
+    assetsConditionSheet.columns = [
+      { header: "Condition", key: "condition", width: 30 },
+      { header: "Count", key: "count", width: 15 },
+    ];
+    assetsByCondition.forEach((item) => {
+      assetsConditionSheet.addRow({ condition: item.condition || "—", count: item.count });
+    });
+  }
+
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="cpdc_dashboard_summary_${dateOnly(new Date())}.xlsx"`);
+
+  await wb.xlsx.write(res);
+  res.end();
+}

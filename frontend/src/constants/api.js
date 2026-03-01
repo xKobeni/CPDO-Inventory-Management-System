@@ -50,6 +50,7 @@ export const API_PATHS = {
     itemsCsv: "/export/items.csv",
     transactionsXlsx: "/export/transactions.xlsx",
     auditXlsx: "/export/audit.xlsx",
+    dashboardSummaryXlsx: "/export/dashboard-summary.xlsx",
   },
   import: {
     items: "/import/items",

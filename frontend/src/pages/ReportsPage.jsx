@@ -38,11 +38,12 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { FloatingHelpButton } from "@/components/HelpButton"
 import { reportsTutorialSteps } from "@/constants/tutorialSteps"
-import { itemsService, transactionsService, exportService } from "@/services"
+import { itemsService, transactionsService, exportService, dashboardService } from "@/services"
 import { getErrorMessage } from "@/utils/api"
 import { useCategories } from "@/contexts/CategoriesContext"
 
 const REPORT_TYPES = [
+  { value: "dashboard-summary", label: "Dashboard Summary" },
   { value: "inventory", label: "Inventory Summary" },
   { value: "stock-in", label: "Stock In" },
   { value: "stock-out", label: "Stock Out" },
@@ -52,6 +53,7 @@ const REPORT_TYPES = [
 const EXPORT_FORMATS = [
   { value: "excel", label: "Excel", icon: FileSpreadsheet },
   { value: "csv", label: "CSV", icon: FileDown },
+  { value: "json", label: "JSON", icon: FileDown },
 ]
 
 function downloadBlob(blob, filename) {
@@ -93,12 +95,14 @@ export default function ReportsPage() {
   const [issuanceItemType, setIssuanceItemType] = useState("all")
   const [filterCategory, setFilterCategory] = useState("")
   const [filterAccountablePerson, setFilterAccountablePerson] = useState("")
+  const [filterItemType, setFilterItemType] = useState("")
   const [accountablePersonOptions, setAccountablePersonOptions] = useState([])
   const [hasResults, setHasResults] = useState(false)
   const [loading, setLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [inventoryResults, setInventoryResults] = useState([])
   const [txResults, setTxResults] = useState([])
+  const [dashboardResults, setDashboardResults] = useState(null)
 
   const isInventory = reportType === "inventory"
   const results = isInventory ? inventoryResults : txResults
@@ -107,12 +111,20 @@ export default function ReportsPage() {
       ? txResults
           .map((tx) => ({
             ...tx,
-            items:
-              issuanceItemType === "all"
-                ? tx.items ?? []
-                : (tx.items ?? []).filter(
-                    (line) => (line.itemId?.itemType ?? "") === issuanceItemType
-                  ),
+            items: (tx.items ?? [])
+              .filter((line) => {
+                // Filter by item type
+                if (issuanceItemType !== "all" && (line.itemId?.itemType ?? "") !== issuanceItemType) {
+                  return false
+                }
+                // Filter by accountable person
+                if (filterAccountablePerson) {
+                  const itemAccName = line.itemId?.accountablePerson?.name?.trim()
+                  const txAccName = tx.accountablePerson?.name?.trim() || tx.issuedToPerson?.trim()
+                  return itemAccName === filterAccountablePerson || txAccName === filterAccountablePerson
+                }
+                return true
+              }),
           }))
           .filter((tx) => (tx.items ?? []).length > 0)
       : []
@@ -122,28 +134,56 @@ export default function ReportsPage() {
           (sum, tx) => sum + (tx.items ?? []).length,
           0
         )
-      : Array.isArray(results)
-        ? results.length
-        : 0
+      : reportType === "dashboard-summary"
+        ? dashboardResults ? 1 : 0
+        : Array.isArray(results)
+          ? results.length
+          : 0
   const resultsForTable = reportType === "issuance" ? issuanceDisplayResults : results
 
   useEffect(() => {
-    if (!reportType) return
+    // Only fetch accountable persons for issuance reports
+    if (reportType !== "issuance") {
+      setAccountablePersonOptions([])
+      return
+    }
+    
     let cancelled = false
-    itemsService
-      .listItems({ archived: "false" })
-      .then((data) => {
+    
+    // Fetch accountable persons from items
+    const namesSet = new Set()
+    
+    Promise.all([
+      itemsService.listItems({ archived: "false" }),
+      transactionsService.listTransactions({ type: "ISSUANCE,ASSET_ASSIGN" })
+    ])
+      .then(([itemsData, txData]) => {
         if (cancelled) return
-        const names = new Set()
-        ;(data || []).forEach((item) => {
+        
+        // From items
+        ;(itemsData || []).forEach((item) => {
           const name = item.accountablePerson?.name?.trim()
-          if (name) names.add(name)
+          if (name) namesSet.add(name)
         })
-        setAccountablePersonOptions(Array.from(names).sort())
+        
+        // From transactions
+        const txList = toArray(txData)
+        txList.forEach((tx) => {
+          const txAccName = tx.accountablePerson?.name?.trim() || tx.issuedToPerson?.trim()
+          if (txAccName) namesSet.add(txAccName)
+          // Also from items within transactions
+          ;(tx.items || []).forEach((line) => {
+            const itemAccName = line.itemId?.accountablePerson?.name?.trim()
+            if (itemAccName) namesSet.add(itemAccName)
+          })
+        })
+        
+        setAccountablePersonOptions(Array.from(namesSet).sort())
       })
       .catch(() => {
         if (!cancelled) setAccountablePersonOptions([])
       })
+      
     return () => { cancelled = true }
   }, [reportType])
 
@@ -160,7 +200,19 @@ export default function ReportsPage() {
         })
       }
     }
-    if (filterAccountablePerson) {
+    // Item type filter for non-issuance reports
+    if (filterItemType && reportType !== "issuance") {
+      if (isInv) {
+        out = out.filter((r) => (r.itemType || "") === filterItemType)
+      } else {
+        out = out.filter((tx) => {
+          const items = tx.items ?? []
+          return items.some((line) => (line.itemId?.itemType || "") === filterItemType)
+        })
+      }
+    }
+    // For issuance reports, accountable person filtering is done at item level in issuanceDisplayResults
+    if (filterAccountablePerson && reportType !== "issuance") {
       if (isInv) {
         out = out.filter(
           (r) => (r.accountablePerson?.name || "").trim() === filterAccountablePerson
@@ -184,6 +236,7 @@ export default function ReportsPage() {
     setIssuanceItemType("all")
     setFilterCategory("")
     setFilterAccountablePerson("")
+    setFilterItemType("")
     setHasResults(false)
   }
 
@@ -191,7 +244,10 @@ export default function ReportsPage() {
     setLoading(true)
     setHasResults(false)
     try {
-      if (reportType === "inventory") {
+      if (reportType === "dashboard-summary") {
+        const data = await dashboardService.getSummary()
+        setDashboardResults(data)
+      } else if (reportType === "inventory") {
         const params = { archived: "false" }
         if (filterCategory) params.category = filterCategory
         const raw = await itemsService.listItems(params)
@@ -233,7 +289,53 @@ export default function ReportsPage() {
   const handleExport = async (format) => {
     setExporting(true)
     try {
-      if (reportType === "inventory") {
+      if (reportType === "dashboard-summary") {
+        if (!dashboardResults) {
+          toast.error("No dashboard data to export")
+          return
+        }
+        
+        if (format === "excel") {
+          // Use backend Excel export
+          const blob = await exportService.downloadDashboardSummaryXlsx()
+          downloadBlob(blob, `dashboard_summary_${new Date().toISOString().slice(0, 10)}.xlsx`)
+        } else if (format === "csv") {
+          // Create CSV from KPIs
+          const data = dashboardResults
+          let csvContent = "Metric,Value\\n"
+          csvContent += `Total Items,${data.kpis?.totalItems ?? 0}\\n`
+          csvContent += `Active Items,${data.kpis?.activeItems ?? 0}\\n`
+          csvContent += `Archived Items,${data.kpis?.archivedItems ?? 0}\\n`
+          csvContent += `Total Supplies,${data.kpis?.totalSupplies ?? 0}\\n`
+          csvContent += `Total Assets,${data.kpis?.totalAssets ?? 0}\\n`
+          csvContent += `Deployed Assets,${data.kpis?.deployedAssets ?? 0}\\n`
+          csvContent += `Out of Stock,${data.kpis?.outOfStockCount ?? 0}\\n`
+          csvContent += `Low Stock,${data.kpis?.lowStockCount ?? 0}\\n`
+          csvContent += `Transactions Today,${data.kpis?.txToday ?? 0}\\n`
+          csvContent += `Transactions This Month,${data.kpis?.txThisMonth ?? 0}\\n`
+          
+          // Add supplies by category
+          if (data.charts?.suppliesByCategory?.length) {
+            csvContent += "\\nSupplies by Category\\n"
+            csvContent += "Category,Count\\n"
+            data.charts.suppliesByCategory.forEach(item => {
+              csvContent += `"${item.category || "Uncategorized"}",${item.count}\\n`
+            })
+          }
+          
+          // Add assets by status
+          if (data.charts?.assetsByStatus?.length) {
+            csvContent += "\\nAssets by Status\\n"
+            csvContent += "Status,Count\\n"
+            data.charts.assetsByStatus.forEach(item => {
+              csvContent += `"${item.status || "—"}",${item.count}\\n`
+            })
+          }
+          
+          const blob = new Blob([csvContent], { type: "text/csv" })
+          downloadBlob(blob, `dashboard_summary_${new Date().toISOString().slice(0, 10)}.csv`)
+        }
+      } else if (reportType === "inventory") {
         const blob = format === "csv"
           ? await exportService.downloadItemsCsv()
           : await exportService.downloadItemsXlsx()
@@ -323,7 +425,8 @@ export default function ReportsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2" data-tutorial="date-range-controls">
+              {reportType !== "dashboard-summary" && reportType !== "inventory" && (
+                <div className="space-y-2" data-tutorial="date-range-controls">
                 <Label>Date Range</Label>
                 <Select
                   value={dateRangePreset}
@@ -354,6 +457,7 @@ export default function ReportsPage() {
                   </div>
                 )}
               </div>
+              )}
             </div>
 
             {reportType === "issuance" && (
@@ -376,7 +480,7 @@ export default function ReportsPage() {
               </div>
             )}
 
-            {reportType && (
+            {reportType && reportType !== "dashboard-summary" && (
               <div className="grid gap-4 sm:grid-cols-2" data-tutorial="report-filters">
                 <div className="space-y-2">
                   <Label htmlFor="filter-category">Category</Label>
@@ -394,25 +498,44 @@ export default function ReportsPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="filter-accountable">Accountable Person</Label>
-                  <Select
-                    value={filterAccountablePerson || "_all"}
-                    onValueChange={(v) => setFilterAccountablePerson(v === "_all" ? "" : v)}
-                  >
-                    <SelectTrigger id="filter-accountable">
-                      <SelectValue placeholder="All" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="_all">All</SelectItem>
-                      {accountablePersonOptions.map((name) => (
-                        <SelectItem key={name} value={name}>
-                          {name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {reportType === "issuance" ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="filter-accountable">Accountable Person</Label>
+                    <Select
+                      value={filterAccountablePerson || "_all"}
+                      onValueChange={(v) => setFilterAccountablePerson(v === "_all" ? "" : v)}
+                    >
+                      <SelectTrigger id="filter-accountable">
+                        <SelectValue placeholder="All" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_all">All</SelectItem>
+                        {accountablePersonOptions.map((name) => (
+                          <SelectItem key={name} value={name}>
+                            {name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="filter-item-type">Item Type</Label>
+                    <Select
+                      value={filterItemType || "_all"}
+                      onValueChange={(v) => setFilterItemType(v === "_all" ? "" : v)}
+                    >
+                      <SelectTrigger id="filter-item-type">
+                        <SelectValue placeholder="All" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_all">All</SelectItem>
+                        <SelectItem value="ASSET">Asset</SelectItem>
+                        <SelectItem value="SUPPLY">Supply</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
             )}
 
@@ -430,7 +553,14 @@ export default function ReportsPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
-                    {EXPORT_FORMATS.filter((f) => reportType !== "inventory" ? f.value !== "csv" : true).map((f) => {
+                    {EXPORT_FORMATS.filter((f) => {
+                      // Dashboard summary: Excel and CSV
+                      if (reportType === "dashboard-summary") return f.value === "csv" || f.value === "excel"
+                      // Inventory: All formats including CSV and Excel
+                      if (reportType === "inventory") return f.value !== "json"
+                      // Transactions (stock-in, stock-out, issuance): Excel only
+                      return f.value === "excel"
+                    }).map((f) => {
                       const Icon = f.icon
                       return (
                         <DropdownMenuItem key={f.value} onClick={() => handleExport(f.value)} disabled={exporting}>
@@ -475,6 +605,107 @@ export default function ReportsPage() {
             </p>
           </div>
           <div className="overflow-x-auto">
+            {reportType === "dashboard-summary" && dashboardResults && (
+              <div className="p-6 space-y-6">
+                <div>
+                  <h3 className="text-sm font-semibold mb-3">Key Performance Indicators</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Metric</TableHead>
+                        <TableHead className="text-right">Value</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <TableRow>
+                        <TableCell className="font-medium">Total Items</TableCell>
+                        <TableCell className="text-right tabular-nums">{dashboardResults.kpis?.totalItems ?? 0}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell className="font-medium">Active Items</TableCell>
+                        <TableCell className="text-right tabular-nums">{dashboardResults.kpis?.activeItems ?? 0}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell className="font-medium">Archived Items</TableCell>
+                        <TableCell className="text-right tabular-nums">{dashboardResults.kpis?.archivedItems ?? 0}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell className="font-medium">Total Supplies</TableCell>
+                        <TableCell className="text-right tabular-nums">{dashboardResults.kpis?.totalSupplies ?? 0}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell className="font-medium">Total Assets</TableCell>
+                        <TableCell className="text-right tabular-nums">{dashboardResults.kpis?.totalAssets ?? 0}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell className="font-medium">Deployed Assets</TableCell>
+                        <TableCell className="text-right tabular-nums">{dashboardResults.kpis?.deployedAssets ?? 0}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell className="font-medium">Out of Stock Items</TableCell>
+                        <TableCell className="text-right tabular-nums">{dashboardResults.kpis?.outOfStockCount ?? 0}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell className="font-medium">Low Stock Items</TableCell>
+                        <TableCell className="text-right tabular-nums">{dashboardResults.kpis?.lowStockCount ?? 0}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell className="font-medium">Transactions Today</TableCell>
+                        <TableCell className="text-right tabular-nums">{dashboardResults.kpis?.txToday ?? 0}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell className="font-medium">Transactions This Month</TableCell>
+                        <TableCell className="text-right tabular-nums">{dashboardResults.kpis?.txThisMonth ?? 0}</TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {dashboardResults.charts?.suppliesByCategory?.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold mb-3">Supplies by Category</h3>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Category</TableHead>
+                          <TableHead className="text-right">Count</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {dashboardResults.charts.suppliesByCategory.map((item, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell className="font-medium">{item.category || "Uncategorized"}</TableCell>
+                            <TableCell className="text-right tabular-nums">{item.count}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+
+                {dashboardResults.charts?.assetsByStatus?.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold mb-3">Assets by Status</h3>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="text-right">Count</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {dashboardResults.charts.assetsByStatus.map((item, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell className="font-medium">{item.status || "—"}</TableCell>
+                            <TableCell className="text-right tabular-nums">{item.count}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+            )}
             {reportType === "inventory" && (
               <Table>
                 <TableHeader>
