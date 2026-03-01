@@ -116,11 +116,11 @@ export async function login(req, res) {
     // Increment login attempts and potentially lock account
     await user.incLoginAttempts();
     
-    // Reload user to get updated loginAttempts and lockUntil
-    await user.reload();
+    // Refetch user to get updated loginAttempts and lockUntil (Mongoose doesn't auto-update after updateOne)
+    const updatedUser = await User.findById(user._id);
     
-    const attemptsLeft = 5 - user.loginAttempts;
-    if (user.isLocked) {
+    const attemptsLeft = 5 - updatedUser.loginAttempts;
+    if (updatedUser.isLocked) {
       return res.status(423).json({
         message: "Too many failed login attempts. Your account has been temporarily locked for 15 minutes.",
         code: "ACCOUNT_LOCKED",
