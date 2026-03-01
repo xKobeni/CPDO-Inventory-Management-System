@@ -54,27 +54,27 @@ function StatCard({ title, value, description, icon: Icon, variant = "default", 
   const isAlert = variant === "danger" || variant === "warning"
   const bg =
     variant === "danger"
-      ? "bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-900"
+      ? "bg-red-50 border-red-200"
       : variant === "warning"
-        ? "bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-900"
-        : "bg-white border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800"
+        ? "bg-amber-50 border-amber-200"
+        : "bg-white border-zinc-200"
   const iconBg =
     variant === "danger"
-      ? "bg-red-100 text-red-700 dark:bg-red-900/50"
+      ? "bg-red-100 text-red-700"
       : variant === "warning"
-        ? "bg-amber-100 text-amber-700 dark:bg-amber-900/50"
-        : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800"
+        ? "bg-amber-100 text-amber-700"
+        : "bg-zinc-100 text-zinc-700"
   const valueColor =
     variant === "danger"
-      ? "text-red-700 dark:text-red-400"
+      ? "text-red-700"
       : variant === "warning"
-        ? "text-amber-700 dark:text-amber-400"
-        : "text-zinc-900 dark:text-zinc-100"
+        ? "text-amber-700"
+        : "text-zinc-900"
 
   const content = (
     <Card className={`overflow-hidden border transition-shadow hover:shadow-md ${bg}`}>
       <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+        <CardTitle className="text-sm font-medium text-zinc-600">
           {title}
         </CardTitle>
         <div className={`rounded-lg p-2 ${iconBg}`}>
@@ -86,7 +86,7 @@ function StatCard({ title, value, description, icon: Icon, variant = "default", 
           {value ?? "—"}
         </p>
         {description && (
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{description}</p>
+          <p className="mt-1 text-xs text-zinc-500">{description}</p>
         )}
       </CardContent>
     </Card>
@@ -105,13 +105,13 @@ function StatCard({ title, value, description, icon: Icon, variant = "default", 
 function QuickAction({ to, title, description, icon }) {
   const Icon = icon
   return (
-    <Card className="transition-shadow hover:shadow-md border-zinc-200 dark:border-zinc-800">
+    <Card className="bg-white transition-shadow hover:shadow-md border-zinc-200">
       <CardHeader className="flex flex-row items-start justify-between space-y-0">
         <div className="space-y-1">
           <CardTitle className="text-base">{title}</CardTitle>
           <CardDescription>{description}</CardDescription>
         </div>
-        <div className="grid size-10 place-items-center rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900">
+        <div className="grid size-10 place-items-center rounded-xl bg-zinc-900 text-white">
           <Icon className="size-5" />
         </div>
       </CardHeader>
@@ -139,7 +139,7 @@ function TransactionsChart({ data }) {
   }
 
   return (
-    <Card className="border-zinc-200 dark:border-zinc-800">
+    <Card className="bg-white border-zinc-200">
       <CardHeader>
         <CardTitle className="text-base">Transactions (last 14 days)</CardTitle>
         <CardDescription>Daily transaction count</CardDescription>
@@ -154,7 +154,7 @@ function TransactionsChart({ data }) {
                   <stop offset="95%" stopColor="#0f172a" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-zinc-200 dark:stroke-zinc-700" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" className="stroke-zinc-200" vertical={false} />
               <XAxis
                 dataKey="date"
                 tickLine={false}
@@ -191,7 +191,7 @@ function SuppliesByCategoryChart({ data }) {
   if (!data?.length) return null
   const chartData = data.map((d) => ({ name: d.category || "Uncategorized", count: d.count }))
   return (
-    <Card className="border-zinc-200 dark:border-zinc-800">
+    <Card className="bg-white border-zinc-200">
       <CardHeader>
         <CardTitle className="text-base">Supplies by category</CardTitle>
         <CardDescription>Item count per category</CardDescription>
@@ -200,7 +200,7 @@ function SuppliesByCategoryChart({ data }) {
         <div className="h-[220px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-zinc-200 dark:stroke-zinc-700" horizontal={false} />
+              <CartesianGrid strokeDasharray="3 3" className="stroke-zinc-200" horizontal={false} />
               <XAxis type="number" tickLine={false} axisLine={false} tickMargin={8} className="text-xs" />
               <YAxis
                 type="category"
@@ -227,7 +227,7 @@ function AssetsByStatusChart({ data }) {
   if (!data?.length) return null
   const chartData = data.map((d) => ({ name: formatStatus(d.status), value: d.count }))
   return (
-    <Card className="border-zinc-200 dark:border-zinc-800">
+    <Card className="bg-white border-zinc-200">
       <CardHeader>
         <CardTitle className="text-base">Assets by status</CardTitle>
         <CardDescription>Distribution by status</CardDescription>
@@ -268,7 +268,7 @@ function InventoryByCategoryLineChart({ data }) {
   // data: [{ category, count }]
   const chartData = Array.isArray(data) ? data.map((d) => ({ category: d.category || "Uncategorized", count: d.count || d.value || 0 })) : []
   return (
-    <Card className="border-zinc-200 dark:border-zinc-800">
+    <Card className="bg-white border-zinc-200">
       <CardHeader>
         <CardTitle className="text-base">Total inventory per category</CardTitle>
         <CardDescription>Items per category</CardDescription>
@@ -278,7 +278,7 @@ function InventoryByCategoryLineChart({ data }) {
           {chartData.length ? (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-zinc-200 dark:stroke-zinc-700" />
+                <CartesianGrid strokeDasharray="3 3" className="stroke-zinc-200" />
                 <XAxis dataKey="category" tick={{ fontSize: 11 }} />
                 <YAxis />
                 <Tooltip formatter={(v) => [v, "Items"]} />
@@ -297,7 +297,7 @@ function InventoryByCategoryLineChart({ data }) {
 function ValueByCategoryPieChart({ data }) {
   const chartData = Array.isArray(data) ? data.map((d) => ({ name: d.category || d.name || "Uncategorized", value: Number(d.value ?? d.count ?? 0) })) : []
   return (
-    <Card className="border-zinc-200 dark:border-zinc-800">
+    <Card className="bg-white border-zinc-200">
       <CardHeader>
         <CardTitle className="text-base">Value breakdown by category</CardTitle>
         <CardDescription>Monetary value distribution</CardDescription>
@@ -341,7 +341,7 @@ function SupplyMovementsChart({ data }) {
   }
 
   return (
-    <Card className="border-zinc-200 dark:border-zinc-800">
+    <Card className="bg-white border-zinc-200">
       <CardHeader>
         <CardTitle className="text-base">Supply Movements (last 14 days)</CardTitle>
         <CardDescription>Daily stock in vs stock out transactions</CardDescription>
@@ -350,7 +350,7 @@ function SupplyMovementsChart({ data }) {
         <div className="h-[260px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-zinc-200 dark:stroke-zinc-700" />
+              <CartesianGrid strokeDasharray="3 3" className="stroke-zinc-200" />
               <XAxis
                 dataKey="date"
                 tickLine={false}
@@ -475,10 +475,10 @@ export default function DashboardHome() {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between" data-tutorial="dashboard-header">
         <div className="min-w-0">
-          <h1 className="truncate text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+          <h1 className="truncate text-2xl font-bold tracking-tight text-zinc-900">
             Dashboard
           </h1>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="mt-1 text-sm text-zinc-500">
             Overview of inventory, stock levels, and recent activity.
           </p>
         </div>
@@ -493,7 +493,7 @@ export default function DashboardHome() {
       </div>
 
       {error && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           {error}
         </div>
       )}
@@ -586,10 +586,10 @@ export default function DashboardHome() {
       </section>
 
       {/* Recent activity */}
-      <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900" data-tutorial="recent-activity">
-        <div className="border-b border-zinc-200 px-4 py-4 dark:border-zinc-800 lg:px-6">
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Recent activity</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+      <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white" data-tutorial="recent-activity">
+        <div className="border-b border-zinc-200 px-4 py-4 lg:px-6">
+          <h2 className="text-lg font-semibold text-zinc-900">Recent activity</h2>
+          <p className="text-sm text-zinc-500">
             Transactions and audit logs {loading ? "(loading…)" : ""}
           </p>
         </div>
@@ -601,7 +601,7 @@ export default function DashboardHome() {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="border-zinc-200 dark:border-zinc-800 hover:bg-transparent">
+                <TableRow className="border-zinc-200 hover:bg-transparent">
                   <TableHead className="font-medium">Type</TableHead>
                   <TableHead className="font-medium">Date</TableHead>
                   <TableHead className="font-medium">By</TableHead>
@@ -612,17 +612,17 @@ export default function DashboardHome() {
                 {recentActivity.map((item, idx) => {
                   const isTransaction = item._itemType === "transaction"
                   return (
-                    <TableRow key={`${item._itemType}-${item._id}-${idx}`} className="border-zinc-100 dark:border-zinc-800">
+                    <TableRow key={`${item._itemType}-${item._id}-${idx}`} className="border-zinc-100">
                       <TableCell className="font-medium">
                         {isTransaction ? item.type : item.action}
                       </TableCell>
-                      <TableCell className="tabular-nums text-zinc-600 dark:text-zinc-400">
+                      <TableCell className="tabular-nums text-zinc-600">
                         {item.createdAt ? new Date(item.createdAt).toLocaleString() : "—"}
                       </TableCell>
                       <TableCell>
                         {isTransaction ? (item.createdBy?.name ?? "—") : (item.actorId?.name ?? "—")}
                       </TableCell>
-                      <TableCell className="text-sm text-zinc-500 dark:text-zinc-400">
+                      <TableCell className="text-sm text-zinc-500">
                         {isTransaction ? (
                           item.items?.length
                             ? item.items.map((i) => `${i.qty}× ${i.itemId?.name ?? i.itemId ?? "—"}`).join(", ")
