@@ -78,7 +78,7 @@ function StepIndicator({ total, current, onGoToStep }) {
             "h-2 w-2 rounded-full transition-all duration-200",
             i === current
               ? "bg-amber-500 w-4"
-              : "bg-zinc-300 hover:bg-zinc-400 dark:bg-zinc-600 dark:hover:bg-zinc-500"
+              : "bg-zinc-300 hover:bg-zinc-400"
           )}
           aria-label={`Go to step ${i + 1}`}
         />
@@ -218,26 +218,63 @@ export function TutorialOverlay() {
   return createPortal(
     <div className="fixed inset-0 z-[9999]" role="dialog" aria-modal="true">
       {/* Backdrop with spotlight cutout */}
-      <div className="absolute inset-0 bg-black/60 transition-opacity duration-200">
-        {highlightStyle && (
+      {!highlightStyle ? (
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity duration-200" />
+      ) : (
+        <>
+          {/* Top backdrop */}
           <div
-            className="absolute rounded-lg transition-all duration-300 ease-out"
+            className="absolute left-0 right-0 bg-black/65 backdrop-blur-[2px]"
+            style={{
+              top: 0,
+              height: Math.max(0, highlightStyle.top),
+            }}
+          />
+          {/* Bottom backdrop */}
+          <div
+            className="absolute left-0 right-0 bottom-0 bg-black/65 backdrop-blur-[2px]"
+            style={{
+              top: highlightStyle.top + highlightStyle.height,
+            }}
+          />
+          {/* Left backdrop */}
+          <div
+            className="absolute bg-black/65 backdrop-blur-[2px]"
+            style={{
+              top: highlightStyle.top,
+              left: 0,
+              width: Math.max(0, highlightStyle.left),
+              height: highlightStyle.height,
+            }}
+          />
+          {/* Right backdrop */}
+          <div
+            className="absolute bg-black/65 backdrop-blur-[2px]"
+            style={{
+              top: highlightStyle.top,
+              left: highlightStyle.left + highlightStyle.width,
+              right: 0,
+              height: highlightStyle.height,
+            }}
+          />
+          {/* Highlight border */}
+          <div
+            className="absolute rounded-lg transition-all duration-300 ease-out pointer-events-none"
             style={{
               ...highlightStyle,
-              boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.6)",
               border: "2px solid #f59e0b",
               background: "transparent",
             }}
           />
-        )}
-      </div>
+        </>
+      )}
 
       {/* Tooltip */}
         <div
           ref={tooltipRef}
           className={cn(
-            "absolute z-[10000] max-w-sm rounded-xl bg-white p-5 shadow-2xl dark:bg-zinc-900",
-          "border border-zinc-200 dark:border-zinc-700",
+            "absolute z-[10000] max-w-sm rounded-xl bg-white p-5 shadow-2xl",
+          "border border-zinc-200",
           "transition-all duration-200 ease-out",
           isAnimating && "opacity-0 scale-95"
         )}
@@ -250,27 +287,27 @@ export function TutorialOverlay() {
         {/* Close button */}
         <button
           onClick={endTutorial}
-          className="absolute right-3 top-3 rounded-md p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+          className="absolute right-3 top-3 rounded-md p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
           aria-label="Close tutorial"
         >
           <X className="h-4 w-4" />
         </button>
 
         {/* Step indicator badge */}
-        <div className="mb-3 inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
+        <div className="mb-3 inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
           Step {currentStep + 1} of {totalSteps}
         </div>
 
         {/* Title */}
         {currentStepData?.title && (
-          <h3 className="mb-2 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+          <h3 className="mb-2 text-lg font-semibold text-zinc-900">
             {currentStepData.title}
           </h3>
         )}
 
         {/* Description */}
         {currentStepData?.description && (
-          <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
+          <p className="mb-4 text-sm text-zinc-600">
             {currentStepData.description}
           </p>
         )}
