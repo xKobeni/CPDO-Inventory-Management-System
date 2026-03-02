@@ -37,6 +37,16 @@ function getTransporter() {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
+      // Connection and socket timeouts (in milliseconds)
+      connectionTimeout: 10000, // 10 seconds to establish connection
+      greetingTimeout: 5000,    // 5 seconds for SMTP greeting
+      socketTimeout: 15000,     // 15 seconds for socket inactivity
+      // Disable IPv6 to avoid connection issues
+      family: 4, // Force IPv4
+      // Connection pool settings
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 100,
     };
 
     transporter = nodemailer.createTransport(smtpConfig);
@@ -132,7 +142,15 @@ export async function sendEmail({ to, toName, subject, htmlContent, textContent 
     if (error.code) {
       console.error(`Error code: ${error.code}`);
     }
-    return null;
+    if (error.command) {
+      console.error(`SMTP command: ${error.command}`);
+    }
+    // Reset transporter on connection errors to force reconnection
+    if (error.code === 'ESOCKET' || error.code === 'ETIMEDOUT' || error.code === 'ENETUNREACH') {
+      console.log('Resetting email transporter due to connection error');
+      transporter = null;
+    }
+    throw error; // Throw error instead of returning null for better error handling
   }
 }
 
