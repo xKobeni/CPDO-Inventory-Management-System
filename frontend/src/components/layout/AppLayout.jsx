@@ -4,6 +4,7 @@ import { CategoriesProvider } from "@/contexts/CategoriesContext"
 import { PeopleProvider } from "@/contexts/PeopleContext"
 import { TutorialProvider } from "@/contexts/TutorialContext"
 import TutorialOverlay from "@/components/TutorialOverlay"
+import { InactivityWarning } from "@/components/InactivityWarning"
 
 export default function AppLayout() {
   return (
@@ -14,6 +15,7 @@ export default function AppLayout() {
             <Outlet />
           </AppShell>
           <TutorialOverlay />
+          <InactivityWarning />
         </TutorialProvider>
       </PeopleProvider>
     </CategoriesProvider>

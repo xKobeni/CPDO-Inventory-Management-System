@@ -78,9 +78,7 @@ export function AppSidebar(props) {
           <SidebarMenuItem>
             <SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:!p-1.5">
               <Link to="/dashboard">
-                <div className="grid size-8 place-items-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground text-sm font-semibold">
-                  CP
-                </div>
+                <img src="/cpdo_logo.png" alt="CPDCO Logo" className="size-8 object-contain" />
                 <span className="text-base font-semibold">CPDC Inventory</span>
               </Link>
             </SidebarMenuButton>

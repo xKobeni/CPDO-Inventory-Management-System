@@ -23,7 +23,8 @@ function getCsrfToken() {
   const storedTime = localStorage.getItem("csrfTokenTime")
   if (stored && storedTime) {
     const age = Date.now() - parseInt(storedTime)
-    if (age < 24 * 60 * 60 * 1000) { // Still valid (24 hours)
+    // Consider token stale after 1 hour to be safe
+    if (age < 60 * 60 * 1000) { // 1 hour
       csrfToken = stored
       lastCsrfFetch = parseInt(storedTime)
       return csrfToken
@@ -87,10 +88,13 @@ http.interceptors.request.use(async (config) => {
   
   // Add CSRF token for non-GET requests
   if (!["GET", "HEAD", "OPTIONS"].includes(config.method?.toUpperCase())) {
-    // Refresh CSRF token if we don't have one or if it's older than 24 hours (matches backend expire time)
+    // Refresh CSRF token if we don't have one or if it's older than 30 minutes
+    // This is more aggressive to prevent cookie expiration issues
     let currentToken = getCsrfToken()
     const tokenAge = lastCsrfFetch ? Date.now() - lastCsrfFetch : Infinity
-    if (!currentToken || tokenAge > 24 * 60 * 60 * 1000) {
+    const REFRESH_THRESHOLD = 30 * 60 * 1000 // 30 minutes
+    
+    if (!currentToken || tokenAge > REFRESH_THRESHOLD) {
       await fetchCsrfToken()
       currentToken = getCsrfToken()
     }

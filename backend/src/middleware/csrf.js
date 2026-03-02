@@ -34,6 +34,7 @@ export function setCsrfToken(req, res, next) {
     httpOnly: true,
     sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     secure: process.env.NODE_ENV === "production",
+    path: "/", // Explicit path to ensure cookie is available everywhere
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
   });
   

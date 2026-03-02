@@ -313,7 +313,7 @@ function ValueByCategoryPieChart({ data }) {
                     <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(v) => [v, "Value"]} />
+                <Tooltip formatter={(v) => [`₱${Number(v).toLocaleString()}`, "Value"]} />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
