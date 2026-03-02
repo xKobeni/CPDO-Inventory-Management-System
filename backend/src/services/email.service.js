@@ -118,8 +118,8 @@ export async function sendEmail({ to, toName, subject, htmlContent, textContent 
     return null;
   }
 
-  const transporter = getTransporter();
-  if (!transporter) {
+  const emailTransporter = getTransporter();
+  if (!emailTransporter) {
     console.error("Nodemailer transporter not initialized");
     return null;
   }
@@ -133,7 +133,7 @@ export async function sendEmail({ to, toName, subject, htmlContent, textContent 
       text: textContent,
     };
 
-    const info = await transporter.sendMail(mailOptions);
+    const info = await emailTransporter.sendMail(mailOptions);
     
     console.log(`Email sent successfully: ${info.messageId}`);
     return { messageId: info.messageId };
