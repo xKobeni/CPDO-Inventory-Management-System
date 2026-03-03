@@ -10,17 +10,30 @@ export const createPersonSchema = z.object({
 });
 
 export async function listPeople(req, res) {
-  const { q, active } = req.query;
+  const { q, active, page, pageSize } = req.query;
   const filter = {};
   if (active === "true") filter.isActive = true;
   if (active === "false") filter.isActive = false;
+  
   if (q && String(q).trim()) {
-    const escaped = String(q).trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(escaped, "i");
-    filter.$or = [{ name: re }, { office: re }, { position: re }];
+    filter.$text = { $search: String(q).trim() };
   }
-  const people = await Person.find(filter).sort({ name: 1 }).limit(2000);
-  res.json(people);
+  
+  const p = Math.max(1, parseInt(page, 10) || 1);
+  const ps = Math.min(500, Math.max(1, parseInt(pageSize, 10) || 100));
+  const skip = (p - 1) * ps;
+  
+  const [people, total] = await Promise.all([
+    Person.find(filter)
+      .select("name position office isActive createdAt")
+      .sort(q && String(q).trim() ? { score: { $meta: "textScore" } } : { name: 1 })
+      .skip(skip)
+      .limit(ps)
+      .lean(),
+    Person.countDocuments(filter)
+  ]);
+  
+  res.json({ people, total, page: p, pageSize: ps, totalPages: Math.ceil(total / ps) });
 }
 
 export async function createPerson(req, res) {

@@ -51,7 +51,12 @@ export async function listItems(req, res) {
   const ps = Math.min(500, Math.max(1, parseInt(pageSize, 10) || 500));
   const skip = (p - 1) * ps;
 
-  const items = await Item.find(finalFilter).sort({ updatedAt: -1 }).skip(skip).limit(ps);
+  const items = await Item.find(finalFilter)
+    .select("name category itemType unit status condition propertyNumber serialNumber quantityOnHand reorderLevel accountablePerson createdAt updatedAt")
+    .sort({ updatedAt: -1 })
+    .skip(skip)
+    .limit(ps)
+    .lean();
   res.json(items);
 }
 
@@ -63,8 +68,10 @@ export async function lowStock(req, res) {
     reorderLevel: { $gt: 0 },
     $expr: { $lte: ["$quantityOnHand", "$reorderLevel"] },
   })
+    .select("name category unit quantityOnHand reorderLevel updatedAt")
     .sort({ quantityOnHand: 1, updatedAt: -1 })
-    .limit(300);
+    .limit(300)
+    .lean();
 
   res.json(items);
 }

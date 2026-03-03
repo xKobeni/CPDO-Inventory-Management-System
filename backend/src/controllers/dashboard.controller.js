@@ -147,10 +147,14 @@ export async function getDashboardSummary(req, res) {
     Transaction.find({})
       .populate("createdBy", "name role")
       .populate("items.itemId", "name unit category itemType propertyNumber")
-      .sort({ createdAt: -1 }),
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean(),
     AuditLog.find({})
       .populate("actorId", "name role email")
-      .sort({ createdAt: -1 }),
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean(),
     Transaction.aggregate([
       { $match: { createdAt: { $gte: startOf14DaysAgo } } },
       {
@@ -166,8 +170,8 @@ export async function getDashboardSummary(req, res) {
 
   // Combine transactions and audit logs, sort by date, take top 8
   const combinedActivity = [
-    ...recentTransactions.map((tx) => ({ ...tx.toObject?.() ?? tx, _itemType: "transaction" })),
-    ...recentAuditLogs.map((log) => ({ ...log.toObject?.() ?? log, _itemType: "audit" })),
+    ...recentTransactions.map((tx) => ({ ...tx, _itemType: "transaction" })),
+    ...recentAuditLogs.map((log) => ({ ...log, _itemType: "audit" })),
   ]
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     .slice(0, 8);
@@ -220,12 +224,21 @@ export async function getDashboardSummary(req, res) {
 }
 
 export async function getAuditLogs(req, res) {
-  const logs = await AuditLog.find({})
-    .populate("actorId", "name role email")
-    .sort({ createdAt: -1 })
-    .limit(10000);
+  const { page, pageSize } = req.query;
+  const p = Math.max(1, parseInt(page, 10) || 1);
+  const ps = Math.min(100, Math.max(1, parseInt(pageSize, 10) || 50));
+  const skip = (p - 1) * ps;
+  
+  const [logs, total] = await Promise.all([
+    AuditLog.find({})
+      .populate("actorId", "name role email")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(ps),
+    AuditLog.countDocuments({})
+  ]);
 
-  res.json(logs);
+  res.json({ logs, total, page: p, pageSize: ps, totalPages: Math.ceil(total / ps) });
 }
 
 export async function getCategories(req, res) {
@@ -289,7 +302,8 @@ export async function getItemHistory(req, res) {
     .populate("createdBy", "name role")
     .populate("items.itemId", "name unit category itemType propertyNumber")
     .sort({ createdAt: -1 })
-    .limit(200);
+    .limit(200)
+    .lean();
 
   // Audit logs that directly target this item
   const audits = await AuditLog.find({
@@ -298,7 +312,8 @@ export async function getItemHistory(req, res) {
   })
     .populate("actorId", "name role email")
     .sort({ createdAt: -1 })
-    .limit(200);
+    .limit(200)
+    .lean();
 
   // Normalize a unified timeline (optional but very useful for UI)
   const timeline = [

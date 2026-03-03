@@ -50,7 +50,8 @@ export async function listTransactions(req, res) {
     .populate("createdBy", "name email role")
     .populate("items.itemId", "name unit category itemType dateAcquired unitCost propertyNumber accountablePerson transferredTo")
     .sort({ createdAt: -1 })
-    .limit(300);
+    .limit(100)
+    .lean();
 
   res.json(txs);
 }

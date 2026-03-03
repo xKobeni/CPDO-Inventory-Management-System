@@ -92,7 +92,7 @@ http.interceptors.request.use(async (config) => {
     // This is more aggressive to prevent cookie expiration issues
     let currentToken = getCsrfToken()
     const tokenAge = lastCsrfFetch ? Date.now() - lastCsrfFetch : Infinity
-    const REFRESH_THRESHOLD = 30 * 60 * 1000 // 30 minutes
+    const REFRESH_THRESHOLD = 12 * 60 * 60 * 1000 // 12 hours - reduce refresh frequency
     
     if (!currentToken || tokenAge > REFRESH_THRESHOLD) {
       await fetchCsrfToken()
