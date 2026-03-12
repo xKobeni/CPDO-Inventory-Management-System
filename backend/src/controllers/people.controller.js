@@ -65,7 +65,7 @@ export async function deactivatePerson(req, res) {
   const { id } = req.params;
   if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ message: "Invalid person id" });
 
-  const person = await Person.findByIdAndUpdate(id, { isActive: false }, { new: true });
+  const person = await Person.findByIdAndUpdate(id, { isActive: false }, { returnDocument: "after" });
   if (!person) return res.status(404).json({ message: "Person not found" });
 
   await AuditLog.create({
@@ -83,7 +83,7 @@ export async function activatePerson(req, res) {
   const { id } = req.params;
   if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ message: "Invalid person id" });
 
-  const person = await Person.findByIdAndUpdate(id, { isActive: true }, { new: true });
+  const person = await Person.findByIdAndUpdate(id, { isActive: true }, { returnDocument: "after" });
   if (!person) return res.status(404).json({ message: "Person not found" });
 
   await AuditLog.create({

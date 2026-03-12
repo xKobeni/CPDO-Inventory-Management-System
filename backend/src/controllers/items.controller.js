@@ -52,7 +52,7 @@ export async function listItems(req, res) {
   const skip = (p - 1) * ps;
 
   const items = await Item.find(finalFilter)
-    .select("name category itemType unit status condition propertyNumber serialNumber quantityOnHand reorderLevel accountablePerson createdAt updatedAt")
+    .select("name category itemType unit status condition propertyNumber serialNumber quantityOnHand reorderLevel accountablePerson isArchived createdAt updatedAt")
     .sort({ updatedAt: -1 })
     .skip(skip)
     .limit(ps)
@@ -266,7 +266,7 @@ export async function updateItem(req, res) {
 
 export async function archiveItem(req, res) {
   const { id } = req.params;
-  const item = await Item.findByIdAndUpdate(id, { isArchived: true }, { new: true });
+  const item = await Item.findByIdAndUpdate(id, { isArchived: true }, { returnDocument: "after" });
   if (!item) return res.status(404).json({ message: "Item not found" });
 
   await AuditLog.create({
@@ -281,7 +281,7 @@ export async function archiveItem(req, res) {
 
 export async function restoreItem(req, res) {
   const { id } = req.params;
-  const item = await Item.findByIdAndUpdate(id, { isArchived: false }, { new: true });
+  const item = await Item.findByIdAndUpdate(id, { isArchived: false }, { returnDocument: "after" });
   if (!item) return res.status(404).json({ message: "Item not found" });
 
   await AuditLog.create({

@@ -243,10 +243,14 @@ export async function getAuditLogs(req, res) {
 
 export async function getCategories(req, res) {
   // Returns categories currently used, useful for dropdown filters.
-  // Optional query: ?type=SUPPLY|ASSET
-  const { type } = req.query;
+  // Optional query:
+  // - ?type=SUPPLY|ASSET
+  // - ?archived=true|false (default: include both so categories still show when everything is archived)
+  const { type, archived } = req.query;
 
-  const match = { isArchived: false };
+  const match = {};
+  if (archived === "true") match.isArchived = true;
+  if (archived === "false") match.isArchived = false;
   if (type) match.itemType = type;
 
   const cats = await Item.aggregate([
@@ -265,13 +269,13 @@ export async function getCategories(req, res) {
   // Helpful split lists too (common UI need)
   const [supplyCats, assetCats] = await Promise.all([
     Item.aggregate([
-      { $match: { isArchived: false, itemType: "SUPPLY" } },
+      { $match: { ...match, itemType: "SUPPLY" } },
       { $group: { _id: "$category", count: { $sum: 1 } } },
       { $project: { _id: 0, category: "$_id", count: 1 } },
       { $sort: { count: -1, category: 1 } },
     ]),
     Item.aggregate([
-      { $match: { isArchived: false, itemType: "ASSET" } },
+      { $match: { ...match, itemType: "ASSET" } },
       { $group: { _id: "$category", count: { $sum: 1 } } },
       { $project: { _id: 0, category: "$_id", count: 1 } },
       { $sort: { count: -1, category: 1 } },
