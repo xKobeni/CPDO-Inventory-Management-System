@@ -23,17 +23,13 @@ export function LoginForm({
   onForgotPassword,
   ...props
 }) {
+  const rememberedEmail = getRememberedEmail() || ""
   const [showPassword, setShowPassword] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
-  const [defaultEmail, setDefaultEmail] = useState("")
+  const [rememberMe, setRememberMe] = useState(() => !!rememberedEmail)
+  const [defaultEmail, setDefaultEmail] = useState(() => rememberedEmail)
   const [turnstileToken, setTurnstileToken] = useState("")
   const [turnstileError, setTurnstileError] = useState("")
   const turnstileWidgetIdRef = useRef(null)
-
-  useEffect(() => {
-    setDefaultEmail(getRememberedEmail() || "")
-    setRememberMe(!!getRememberedEmail())
-  }, [])
 
   const onTurnstileSuccess = useCallback((token) => {
     setTurnstileToken(token)
@@ -64,7 +60,9 @@ export function LoginForm({
           "error-callback": onTurnstileError,
           "expired-callback": onTurnstileExpire,
         })
-      } catch (_) {}
+      } catch (err) {
+        console.warn("Turnstile render failed:", err)
+      }
     }
     if (window.turnstile) {
       renderWidget()
@@ -82,7 +80,9 @@ export function LoginForm({
     if (error && TURNSTILE_SITE_KEY && typeof window !== "undefined" && window.turnstile && turnstileWidgetIdRef.current != null) {
       try {
         window.turnstile.reset(turnstileWidgetIdRef.current)
-      } catch (_) {}
+      } catch (err) {
+        console.warn("Turnstile reset failed:", err)
+      }
       setTurnstileToken("")
     }
   }, [error])

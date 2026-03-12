@@ -10,66 +10,6 @@ export const http = axios.create({
 let isRefreshing = false
 let failedQueue = []
 
-// Store CSRF token & last fetch time
-let csrfToken = null
-let lastCsrfFetch = null
-
-// Get CSRF token from memory or localStorage
-function getCsrfToken() {
-  if (csrfToken) return csrfToken
-  
-  // Try to recover from localStorage (persists across page refreshes)
-  const stored = localStorage.getItem("csrfToken")
-  const storedTime = localStorage.getItem("csrfTokenTime")
-  if (stored && storedTime) {
-    const age = Date.now() - parseInt(storedTime)
-    // Consider token stale after 1 hour to be safe
-    if (age < 60 * 60 * 1000) { // 1 hour
-      csrfToken = stored
-      lastCsrfFetch = parseInt(storedTime)
-      return csrfToken
-    } else {
-      // Token expired, clear it
-      clearCsrfToken()
-    }
-  }
-  return null
-}
-
-// Set CSRF token in memory and localStorage
-function setCsrfToken(token) {
-  csrfToken = token
-  lastCsrfFetch = Date.now()
-  localStorage.setItem("csrfToken", token)
-  localStorage.setItem("csrfTokenTime", lastCsrfFetch.toString())
-}
-
-// Clear CSRF token
-function clearCsrfToken() {
-  csrfToken = null
-  lastCsrfFetch = null
-  localStorage.removeItem("csrfToken")
-  localStorage.removeItem("csrfTokenTime")
-}
-
-// Fetch CSRF token from server
-export async function fetchCsrfToken() {
-  try {
-    const { data } = await axios.get(
-      `${import.meta.env.VITE_API_BASE_URL}/csrf-token`,
-      { withCredentials: true }
-    )
-    setCsrfToken(data.csrfToken)
-    return csrfToken
-  } catch (err) {
-    console.error("Failed to fetch CSRF token:", err)
-    return getCsrfToken()
-  }
-}
-
-// Export clearCsrfToken for use in logout flow
-export { clearCsrfToken }
-
 const processQueue = (error, token = null) => {
   failedQueue.forEach((prom) => {
     if (error) {
@@ -85,48 +25,15 @@ http.interceptors.request.use(async (config) => {
   // Add access token
   const token = getToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
-  
-  // Add CSRF token for non-GET requests
-  if (!["GET", "HEAD", "OPTIONS"].includes(config.method?.toUpperCase())) {
-    // Refresh CSRF token if we don't have one or if it's older than 30 minutes
-    // This is more aggressive to prevent cookie expiration issues
-    let currentToken = getCsrfToken()
-    const tokenAge = lastCsrfFetch ? Date.now() - lastCsrfFetch : Infinity
-    const REFRESH_THRESHOLD = 12 * 60 * 60 * 1000 // 12 hours - reduce refresh frequency
-    
-    if (!currentToken || tokenAge > REFRESH_THRESHOLD) {
-      await fetchCsrfToken()
-      currentToken = getCsrfToken()
-    }
-    if (currentToken) {
-      config.headers["X-CSRF-Token"] = currentToken
-    }
-  }
-  
   return config
 })
 
 http.interceptors.response.use(
   (res) => {
-    // Check if response contains a new CSRF token and update it
-    if (res.data?.csrfToken) {
-      setCsrfToken(res.data.csrfToken)
-    }
     return res
   },
   async (err) => {
     const originalRequest = err.config
-
-    // If CSRF token is invalid or missing, clear it and fetch a new one
-    if (err?.response?.status === 403 && (err?.response?.data?.code === "CSRF_TOKEN_INVALID" || err?.response?.data?.code === "CSRF_TOKEN_MISSING")) {
-      clearCsrfToken()
-      await fetchCsrfToken()
-      const newToken = getCsrfToken()
-      if (newToken && originalRequest.headers) {
-        originalRequest.headers["X-CSRF-Token"] = newToken
-        return http(originalRequest)
-      }
-    }
 
     // If error is 401 and we haven't tried to refresh yet
     if (err?.response?.status === 401 && !originalRequest._retry) {
@@ -148,7 +55,7 @@ http.interceptors.response.use(
       isRefreshing = true
 
       try {
-        // Attempt to refresh the token
+        // Attempt to refresh the token (refresh token is httpOnly cookie)
         const { data } = await axios.post(
           `${import.meta.env.VITE_API_BASE_URL}/auth/refresh`,
           {},

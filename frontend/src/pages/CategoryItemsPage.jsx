@@ -1675,8 +1675,8 @@ export default function CategoryItemsPage() {
                           value={form.division}
                           onChange={(e) => setForm((f) => ({ ...f, division: e.target.value }))}
                           placeholder="e.g. Admin, IT, Finance"
-                          readOnly={!!(form.accountablePerson?.name?.trim() || form.transferredTo?.trim())}
-                          className={!!(form.accountablePerson?.name?.trim() || form.transferredTo?.trim()) ? "bg-muted cursor-not-allowed" : ""}
+                          readOnly={(form.accountablePerson?.name?.trim() || form.transferredTo?.trim()) ? true : false}
+                          className={(form.accountablePerson?.name?.trim() || form.transferredTo?.trim()) ? "bg-muted cursor-not-allowed" : ""}
                         />
                         {(form.accountablePerson?.name?.trim() || form.transferredTo?.trim()) && (
                           <p className="text-xs text-muted-foreground">Auto-filled from selected person — edit manually if needed</p>
@@ -1986,8 +1986,8 @@ export default function CategoryItemsPage() {
                           value={form.division}
                           onChange={(e) => setForm((f) => ({ ...f, division: e.target.value }))}
                           placeholder="e.g. Admin, IT, Finance"
-                          readOnly={!!(form.accountablePerson?.name?.trim() || form.transferredTo?.trim())}
-                          className={!!(form.accountablePerson?.name?.trim() || form.transferredTo?.trim()) ? "bg-muted cursor-not-allowed" : ""}
+                          readOnly={(form.accountablePerson?.name?.trim() || form.transferredTo?.trim()) ? true : false}
+                          className={(form.accountablePerson?.name?.trim() || form.transferredTo?.trim()) ? "bg-muted cursor-not-allowed" : ""}
                         />
                         {(form.accountablePerson?.name?.trim() || form.transferredTo?.trim()) && (
                           <p className="text-xs text-muted-foreground">Auto-filled from selected person — edit manually if needed</p>

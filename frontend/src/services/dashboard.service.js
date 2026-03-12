@@ -31,6 +31,6 @@ export async function getItemHistory(itemId) {
  * @returns {Promise<Array>} All audit logs (up to 10000), sorted by createdAt desc
  */
 export async function getAuditLogs() {
-  const { data } = await http.get(API_PATHS.dashboard.auditLogs)
-  return data
+  const { data } = await http.get(API_PATHS.dashboard.auditLogs, { params: { page: 1, pageSize: 10000 } })
+  return Array.isArray(data) ? data : (data?.logs ?? [])
 }

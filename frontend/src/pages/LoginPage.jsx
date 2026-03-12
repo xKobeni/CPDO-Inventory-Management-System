@@ -37,9 +37,6 @@ export default function LoginPage() {
       } else if (err?.response?.status === 401) {
         // Explicitly handle 401 (invalid credentials)
         setError(err?.response?.data?.message || "Invalid username or password")
-      } else if (err?.response?.status === 403 && (err?.response?.data?.code === "CSRF_TOKEN_INVALID" || err?.response?.data?.code === "CSRF_TOKEN_MISSING")) {
-        // Handle CSRF errors separately
-        setError("Session expired. Please refresh the page and try again.")
       } else {
         setError(getErrorMessage(err))
       }

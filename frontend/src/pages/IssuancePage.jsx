@@ -122,7 +122,7 @@ export default function IssuancePage() {
   // status filter removed
   const [assetAssignedFilter, setAssetAssignedFilter] = useState("false") // Assigned = No (string because API uses string flags elsewhere)
   const [assetPage, setAssetPage] = useState(1)
-  const [assetPageSize, setAssetPageSize] = useState(50)
+  const [assetPageSize] = useState(50)
   const [assetsHasMore, setAssetsHasMore] = useState(true)
   const assetsRef = useRef(new Map())
   const [transactions, setTransactions] = useState([])
@@ -137,7 +137,7 @@ export default function IssuancePage() {
   const [dateTo, setDateTo] = useState(todayStr())
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
-  const [deletingTxId, setDeletingTxId] = useState(null)
+  // deletingTxId removed (was not used for UI state)
   const [actionRow, setActionRow] = useState(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [transferDialogOpen, setTransferDialogOpen] = useState(false)
@@ -489,50 +489,11 @@ export default function IssuancePage() {
     setPage(1)
   }, [search, filterAccountable, filterItem, filterType, dateFrom, dateTo])
 
-  const handleRemoveTransaction = async (txId, txType) => {
-    const isAsset = txType === "ASSET_ASSIGN"
-    const msg = isAsset
-      ? "Remove this asset assignment? The asset(s) will return to inventory (unassigned)."
-      : "Remove this issuance? Stock will be returned to inventory."
-    if (!window.confirm(msg)) return
-    setDeletingTxId(txId)
-    try {
-      await transactionsService.deleteIssuance(txId)
-      toast.success(isAsset ? "Asset assignment removed." : "Issuance removed.")
-      fetchTransactions()
-    } catch (err) {
-      toast.error(getErrorMessage(err))
-    } finally {
-      setDeletingTxId(null)
-    }
-  }
-
-  const handleRemoveLine = async (txId, txType, itemId) => {
-    const isAsset = txType === "ASSET_ASSIGN"
-    const msg = isAsset
-      ? "Remove this assigned asset from the transaction? The asset will return to inventory (unassigned)."
-      : "Remove this issued item line? Stock will be returned to inventory."
-    if (!window.confirm(msg)) return
-    const key = `${txId}:${itemId}`
-    setDeletingTxId(key)
-    try {
-      await transactionsService.deleteIssuanceLine(txId, itemId)
-      toast.success(isAsset ? "Line removed (asset unassigned)." : "Line removed (stock returned).")
-      fetchTransactions()
-    } catch (err) {
-      toast.error(getErrorMessage(err))
-    } finally {
-      setDeletingTxId(null)
-    }
-  }
-
   // Confirmed delete (used by AlertDialog) - deletes the specific line stored in `actionRow`
   const confirmDelete = async () => {
     if (!actionRow) return
     const { txId, txType, itemId } = actionRow
     const isAsset = txType === "ASSET_ASSIGN"
-    const key = `${txId}:${itemId}`
-    setDeletingTxId(key)
     setDeleteDialogOpen(false)
     try {
       await transactionsService.deleteIssuanceLine(txId, itemId)
@@ -541,7 +502,6 @@ export default function IssuancePage() {
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
-      setDeletingTxId(null)
       setActionRow(null)
     }
   }
@@ -1021,7 +981,7 @@ export default function IssuancePage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    paginatedRows.map((row, idx) => {
+                    paginatedRows.map((row) => {
                       const isIssuance = row.txType === "ISSUANCE"
                       const accName = row.item?.accountablePerson?.name ?? row.accountablePerson?.name ?? row.issuedToPerson ?? "N/A"
                       return (

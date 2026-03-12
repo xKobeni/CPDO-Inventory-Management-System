@@ -149,7 +149,7 @@ export function TutorialOverlay() {
 
     // Trigger animation on step change
     if (stepChanged) {
-      setIsAnimating(true)
+      queueMicrotask(() => setIsAnimating(true))
     }
 
     const animationTimer = setTimeout(() => setIsAnimating(false), 200)

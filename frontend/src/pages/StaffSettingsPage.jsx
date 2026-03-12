@@ -132,7 +132,7 @@ export default function StaffSettingsPage() {
     try {
       localStorage.setItem("staffNotifications", JSON.stringify(notifications))
       toast.success("Notification preferences saved")
-    } catch (err) {
+    } catch {
       toast.error("Failed to save notification preferences")
     } finally {
       setSavingNotifications(false)
@@ -145,7 +145,7 @@ export default function StaffSettingsPage() {
     try {
       localStorage.setItem("staffPreferences", JSON.stringify(preferences))
       toast.success("Preferences saved")
-    } catch (err) {
+    } catch {
       toast.error("Failed to save preferences")
     } finally {
       setSavingPreferences(false)

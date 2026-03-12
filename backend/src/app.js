@@ -4,7 +4,6 @@ import helmet from "helmet";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
 import mongoSanitize from "express-mongo-sanitize";
-import { setCsrfToken, verifyCsrfToken, addCsrfToResponse } from "./middleware/csrf.js";
 import { 
   getSentryRequestHandler, 
   getSentryTracingHandler, 
@@ -47,31 +46,55 @@ app.use((req, _res, next) => {
   next();
 });
 
+function normalizeOrigin(value) {
+  if (!value) return null;
+  try {
+    return new URL(String(value)).origin;
+  } catch {
+    return null;
+  }
+}
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || process.env.CLIENT_ORIGIN || "http://localhost:5173",
+    origin: (origin, cb) => {
+      const raw =
+        process.env.CLIENT_URL ||
+        process.env.CLIENT_ORIGIN ||
+        "http://localhost:5173";
+      const allowed = String(raw)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      // Non-browser clients may omit Origin.
+      if (!origin) return cb(null, true);
+
+      const presented = normalizeOrigin(origin) || origin;
+      const allowedNormalized = allowed.map((s) => normalizeOrigin(s) || s);
+
+      // Do not throw on mismatch; just deny CORS so the browser blocks.
+      if (allowedNormalized.includes(presented)) return cb(null, true);
+      return cb(null, false);
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    optionsSuccessStatus: 204,
   })
 );
-
-// CSRF token endpoint - client calls this to get initial token
-app.get("/api/csrf-token", setCsrfToken, addCsrfToResponse, (req, res) => {
-  res.json({ csrfToken: req.csrfToken });
-});
 
 app.get("/", (req, res) => res.json({ ok: true, name: "CPDC Inventory API" }));
 
 app.use("/api/health", healthRoutes);
-app.use("/api/auth", verifyCsrfToken, authRoutes);
-app.use("/api/items", verifyCsrfToken, itemsRoutes);
-app.use("/api/transactions", verifyCsrfToken, txRoutes);
-app.use("/api/users", verifyCsrfToken, usersRoutes);
-app.use("/api/people", verifyCsrfToken, peopleRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/items", itemsRoutes);
+app.use("/api/transactions", txRoutes);
+app.use("/api/users", usersRoutes);
+app.use("/api/people", peopleRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/export", exportRoutes);
-app.use("/api/import", verifyCsrfToken, importRoutes);
+app.use("/api/import", importRoutes);
 
 // Sentry error handler must be before other error handlers
 app.use(getSentryErrorHandler());

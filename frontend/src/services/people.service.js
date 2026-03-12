@@ -3,7 +3,7 @@ import { API_PATHS } from "@/constants/api"
 
 export async function listPeople(params = {}) {
   const { data } = await http.get(API_PATHS.people, { params })
-  return data
+  return Array.isArray(data) ? data : (data?.people ?? [])
 }
 
 export async function createPerson(body) {

@@ -8,7 +8,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { fetchCsrfToken } from "@/lib/http"
 import { Clock } from "lucide-react"
 
 const INACTIVITY_WARNING_TIME = 25 * 60 * 1000 // 25 minutes (5 min before token expires)
@@ -17,7 +16,7 @@ const INACTIVITY_LOGOUT_TIME = 30 * 60 * 1000 // 30 minutes (when token actually
 export function InactivityWarning() {
   const [showWarning, setShowWarning] = useState(false)
   const [countdown, setCountdown] = useState(5 * 60) // 5 minutes in seconds
-  const [lastActivity, setLastActivity] = useState(Date.now())
+  const [lastActivity, setLastActivity] = useState(() => Date.now())
 
   const resetActivity = useCallback(() => {
     setLastActivity(Date.now())
@@ -27,12 +26,6 @@ export function InactivityWarning() {
   const handleContinue = useCallback(async () => {
     setShowWarning(false)
     resetActivity()
-    // Fetch a fresh CSRF token
-    try {
-      await fetchCsrfToken()
-    } catch (err) {
-      console.error("Failed to refresh CSRF token:", err)
-    }
   }, [resetActivity])
 
   // Track user activity

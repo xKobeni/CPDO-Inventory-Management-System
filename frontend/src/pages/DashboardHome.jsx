@@ -419,8 +419,6 @@ export default function DashboardHome() {
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
-    setError(null)
     dashboardService
       .getSummary()
       .then((data) => {
@@ -446,7 +444,6 @@ export default function DashboardHome() {
 
   useEffect(() => {
     let cancelled = false
-    setPeopleLoading(true)
     peopleService
       .listPeople()
       .then((data) => {

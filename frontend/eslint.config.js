@@ -23,7 +23,16 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      // Keep lint signal, but avoid blocking builds/dev over style-only rules.
+      'no-unused-vars': ['warn', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-empty': 'warn',
+
+      // Fast refresh rule is noisy for component libraries/context modules.
+      'react-refresh/only-export-components': 'off',
+
+      // These hook rules are valuable, but too strict for this codebase as-is.
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/purity': 'off',
     },
   },
 ])

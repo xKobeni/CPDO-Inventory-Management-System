@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Search, Plus, Trash2, Package, RefreshCw, ChevronLeft, ChevronRight, TrendingUp, AlertCircle } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"

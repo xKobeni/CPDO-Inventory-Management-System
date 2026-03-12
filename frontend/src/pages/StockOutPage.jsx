@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Search, RefreshCw, ChevronLeft, ChevronRight, Plus, Trash2, TrendingDown, AlertTriangle, Package } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
@@ -65,7 +65,6 @@ export default function StockOutPage() {
 
   // Stock out form state
   const [supplies, setSupplies] = useState([])
-  const [suppliesLoading, setSuppliesLoading] = useState(false)
   const [lines, setLines] = useState([{ itemId: "", qty: 1, searchQuery: "" }])
   const [purpose, setPurpose] = useState("usage")
   const [remarks, setRemarks] = useState("")
@@ -89,15 +88,12 @@ export default function StockOutPage() {
   }, [])
 
   const fetchSupplies = useCallback(async () => {
-    setSuppliesLoading(true)
     try {
       const data = await itemsService.listItems({ type: "SUPPLY", archived: "false" })
       setSupplies(data)
-    } catch (err) {
+    } catch {
       toast.error("Failed to load supplies")
       setSupplies([])
-    } finally {
-      setSuppliesLoading(false)
     }
   }, [])
 

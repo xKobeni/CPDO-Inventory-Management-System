@@ -186,28 +186,7 @@ export async function refresh(req, res) {
 }
 
 export async function logout(req, res) {
-  let userId = null;
-
-  // 1) Prefer refresh cookie
-  const token = req.cookies?.refresh_token;
-  if (token) {
-    try {
-      const payload = verifyRefreshToken(token);
-      userId = payload.sub;
-    } catch {
-      // ignore invalid cookie
-    }
-  }
-
-  // 2) Fallback: access token (if you have req.user from requireAuth)
-  if (!userId && req.user?._id) {
-    userId = req.user._id.toString();
-  }
-
-  if (userId) {
-    await User.findByIdAndUpdate(userId, { refreshTokenHash: null });
-  }
-
+  await User.findByIdAndUpdate(req.user._id, { refreshTokenHash: null });
   res.clearCookie("refresh_token", { path: "/api/auth/refresh" });
   res.json({ ok: true });
 }

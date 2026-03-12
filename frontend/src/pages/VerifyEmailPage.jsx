@@ -13,22 +13,18 @@ export default function VerifyEmailPage() {
   const [searchParams] = useSearchParams()
   const token = searchParams.get("token")
 
-  const [status, setStatus] = useState("verifying") // verifying, success, error
-  const [error, setError] = useState(null)
+  const isLoggedIn = !!getToken()
+  const [status, setStatus] = useState(() => (!token ? "error" : "verifying")) // verifying, success, error
+  const [error, setError] = useState(() => (!token ? "Invalid verification link. The token is missing." : null))
 
   useEffect(() => {
     // If user is already logged in, redirect to dashboard
-    if (getToken()) {
+    if (isLoggedIn) {
       navigate("/dashboard", { replace: true })
       return
     }
 
-    // If no token in URL, show error
-    if (!token) {
-      setStatus("error")
-      setError("Invalid verification link. The token is missing.")
-      return
-    }
+    if (!token) return
 
     // Verify the token automatically
     async function verifyToken() {
@@ -50,7 +46,7 @@ export default function VerifyEmailPage() {
     }
 
     verifyToken()
-  }, [token, navigate])
+  }, [token, navigate, isLoggedIn])
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-white p-6 md:p-10">

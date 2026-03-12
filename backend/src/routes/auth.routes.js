@@ -2,7 +2,7 @@ import { Router } from "express";
 import { authLimiter } from "../middleware/rateLimit.js";
 import { validateBody } from "../middleware/validate.js";
 import { requireAuth } from "../middleware/auth.js";
-import { setCsrfToken, addCsrfToResponse } from "../middleware/csrf.js";
+import { verifyOrigin } from "../middleware/verifyOrigin.js";
 import {
   loginSchema,
   login,
@@ -24,10 +24,9 @@ import {
 
 const r = Router();
 
-// Login and refresh provide new CSRF tokens
-r.post("/login", authLimiter, validateBody(loginSchema), setCsrfToken, addCsrfToResponse, login);
-r.post("/refresh", authLimiter, setCsrfToken, addCsrfToResponse, refresh);
-r.post("/logout", requireAuth, logout);
+r.post("/login", authLimiter, validateBody(loginSchema), login);
+r.post("/refresh", authLimiter, verifyOrigin, refresh);
+r.post("/logout", requireAuth, verifyOrigin, logout);
 
 r.get("/verify-email", verifyEmail);
 r.post("/resend-verification", authLimiter, validateBody(resendVerificationSchema), resendVerification);

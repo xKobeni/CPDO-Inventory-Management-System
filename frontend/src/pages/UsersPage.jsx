@@ -956,8 +956,12 @@ export default function UsersPage() {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={() => startEditPerson(p)}>Edit</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleRemovePerson(p.id)} className="text-destructive">
-                                  Remove
+                                <DropdownMenuItem
+                                  onClick={() => handleRemovePerson(p.id)}
+                                  className="text-destructive"
+                                  disabled={removingPersonId === p.id}
+                                >
+                                  {removingPersonId === p.id ? "Removing…" : "Remove"}
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>

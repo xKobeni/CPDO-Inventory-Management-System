@@ -226,7 +226,7 @@ export async function getDashboardSummary(req, res) {
 export async function getAuditLogs(req, res) {
   const { page, pageSize } = req.query;
   const p = Math.max(1, parseInt(page, 10) || 1);
-  const ps = Math.min(100, Math.max(1, parseInt(pageSize, 10) || 50));
+  const ps = Math.min(10000, Math.max(1, parseInt(pageSize, 10) || 50));
   const skip = (p - 1) * ps;
   
   const [logs, total] = await Promise.all([

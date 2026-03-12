@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 import { PanelLeft, PanelLeftClose, LogOut } from "lucide-react"
 import { clearAuth, getUser } from "@/lib/auth"
-import { clearCsrfToken } from "@/lib/http"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { useSidebarCollapsed } from "./SidebarCollapsedContext"
 import { Button } from "@/components/ui/button"
@@ -46,7 +45,6 @@ export default function Topbar() {
 
   function handleSignOut() {
     clearAuth()
-    clearCsrfToken()
     setLogoutOpen(false)
     toast.success("Successfully signed out")
     navigate("/login", { replace: true })

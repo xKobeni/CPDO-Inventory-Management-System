@@ -34,7 +34,7 @@ export async function initSentry() {
     let sentryModule
     try {
       sentryModule = await import("@sentry/react")
-    } catch (importError) {
+    } catch {
       console.log("⚠️  Sentry DSN configured but @sentry/react package not installed")
       console.log("   Install with: npm install @sentry/react")
       return false
