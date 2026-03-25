@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Search } from "lucide-react"
+import { Search, Upload } from "lucide-react"
 import { Link } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
@@ -16,13 +16,15 @@ import {
 import { useCategories } from "@/contexts/CategoriesContext"
 import { FloatingHelpButton } from "@/components/HelpButton"
 import { itemsPageTutorialSteps } from "@/constants/tutorialSteps"
+import ImportModal from "@/components/ImportModal"
 
 export default function ItemsPage() {
-  const { getCategoriesWithIcons, loading, error } = useCategories()
+  const { getCategoriesWithIcons, loading, error, refreshCategories } = useCategories()
   const allManagedCategories = getCategoriesWithIcons()
 
   const [filterType, setFilterType] = useState(null) // null, "SUPPLY", or "ASSET"
   const [searchQuery, setSearchQuery] = useState("")
+  const [importOpen, setImportOpen] = useState(false)
 
   const displayedCategories = allManagedCategories
     .filter((cat) => {
@@ -72,6 +74,14 @@ export default function ItemsPage() {
           </Button>
           <Button asChild variant="outline" data-tutorial="out-of-stock-btn">
             <Link to="/items/out-of-stock">Out of stock</Link>
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => setImportOpen(true)}
+          >
+            <Upload className="size-4" />
+            Import
           </Button>
           <Button asChild data-tutorial="manage-categories-btn">
             <Link to="/items/manage-categories">Manage Categories</Link>
@@ -165,6 +175,12 @@ export default function ItemsPage() {
           )}
         </div>
       </section>
+
+      <ImportModal
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onSuccess={refreshCategories}
+      />
     </div>
   )
 }

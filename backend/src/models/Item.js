@@ -36,7 +36,7 @@ const ItemSchema = new mongoose.Schema(
     quantityOnHand: { type: Number, default: 0, min: 0 },
 
     // ASSET fields
-    propertyNumber: { type: String, trim: true, default: null }, // unique for assets
+    propertyNumber: { type: String, trim: true, default: null },
     serialNumber: { type: String, trim: true, default: null },   // optional
     brand: { type: String, trim: true, default: "" },
     model: { type: String, trim: true, default: "" },
@@ -63,8 +63,6 @@ const ItemSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-
-// Uniqueness for propertyNumber/serialNumber enforced in controller to avoid E11000 on null
 
 // Additional indexes for performance
 ItemSchema.index({ name: "text", category: "text" }); // Text search

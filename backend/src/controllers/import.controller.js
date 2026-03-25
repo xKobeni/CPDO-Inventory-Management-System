@@ -82,7 +82,7 @@ export async function importItems(req, res) {
         dateAcquired: r.dateAcquired ?? r["Date Acquired"],
         unitCost: r.unitCost ?? r["Unit Cost"] ?? r["Amount"],
 
-        accountableName: r.accountableName ?? r["Accountable Name"],
+        accountableName: r.accountableName ?? r["Accountable Name"] ?? r["Accountable Person Transferred To"],
         accountablePosition: r.accountablePosition ?? r["Accountable Position"],
         accountableOffice: r.accountableOffice ?? r["Accountable Office"],
 

@@ -145,13 +145,14 @@ function getEmptyForm(isSupply, categoryName = "General") {
   }
   return {
     ...base,
+    unit: "pcs",
     quantityOnHand: "1",
     propertyNumber: "",
     serialNumber: "",
     brand: "",
     model: "",
     division: "",
-    status: "IN_STOCK",
+    status: "DEPLOYED",
     condition: "GOOD",
   }
 }
@@ -335,7 +336,7 @@ function StatusBadge({ status }) {
   )
 }
 
-function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, onArchive, onRestore, onDelete, columnVisibility, onRowClick }) {
+function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, onArchive, onRestore, onDelete, onMove, columnVisibility, onRowClick }) {
   const { attributes, listeners, transform, transition, setNodeRef, isDragging } = useSortable({ id: item.id })
   const nodeRef = React.useRef(null)
   React.useLayoutEffect(() => {
@@ -375,9 +376,7 @@ function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, onArchive, 
       case "quantity":
         return (
           <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>
-            {item.itemType === "SUPPLY"
-              ? (Number(item.quantityOnHand) || 0).toLocaleString()
-              : "1"}
+            {(Number(item.quantityOnHand) || (item.itemType === "ASSET" ? 1 : 0)).toLocaleString()}
           </TableCell>
         )
       case "reorderLevel":
@@ -432,8 +431,12 @@ function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, onArchive, 
                   <span className="sr-only">Open menu</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem onClick={() => openEdit(item)}>Edit</DropdownMenuItem>
+                {!item.isArchived && (
+                  <DropdownMenuItem onClick={() => onMove?.(item)}>Move to category</DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
                 {item.isArchived ? (
                   <>
                     <DropdownMenuItem onClick={() => onRestore?.(item)}>Restore</DropdownMenuItem>
@@ -468,7 +471,7 @@ function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, onArchive, 
   )
 }
 
-function SortableRowAsset({ item, selectedIds, toggleRow, openEdit, onArchive, onRestore, onDelete, columnVisibility, onRowClick }) {
+function SortableRowAsset({ item, selectedIds, toggleRow, openEdit, onArchive, onRestore, onDelete, onMove, columnVisibility, onRowClick }) {
   const { attributes, listeners, transform, transition, setNodeRef, isDragging } = useSortable({ id: item.id })
   const nodeRef = React.useRef(null)
   React.useLayoutEffect(() => {
@@ -517,7 +520,7 @@ function SortableRowAsset({ item, selectedIds, toggleRow, openEdit, onArchive, o
       case "quantity":
         return (
           <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>
-            {Number(item.quantityOnHand) || 1}
+            {(Number(item.quantityOnHand) || 1).toLocaleString()}
           </TableCell>
         )
       case "details":
@@ -569,8 +572,12 @@ function SortableRowAsset({ item, selectedIds, toggleRow, openEdit, onArchive, o
                   <span className="sr-only">Open menu</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem onClick={() => openEdit(item)}>Edit</DropdownMenuItem>
+                {!item.isArchived && (
+                  <DropdownMenuItem onClick={() => onMove?.(item)}>Move to category</DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
                 {item.isArchived ? (
                   <>
                     <DropdownMenuItem onClick={() => onRestore?.(item)}>Restore</DropdownMenuItem>
@@ -710,6 +717,7 @@ function formToApiPayload(form, isSupply) {
   }
   return {
     ...base,
+    quantityOnHand: parseInt(form.quantityOnHand, 10) || 1,
     propertyNumber: (form.propertyNumber || "").trim() || null,
     serialNumber: (form.serialNumber || "").trim() || null,
     brand: (form.brand || "").trim(),
@@ -742,6 +750,7 @@ function formToUpdatePayload(form, isSupply) {
   }
   return {
     ...base,
+    quantityOnHand: parseInt(form.quantityOnHand, 10) || 1,
     propertyNumber: (form.propertyNumber || "").trim() || null,
     serialNumber: (form.serialNumber || "").trim() || null,
     brand: (form.brand || "").trim(),
@@ -754,7 +763,7 @@ function formToUpdatePayload(form, isSupply) {
 export default function CategoryItemsPage() {
   const { categorySlug } = useParams()
   const location = useLocation()
-  const { getCategoryBySlug, refreshCategories } = useCategories()
+  const { getCategoryBySlug, refreshCategories, categories } = useCategories()
   const { peopleOptions } = usePeople()
   const categoryFromApi = getCategoryBySlug(categorySlug)
   const navState = location.state
@@ -791,6 +800,9 @@ export default function CategoryItemsPage() {
   const [archiveFilter, setArchiveFilter] = useState("active") // "active" | "archived"
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [itemToDelete, setItemToDelete] = useState(null)
+  const [moveOpen, setMoveOpen] = useState(false)
+  const [itemToMove, setItemToMove] = useState(null)
+  const [moveTarget, setMoveTarget] = useState("")
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const dndId = useId()
@@ -1075,6 +1087,31 @@ export default function CategoryItemsPage() {
     }
   }
 
+  const openMove = (item) => {
+    setItemToMove(item)
+    setMoveTarget("")
+    setMoveOpen(true)
+  }
+
+  const confirmMove = async () => {
+    if (!itemToMove || !moveTarget) return
+    const id = itemToMove.id ?? itemToMove._id
+    setSubmitting(true)
+    try {
+      await itemsService.updateItem(id, { category: moveTarget })
+      setItems((prev) => prev.filter((i) => String(i.id) !== String(id)))
+      refreshCategories?.()
+      toast.success(`"${itemToMove.name}" moved to ${moveTarget}.`)
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setSubmitting(false)
+      setMoveOpen(false)
+      setItemToMove(null)
+      setMoveTarget("")
+    }
+  }
+
   if (!category) {
     return (
       <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-6">
@@ -1097,10 +1134,16 @@ export default function CategoryItemsPage() {
   // Normalize status string to consistent token like IN_STOCK, LOW_STOCK, DEPLOYED, etc.
   const normalizeStatus = (s) => (s || "").toString().trim().toUpperCase().replace(/\s+/g, "_")
   const statuses = items.map((it) => normalizeStatus(it.status))
+  // Supply summary counts
   const inStockCount = statuses.filter((st) => st === "IN_STOCK").length
   const lowStockCount = statuses.filter((st) => st === "LOW_STOCK").length
-  // 'Other' are items with statuses that are not IN_STOCK or LOW_STOCK (e.g., DEPLOYED, FOR_REPAIR, DISPOSED, LOST)
   const otherCount = Math.max(0, items.length - inStockCount - lowStockCount)
+  // Asset summary counts
+  const deployedCount = statuses.filter((st) => st === "DEPLOYED").length
+  const assetInStockCount = statuses.filter((st) => st === "IN_STOCK").length
+  const forRepairCount = statuses.filter((st) => st === "FOR_REPAIR").length
+  const disposedCount = statuses.filter((st) => st === "DISPOSED").length
+  const lostCount = statuses.filter((st) => st === "LOST").length
 
   // Total asset/supply value: for supplies multiply unitCost * quantityOnHand when available,
   // for assets sum unitCost (or unitCost * quantityOnHand if quantity provided).
@@ -1184,30 +1227,65 @@ export default function CategoryItemsPage() {
               <div className="mt-3">
                 <div className="w-full h-3 rounded-full bg-muted-foreground/20 overflow-hidden flex">
                   {items.length > 0 ? (
-                    <>
-                      <div className="h-3 bg-green-500" style={{ width: `${(inStockCount / items.length) * 100}%` }} />
-                      <div className="h-3 bg-amber-500" style={{ width: `${(lowStockCount / items.length) * 100}%` }} />
-                      <div className="h-3 bg-zinc-400" style={{ width: `${(otherCount / items.length) * 100}%` }} />
-                    </>
+                    isSupply ? (
+                      <>
+                        <div className="h-3 bg-green-500" style={{ width: `${(inStockCount / items.length) * 100}%` }} />
+                        <div className="h-3 bg-amber-500" style={{ width: `${(lowStockCount / items.length) * 100}%` }} />
+                        <div className="h-3 bg-zinc-400" style={{ width: `${(otherCount / items.length) * 100}%` }} />
+                      </>
+                    ) : (
+                      <>
+                        <div className="h-3 bg-green-500" style={{ width: `${(deployedCount / items.length) * 100}%` }} />
+                        <div className="h-3 bg-blue-400" style={{ width: `${(assetInStockCount / items.length) * 100}%` }} />
+                        <div className="h-3 bg-amber-500" style={{ width: `${(forRepairCount / items.length) * 100}%` }} />
+                        <div className="h-3 bg-zinc-400" style={{ width: `${(disposedCount / items.length) * 100}%` }} />
+                        <div className="h-3 bg-red-500" style={{ width: `${(lostCount / items.length) * 100}%` }} />
+                      </>
+                    )
                   ) : (
                     <div className="h-3 w-full bg-zinc-200" />
                   )}
                 </div>
 
-                <div className="mt-3 flex items-center justify-between text-sm text-muted-foreground">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
-                    <span>In stock: {inStockCount}</span>
+                {isSupply ? (
+                  <div className="mt-3 flex items-center justify-between text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+                      <span>In stock: {inStockCount}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
+                      <span>Low stock: {lowStockCount}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-zinc-400 inline-block" />
+                      <span>Other: {otherCount}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
-                    <span>Low stock: {lowStockCount}</span>
+                ) : (
+                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+                      <span>Deployed: {deployedCount}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" />
+                      <span>In stock: {assetInStockCount}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
+                      <span>For repair: {forRepairCount}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-zinc-400 inline-block" />
+                      <span>Disposed: {disposedCount}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
+                      <span>Lost: {lostCount}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-zinc-400 inline-block" />
-                    <span>Other: {otherCount}</span>
-                  </div>
-                </div>
+                )}
               </div>
             </CardHeader>
           </Card>
@@ -1341,6 +1419,7 @@ export default function CategoryItemsPage() {
                             onArchive={handleArchive}
                             onRestore={handleRestore}
                             onDelete={handleDelete}
+                            onMove={openMove}
                             columnVisibility={columnVisibility}
                             onRowClick={openDrawer}
                           />
@@ -1354,6 +1433,7 @@ export default function CategoryItemsPage() {
                             onArchive={handleArchive}
                             onRestore={handleRestore}
                             onDelete={handleDelete}
+                            onMove={openMove}
                             columnVisibility={columnVisibility}
                             onRowClick={openDrawer}
                           />
@@ -1793,67 +1873,29 @@ export default function CategoryItemsPage() {
                 </div>
               </div>
 
-              {/* Accountable person & Transferred to */}
+              {/* Accountable person & Transferred to — read-only, managed via Assign/Transfer/Return */}
               <Separator />
               <div>
-                <h4 className="mb-3 text-sm font-medium text-zinc-900">Accountability</h4>
+                <div className="mb-3 flex items-center justify-between">
+                  <h4 className="text-sm font-medium text-zinc-900">Accountability</h4>
+                  <span className="text-xs text-muted-foreground">Use Assign / Transfer / Return to change</span>
+                </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="edit-acc-name">Accountable person</Label>
-                    <Select
-                      value={form.accountablePerson?.name?.trim() ? form.accountablePerson.name : "_"}
-                      onValueChange={(v) => {
-                        const next = v === "_" ? "" : v
-                        const p = next ? personByName.get(next) : null
-                        setForm((f) => ({
-                          ...f,
-                          accountablePerson: {
-                            ...(f.accountablePerson || defaultAccountablePerson()),
-                            name: next,
-                            position: p?.position ?? (f.accountablePerson?.position ?? ""),
-                            office: p?.office ?? (f.accountablePerson?.office ?? "CPDC"),
-                          },
-                          division: p?.office ?? (f.division || ""),
-                        }))
-                      }}
-                    >
-                      <SelectTrigger id="edit-acc-name">
-                        <SelectValue placeholder="Select person" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="_">N/A</SelectItem>
-                        {peopleOptions.map((p) => (
-                          <SelectItem key={p.id} value={p.name}>
-                            {p.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>Accountable person</Label>
+                    <Input
+                      value={form.accountablePerson?.name?.trim() || "N/A"}
+                      disabled
+                      className="bg-muted/50 text-muted-foreground"
+                    />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="edit-transferredTo">Transferred to (optional)</Label>
-                    <Select
-                      value={form.transferredTo?.trim() ? form.transferredTo : "_"}
-                      onValueChange={(v) => {
-                        const next = v === "_" ? "" : v
-                        const p = next ? personByName.get(next) : null
-                        setForm((f) => ({
-                          ...f,
-                          transferredTo: next || undefined,
-                          division: p?.office ?? (f.division || ""),
-                        }))
-                      }}
-                    >
-                      <SelectTrigger id="edit-transferredTo">
-                        <SelectValue placeholder="Select person" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="_">None</SelectItem>
-                        {peopleOptions.map((p) => (
-                          <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>Transferred to</Label>
+                    <Input
+                      value={form.transferredTo?.trim() || "None"}
+                      disabled
+                      className="bg-muted/50 text-muted-foreground"
+                    />
                   </div>
                 </div>
               </div>
@@ -2231,6 +2273,40 @@ export default function CategoryItemsPage() {
         </DrawerContent>
       </Drawer>
     </div>
+
+      {/* Move to category dialog */}
+      <Dialog open={moveOpen} onOpenChange={(o) => { if (!o) { setMoveOpen(false); setItemToMove(null); setMoveTarget("") } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Move to category</DialogTitle>
+            <DialogDescription>
+              Select a destination category for &quot;{itemToMove?.name}&quot;. The item will be removed from the current category.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Select value={moveTarget} onValueChange={setMoveTarget}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select category…" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories
+                  .filter((c) => c.name !== category?.name && c.itemType === category?.itemType)
+                  .map((c) => (
+                    <SelectItem key={c.slug} value={c.name}>{c.name}</SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setMoveOpen(false); setItemToMove(null); setMoveTarget("") }}>
+              Cancel
+            </Button>
+            <Button onClick={confirmMove} disabled={!moveTarget || submitting}>
+              {submitting ? "Moving…" : "Move"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>

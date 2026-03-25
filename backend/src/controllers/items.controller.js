@@ -52,7 +52,7 @@ export async function listItems(req, res) {
   const skip = (p - 1) * ps;
 
   const items = await Item.find(finalFilter)
-    .select("name category itemType unit status condition propertyNumber serialNumber quantityOnHand reorderLevel accountablePerson isArchived createdAt updatedAt")
+    .select("name category itemType unit status condition propertyNumber serialNumber quantityOnHand reorderLevel accountablePerson isArchived dateAcquired unitCost brand model division remarks transferredTo assignedDate returnedDate createdAt updatedAt")
     .sort({ updatedAt: -1 })
     .skip(skip)
     .limit(ps)
@@ -81,16 +81,6 @@ export async function createItem(req, res) {
 
   // Normalize dates
   body.dateAcquired = toDateOrNull(body.dateAcquired);
-
-  if (body.itemType === "ASSET") {
-    const pn = body.propertyNumber?.trim();
-    if (pn) {
-      const existing = await Item.findOne({ propertyNumber: pn });
-      if (existing) {
-        return res.status(409).json({ message: "An item with this property number already exists" });
-      }
-    }
-  }
 
   if (body.itemType === "SUPPLY") {
     body.propertyNumber = null;
@@ -176,16 +166,11 @@ export async function updateItem(req, res) {
   const patch = { ...req.body };
   if ("dateAcquired" in patch) patch.dateAcquired = toDateOrNull(patch.dateAcquired);
 
-  // Safeguard: prevent direct edits to assignment/accountable fields here.
-  // Assignment changes must go through assign/transfer/return flows which create
-  // the corresponding Transaction records (single source of truth).
-  const protectedFields = ["accountablePerson", "status", "assignedDate", "returnedDate", "transferredTo"];
-  const attempted = Object.keys(patch).filter((k) => protectedFields.includes(k));
-  if (attempted.length) {
-    return res.status(400).json({
-      message: `Direct edits to assignment-related fields are not allowed: ${attempted.join(", ")}. Use assign/transfer/return endpoints instead.`,
-    });
-  }
+  // Strip protected accountability/assignment fields — those must go through
+  // assign/transfer/return endpoints which create Transaction records.
+  // status and condition are allowed here (e.g. FOR_REPAIR, DISPOSED, LOST).
+  const protectedFields = ["accountablePerson", "assignedDate", "returnedDate", "transferredTo"];
+  protectedFields.forEach((f) => delete patch[f]);
 
   const item = await Item.findById(id);
   if (!item) return res.status(404).json({ message: "Item not found" });
@@ -212,13 +197,6 @@ export async function updateItem(req, res) {
     item.propertyNumber = null;
   }
 
-  const pn = item.propertyNumber?.trim();
-  if (pn) {
-    const existing = await Item.findOne({ propertyNumber: pn, _id: { $ne: item._id } });
-    if (existing) {
-      return res.status(409).json({ message: "An item with this property number already exists" });
-    }
-  }
   const sn = item.serialNumber?.trim();
   if (sn) {
     const existing = await Item.findOne({ serialNumber: sn, _id: { $ne: item._id } });
