@@ -78,3 +78,15 @@ export async function transferAsset(id, body) {
   const { data } = await http.post(API_PATHS.itemTransfer(id), body)
   return data
 }
+
+/**
+ * Copy an item by ID. Optionally pass field overrides (name, serialNumber, etc.)
+ * accountablePerson and transferredTo are always stripped server-side.
+ * @param {string} id - Source item ID
+ * @param {Object} [body] - Optional field overrides
+ * @returns {Promise<Object>}
+ */
+export async function copyItem(id, body = {}) {
+  const { data } = await http.post(API_PATHS.itemCopy(id), body)
+  return data
+}

@@ -336,7 +336,7 @@ function StatusBadge({ status }) {
   )
 }
 
-function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, onArchive, onRestore, onDelete, onMove, columnVisibility, onRowClick }) {
+function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, onArchive, onRestore, onDelete, onMove, onCopy, columnVisibility, onRowClick }) {
   const { attributes, listeners, transform, transition, setNodeRef, isDragging } = useSortable({ id: item.id })
   const nodeRef = React.useRef(null)
   React.useLayoutEffect(() => {
@@ -445,6 +445,7 @@ function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, onArchive, 
                 ) : (
                   <DropdownMenuItem variant="destructive" onClick={() => onArchive?.(item)}>Archive</DropdownMenuItem>
                 )}
+                <DropdownMenuItem onClick={() => onCopy?.(item)}>Copy</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </TableCell>
@@ -471,7 +472,7 @@ function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, onArchive, 
   )
 }
 
-function SortableRowAsset({ item, selectedIds, toggleRow, openEdit, onArchive, onRestore, onDelete, onMove, columnVisibility, onRowClick }) {
+function SortableRowAsset({ item, selectedIds, toggleRow, openEdit, onArchive, onRestore, onDelete, onMove, onCopy, columnVisibility, onRowClick }) {
   const { attributes, listeners, transform, transition, setNodeRef, isDragging } = useSortable({ id: item.id })
   const nodeRef = React.useRef(null)
   React.useLayoutEffect(() => {
@@ -586,6 +587,7 @@ function SortableRowAsset({ item, selectedIds, toggleRow, openEdit, onArchive, o
                 ) : (
                   <DropdownMenuItem variant="destructive" onClick={() => onArchive?.(item)}>Archive</DropdownMenuItem>
                 )}
+                <DropdownMenuItem onClick={() => onCopy?.(item)}>Copy</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </TableCell>
@@ -803,6 +805,9 @@ export default function CategoryItemsPage() {
   const [moveOpen, setMoveOpen] = useState(false)
   const [itemToMove, setItemToMove] = useState(null)
   const [moveTarget, setMoveTarget] = useState("")
+  const [copyConfirmOpen, setCopyConfirmOpen] = useState(false)
+  const [itemToCopy, setItemToCopy] = useState(null)
+  const [copyForm, setCopyForm] = useState(null)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const dndId = useId()
@@ -1091,6 +1096,40 @@ export default function CategoryItemsPage() {
     setItemToMove(item)
     setMoveTarget("")
     setMoveOpen(true)
+  }
+
+  const openCopyConfirm = (item) => {
+    const isSupply = item.itemType === "SUPPLY"
+    const base = itemToForm(item, isSupply)
+    setCopyForm({
+      ...base,
+      name: `${item.name} (Copy)`,
+      serialNumber: "",
+      // propertyNumber and accountablePerson kept pre-filled from source
+      transferredTo: "",
+    })
+    setItemToCopy(item)
+    setCopyConfirmOpen(true)
+  }
+
+  const handleConfirmCopy = async () => {
+    if (!itemToCopy || !copyForm) return
+    const id = itemToCopy.id ?? itemToCopy._id
+    const isSupply = itemToCopy.itemType === "SUPPLY"
+    const payload = formToApiPayload(copyForm, isSupply)
+    setSubmitting(true)
+    try {
+      const created = await itemsService.copyItem(id, payload)
+      setItems((prev) => [...prev, { ...created, id: created._id?.toString() ?? created._id }])
+      toast.success(`"${copyForm.name}" copied successfully.`)
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setSubmitting(false)
+      setCopyConfirmOpen(false)
+      setItemToCopy(null)
+      setCopyForm(null)
+    }
   }
 
   const confirmMove = async () => {
@@ -1420,6 +1459,7 @@ export default function CategoryItemsPage() {
                             onRestore={handleRestore}
                             onDelete={handleDelete}
                             onMove={openMove}
+                            onCopy={openCopyConfirm}
                             columnVisibility={columnVisibility}
                             onRowClick={openDrawer}
                           />
@@ -1434,6 +1474,7 @@ export default function CategoryItemsPage() {
                             onRestore={handleRestore}
                             onDelete={handleDelete}
                             onMove={openMove}
+                            onCopy={openCopyConfirm}
                             columnVisibility={columnVisibility}
                             onRowClick={openDrawer}
                           />
@@ -2303,6 +2344,225 @@ export default function CategoryItemsPage() {
             </Button>
             <Button onClick={confirmMove} disabled={!moveTarget || submitting}>
               {submitting ? "Moving…" : "Move"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Copy Item Dialog — editable pre-filled form */}
+      <Dialog open={copyConfirmOpen} onOpenChange={(o) => { if (!o) { setCopyConfirmOpen(false); setItemToCopy(null); setCopyForm(null) } }}>
+        <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col p-0 sm:max-w-2xl">
+          <DialogHeader className="shrink-0 border-b px-6 py-4">
+            <DialogTitle>Copy Item</DialogTitle>
+            <DialogDescription>
+              Review and edit the details for the new copy before saving.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+            {copyForm && (
+              <div className="space-y-6">
+                {/* Inventory record */}
+                <div>
+                  <h4 className="mb-3 text-sm font-medium text-zinc-900">Inventory record</h4>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="copy-dateAcquired">Date acquired</Label>
+                      <Input
+                        id="copy-dateAcquired"
+                        type="date"
+                        value={copyForm.dateAcquired}
+                        onChange={(e) => setCopyForm((f) => ({ ...f, dateAcquired: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="copy-unitCost">Amount (₱)</Label>
+                      <Input
+                        id="copy-unitCost"
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={copyForm.unitCost}
+                        onChange={(e) => setCopyForm((f) => ({ ...f, unitCost: e.target.value }))}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="copy-name">Item name <span className="text-destructive">*</span></Label>
+                      <Input
+                        id="copy-name"
+                        value={copyForm.name}
+                        onChange={(e) => setCopyForm((f) => ({ ...f, name: e.target.value }))}
+                        placeholder="Item name"
+                      />
+                    </div>
+                    {itemToCopy?.itemType !== "SUPPLY" && (
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="copy-propertyNo">Property number</Label>
+                        <Input
+                          id="copy-propertyNo"
+                          value={copyForm.propertyNumber ?? ""}
+                          onChange={(e) => setCopyForm((f) => ({ ...f, propertyNumber: e.target.value }))}
+                          placeholder="e.g. 2025-26-014"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Accountability */}
+                <Separator />
+                <div>
+                  <h4 className="mb-3 text-sm font-medium text-zinc-900">Accountability</h4>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="copy-acc-name">Accountable person</Label>
+                      <Select
+                        value={copyForm.accountablePerson?.name?.trim() ? copyForm.accountablePerson.name : "_"}
+                        onValueChange={(v) => {
+                          const next = v === "_" ? "" : v
+                          const p = next ? personByName.get(next) : null
+                          setCopyForm((f) => ({
+                            ...f,
+                            accountablePerson: {
+                              ...(f.accountablePerson || defaultAccountablePerson()),
+                              name: next,
+                              position: p?.position ?? (f.accountablePerson?.position ?? ""),
+                              office: p?.office ?? (f.accountablePerson?.office ?? "CPDC"),
+                            },
+                          }))
+                        }}
+                      >
+                        <SelectTrigger id="copy-acc-name"><SelectValue placeholder="Select person" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_">N/A</SelectItem>
+                          {peopleOptions.map((p) => (
+                            <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="copy-transferredTo">Transferred to (optional)</Label>
+                      <Select
+                        value={copyForm.transferredTo?.trim() ? copyForm.transferredTo : "_"}
+                        onValueChange={(v) => {
+                          const next = v === "_" ? "" : v
+                          setCopyForm((f) => ({ ...f, transferredTo: next || "" }))
+                        }}
+                      >
+                        <SelectTrigger id="copy-transferredTo"><SelectValue placeholder="Select person" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_">None</SelectItem>
+                          {peopleOptions.map((p) => (
+                            <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Details */}
+                <Separator />
+                <div>
+                  <h4 className="mb-3 text-sm font-medium text-zinc-900">Details</h4>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="copy-unit">Unit</Label>
+                      <Select value={copyForm.unit} onValueChange={(v) => setCopyForm((f) => ({ ...f, unit: v }))}>
+                        <SelectTrigger id="copy-unit"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {UNIT_OPTIONS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="copy-serial">Serial no. (optional)</Label>
+                      <Input
+                        id="copy-serial"
+                        value={copyForm.serialNumber ?? ""}
+                        onChange={(e) => setCopyForm((f) => ({ ...f, serialNumber: e.target.value }))}
+                        placeholder="Cleared — enter new serial if needed"
+                      />
+                    </div>
+                    {itemToCopy?.itemType === "SUPPLY" ? (
+                      <>
+                        <div className="space-y-2">
+                          <Label htmlFor="copy-qty">Quantity on hand</Label>
+                          <Input id="copy-qty" type="number" min={0}
+                            value={copyForm.quantityOnHand}
+                            onChange={(e) => setCopyForm((f) => ({ ...f, quantityOnHand: e.target.value }))}
+                            placeholder="0" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="copy-reorder">Reorder level</Label>
+                          <Input id="copy-reorder" type="number" min={0}
+                            value={copyForm.reorderLevel}
+                            onChange={(e) => setCopyForm((f) => ({ ...f, reorderLevel: e.target.value }))}
+                            placeholder="0" />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="space-y-2">
+                          <Label htmlFor="copy-brand">Brand</Label>
+                          <Input id="copy-brand" value={copyForm.brand ?? ""}
+                            onChange={(e) => setCopyForm((f) => ({ ...f, brand: e.target.value }))}
+                            placeholder="e.g. HP" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="copy-model">Model</Label>
+                          <Input id="copy-model" value={copyForm.model ?? ""}
+                            onChange={(e) => setCopyForm((f) => ({ ...f, model: e.target.value }))}
+                            placeholder="e.g. LaserJet Pro" />
+                        </div>
+                      </>
+                    )}
+                    <div className="space-y-2">
+                      <Label htmlFor="copy-status">Status</Label>
+                      <Select value={copyForm.status} onValueChange={(v) => setCopyForm((f) => ({ ...f, status: v }))}>
+                        <SelectTrigger id="copy-status"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {STATUS_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="copy-condition">Condition</Label>
+                      <Select value={copyForm.condition} onValueChange={(v) => setCopyForm((f) => ({ ...f, condition: v }))}>
+                        <SelectTrigger id="copy-condition"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {CONDITION_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Remarks */}
+                <Separator />
+                <div>
+                  <h4 className="mb-3 text-sm font-medium text-zinc-900">Remarks</h4>
+                  <Textarea
+                    id="copy-remarks"
+                    value={copyForm.remarks ?? ""}
+                    onChange={(e) => setCopyForm((f) => ({ ...f, remarks: e.target.value }))}
+                    placeholder="Optional remarks"
+                    rows={3}
+                    className="resize-none"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="shrink-0 border-t bg-muted/30 px-6 py-4">
+            <Button variant="outline" onClick={() => { setCopyConfirmOpen(false); setItemToCopy(null); setCopyForm(null) }} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmCopy} disabled={submitting || !copyForm?.name?.trim()}>
+              {submitting ? "Copying…" : "Create Copy"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -465,3 +465,89 @@ export async function transferAsset(req, res) {
 
   res.json(item);
 }
+
+// -------------------- COPY --------------------
+
+export async function copyItem(req, res) {
+  const { id } = req.params;
+
+  const source = await Item.findById(id).lean();
+  if (!source) return res.status(404).json({ message: "Item not found" });
+
+  // Build base copy payload — strip identity, audit, and accountability fields
+  const {
+    _id,
+    __v,
+    createdAt,
+    updatedAt,
+    isArchived,
+    accountablePerson: _acc,
+    transferredTo: _trf,
+    assignedDate,
+    returnedDate,
+    ...rest
+  } = source;
+
+  // Optional overrides from request body (user edited fields in the copy dialog)
+  const overrides = { ...req.body };
+  // Strip audit/identity fields only — accountablePerson and transferredTo ARE allowed
+  delete overrides.assignedDate;
+  delete overrides.returnedDate;
+  delete overrides.isArchived;
+  delete overrides._id;
+
+  if (overrides.dateAcquired !== undefined) {
+    overrides.dateAcquired = toDateOrNull(overrides.dateAcquired);
+  }
+
+  const copyPayload = {
+    ...rest,
+    name: `${source.name} (Copy)`,
+    serialNumber: null,  // default: cleared (user can override via body)
+    propertyNumber: null,
+    status: "IN_STOCK",
+    accountablePerson: { name: "", position: "", office: "CPDC" },
+    transferredTo: "",
+    assignedDate: null,
+    returnedDate: null,
+    isArchived: false,
+    dateAcquired: toDateOrNull(source.dateAcquired),
+    // Apply user overrides last
+    ...overrides,
+  };
+
+  // Check serial number uniqueness if user provided one
+  const sn = copyPayload.serialNumber?.trim?.();
+  if (sn) {
+    const existing = await Item.findOne({ serialNumber: sn });
+    if (existing) {
+      return res.status(409).json({ message: "An item with this serial number already exists" });
+    }
+  }
+
+  const session = await mongoose.startSession();
+  try {
+    session.startTransaction();
+
+    const created = await Item.create([copyPayload], { session });
+    const newItem = created[0];
+
+    await AuditLog.create([
+      {
+        actorId: req.user._id,
+        action: "ITEM_COPY",
+        targetType: "Item",
+        targetId: newItem._id.toString(),
+        meta: { sourceId: id, name: newItem.name, itemType: newItem.itemType },
+      },
+    ], { session });
+
+    await session.commitTransaction();
+    res.status(201).json(newItem);
+  } catch (e) {
+    await session.abortTransaction();
+    throw e;
+  } finally {
+    session.endSession();
+  }
+}

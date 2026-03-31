@@ -24,6 +24,7 @@ export const API_PATHS = {
   itemAssign: (id) => `/items/${id}/assign`,
   itemReturn: (id) => `/items/${id}/return`,
   itemTransfer: (id) => `/items/${id}/transfer`,
+  itemCopy: (id) => `/items/${id}/copy`,
   transactions: "/transactions",
   transaction: (id) => `/transactions/${id}`,
   transactionLine: (txId, itemId) => `/transactions/${txId}/line/${itemId}`,

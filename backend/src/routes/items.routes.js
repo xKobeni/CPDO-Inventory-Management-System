@@ -14,6 +14,7 @@ import {
   assignAsset,
   returnAsset,
   transferAsset,
+  copyItem,
 } from "../controllers/items.controller.js";
 
 const r = Router();
@@ -124,5 +125,8 @@ r.delete("/:id", requireAuth, requireRole("ADMIN", "STAFF"), deleteItem);
 r.post("/:id/assign", requireAuth, requireRole("ADMIN", "STAFF"), validateBody(assignSchema), assignAsset);
 r.post("/:id/return", requireAuth, requireRole("ADMIN", "STAFF"), validateBody(returnSchema), returnAsset);
 r.post("/:id/transfer", requireAuth, requireRole("ADMIN", "STAFF"), validateBody(transferSchema), transferAsset);
+
+// Copy item (creates a duplicate without accountability / transfer fields)
+r.post("/:id/copy", requireAuth, requireRole("ADMIN", "STAFF"), copyItem);
 
 export default r;
