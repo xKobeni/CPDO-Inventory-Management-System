@@ -536,7 +536,7 @@ export default function DashboardHome() {
           <StatCard
             title="Low stock"
             value={loading ? "…" : kpis.lowStockCount}
-            description="At or below reorder level"
+            description="On hand above zero, at or below reorder"
             icon={TrendingDown}
             variant="warning"
             href="/items/low-stock"

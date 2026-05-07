@@ -391,6 +391,7 @@ export async function exportDashboardSummaryXlsx(req, res) {
     itemType: "SUPPLY",
     isArchived: false,
     reorderLevel: { $gt: 0 },
+    quantityOnHand: { $gt: 0 },
     $expr: { $lte: ["$quantityOnHand", "$reorderLevel"] },
   });
 

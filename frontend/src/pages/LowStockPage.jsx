@@ -99,7 +99,7 @@ export default function LowStockPage() {
             Low stock
           </h1>
           <p className="text-sm text-muted-foreground">
-            Supply items at or below reorder level. Restock these to avoid running out.
+            Supplies with quantity on hand above zero but at or below reorder level. (Quantity zero appears under Out of stock.)
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

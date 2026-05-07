@@ -61,11 +61,12 @@ export async function listItems(req, res) {
 }
 
 export async function lowStock(req, res) {
-  // Supplies only, not archived, reorderLevel > 0, qty <= reorderLevel
+  // Supplies only, not archived, reorder set, on-hand > 0 and at/below reorder (exclude qty 0 — no stock)
   const items = await Item.find({
     itemType: "SUPPLY",
     isArchived: false,
     reorderLevel: { $gt: 0 },
+    quantityOnHand: { $gt: 0 },
     $expr: { $lte: ["$quantityOnHand", "$reorderLevel"] },
   })
     .select("name category unit quantityOnHand reorderLevel updatedAt")

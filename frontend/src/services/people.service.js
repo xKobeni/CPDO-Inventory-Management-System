@@ -6,6 +6,29 @@ export async function listPeople(params = {}) {
   return Array.isArray(data) ? data : (data?.people ?? [])
 }
 
+/**
+ * Fetch every person record (paginates with pageSize 500 until all pages are read).
+ * For query flags see {@link listPeople} (e.g. active: "true").
+ */
+export async function listAllPeople(params = {}) {
+  const merged = { ...params }
+  const out = []
+  let page = 1
+  const pageSize = 500
+  while (true) {
+    const { data } = await http.get(API_PATHS.people, {
+      params: { ...merged, page, pageSize },
+    })
+    const chunk = Array.isArray(data) ? data : (data?.people ?? [])
+    const totalPages =
+      typeof data?.totalPages === "number" && data.totalPages >= 1 ? data.totalPages : 1
+    out.push(...chunk)
+    if (page >= totalPages || chunk.length === 0) break
+    page += 1
+  }
+  return out
+}
+
 export async function createPerson(body) {
   const { data } = await http.post(API_PATHS.people, body)
   return data

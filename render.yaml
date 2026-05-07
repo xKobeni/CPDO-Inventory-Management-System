@@ -1,0 +1,56 @@
+# Render Blueprint for CPDO Inventory Management System
+# This file defines the infrastructure for deploying on Render
+# Learn more: https://render.com/docs/blueprint-spec
+
+services:
+  # Backend API Service
+  - type: web
+    name: cpdo-inventory-api
+    runtime: node
+    region: singapore # change to your preferred region
+    plan: starter # free tier or starter ($7/month)
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      # Add these in Render dashboard as secret environment variables:
+      # - MONGODB_URI (your MongoDB Atlas connection string)
+      # - JWT_ACCESS_SECRET (generate with: openssl rand -hex 32)
+      # - JWT_REFRESH_SECRET (generate with: openssl rand -hex 32)
+      # - CLIENT_URL (your frontend URL, e.g., https://your-app.onrender.com)
+      # - SMTP_HOST (optional, for email)
+      # - SMTP_PORT (optional, for email)
+      # - SMTP_USER (optional, for email)
+      # - SMTP_PASS (optional, for email)
+      # - EMAIL_FROM_EMAIL (optional, for email)
+      # - EMAIL_FROM_NAME (optional, for email)
+      # - TURNSTILE_SECRET_KEY (optional, for captcha)
+      # - SENTRY_DSN (optional, for error monitoring)
+      # - ACCESS_TOKEN_EXPIRES_IN (optional, default: 15m)
+      # - REFRESH_TOKEN_EXPIRES_IN (optional, default: 7d)
+    healthCheckPath: /api/health
+
+  # Frontend Static Site
+  - type: web
+    name: cpdo-inventory-frontend
+    runtime: static
+    region: singapore # change to your preferred region
+    plan: starter # free tier
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://cpdo-inventory-api.onrender.com/api # Update with your actual backend URL
+      # Add these in Render dashboard (optional):
+      # - VITE_TURNSTILE_SITE_KEY (optional, for captcha)
+      # - VITE_SENTRY_DSN (optional, for error monitoring)
+      # - VITE_SENTRY_ENVIRONMENT (optional, value: production)
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

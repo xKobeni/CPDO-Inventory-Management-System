@@ -162,7 +162,7 @@ export const categoryItemsTutorialSteps = [
   {
     target: "[data-tutorial='summary-card']",
     title: "Status Summary",
-    description: "Visual breakdown of item statuses: In Stock (green), Low Stock (amber), and Other statuses like Deployed or For Repair.",
+    description: "For supplies: In stock (green), Low stock (amber), No stock (red). For assets: breakdown by deployed, in stock, repair, etc.",
   },
   {
     target: "[data-tutorial='items-search']",
@@ -172,7 +172,7 @@ export const categoryItemsTutorialSteps = [
   {
     target: "[data-tutorial='status-filter']",
     title: "Status Filter",
-    description: "Filter items by their status: In Stock, Low Stock, Deployed, For Repair, Disposed, or Lost.",
+    description: "Filter by status. Supplies also support Low stock and No stock; assets include Deployed, For Repair, and others.",
   },
   {
     target: "[data-tutorial='archive-filter']",
@@ -422,7 +422,7 @@ export const reportsTutorialSteps = [
   {
     target: "[data-tutorial='date-range-controls']",
     title: "Date Range Options",
-    description: "Filter reports by time period. Choose 'All time' for complete history or 'Custom range' to specify exact dates for your analysis.",
+    description: "Pick a quick range (for example Last 30 days, This month, or This year) or use Custom dates for full control. Rolling ranges update whenever you generate.",
   },
   {
     target: "[data-tutorial='issuance-item-filter']",
@@ -432,7 +432,12 @@ export const reportsTutorialSteps = [
   {
     target: "[data-tutorial='report-filters']",
     title: "Additional Filters",
-    description: "Narrow your report scope by category or accountable person. These filters help focus on specific departments, people, or item categories.",
+    description: "Choose category and item type (or accountable person on Issuance). For Inventory Summary, Stock In, and Stock Out, scroll down for Search and Person / accountable.",
+  },
+  {
+    target: "[data-tutorial='report-search-filter']",
+    title: "Search and Person Filter",
+    description: "Search scans many fields (items, suppliers, references, recipients, remarks). Person / accountable limits inventory or movements to one person; click Generate after changing it—Search updates the table instantly.",
   },
   {
     target: "[data-tutorial='generate-report-btn']",
@@ -453,6 +458,11 @@ export const reportsTutorialSteps = [
     target: "[data-tutorial='results-table']",
     title: "Report Results",
     description: "View your report data in a structured table. Column layout changes based on report type to show the most relevant information.",
+  },
+  {
+    target: "[data-tutorial='issuance-table-columns']",
+    title: "Issuance table layout",
+    description: "For Issuance detail rows, use Table layout to show or hide columns, reorder them, or reset to defaults. Extra columns include category, quantity, and transaction type. Choices are saved in this browser only.",
   },
 ]
 

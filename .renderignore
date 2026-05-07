@@ -1,0 +1,28 @@
+# Files to ignore during Render deployment
+# Similar to .gitignore but for Render-specific ignores
+
+# Development files
+*.md
+!README.md
+!PRODUCTION_CHECKLIST.md
+
+# Test files
+**/*.test.js
+**/*.spec.js
+**/tests/
+**/test/
+
+# Documentation
+docs/
+
+# Editor files
+.vscode/
+.idea/
+
+# Environment examples
+**/.env.example
+
+# Backups and temporary files
+**/backups/
+**/tmp/
+**/temp/

@@ -58,3 +58,13 @@ export async function deleteIssuanceLine(txId, itemId) {
   const { data } = await http.delete(API_PATHS.transactionLine(txId, itemId))
   return data
 }
+
+/**
+ * Update transaction remarks (maps to purpose). Issuance / asset-assign only; ADMIN or STAFF.
+ * @param {string} id
+ * @param {{ purpose: string }} body
+ */
+export async function patchTransactionPurpose(id, body) {
+  const { data } = await http.patch(API_PATHS.transaction(id), body)
+  return data
+}

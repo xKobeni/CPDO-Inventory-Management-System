@@ -70,7 +70,7 @@ export function SectionCards({ kpis } = {}) {
             {lowStockCount}
           </CardTitle>
           <CardAction>
-            <Badge variant="outline">At or below reorder</Badge>
+            <Badge variant="outline">Qty above zero, at/below reorder</Badge>
           </CardAction>
         </CardHeader>
         <CardFooter className="flex-col items-start gap-1.5 text-sm">

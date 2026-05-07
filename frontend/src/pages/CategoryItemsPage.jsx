@@ -103,6 +103,7 @@ const STATUS_FILTER_OPTIONS = [
   { value: "", label: "All statuses" },
   ...STATUS_OPTIONS,
   { value: "LOW_STOCK", label: "Low stock" },
+  { value: "NO_STOCK", label: "No stock" },
 ]
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
 const CONDITION_OPTIONS = [
@@ -175,7 +176,7 @@ function formToItem(form, isSupply, newId) {
       remarks: (form.remarks || "").trim(),
       quantityOnHand: qty,
       reorderLevel: reorder,
-      status: qty <= reorder && reorder > 0 ? "Low Stock" : "IN_STOCK",
+      status: qty === 0 ? "NO_STOCK" : qty <= reorder && reorder > 0 ? "LOW_STOCK" : "IN_STOCK",
       condition: "GOOD",
       accountablePerson: { ...acc },
       division: "",
@@ -314,6 +315,8 @@ const getColAlignment = (id) => COLUMN_ALIGNMENT[id] || "text-left"
 
 const STATUS_LABELS = {
   IN_STOCK: "In Stock",
+  LOW_STOCK: "Low stock",
+  NO_STOCK: "No stock",
   DEPLOYED: "Deployed",
   FOR_REPAIR: "For Repair",
   DISPOSED: "Disposed",
@@ -321,13 +324,34 @@ const STATUS_LABELS = {
 }
 const CONDITION_LABELS = { NEW: "New", GOOD: "Good", FAIR: "Fair", POOR: "Poor", DAMAGED: "Damaged" }
 
+function isSupplyNoStock(item) {
+  return item.itemType === "SUPPLY" && (Number(item.quantityOnHand) || 0) === 0
+}
+
+/** On-hand &gt; 0, reorder set, and on-hand at or below reorder (matches `/items/low-stock`; excludes zero qty). */
+function isSupplyLowStock(item) {
+  const qty = Number(item.quantityOnHand) || 0
+  const reorder = Number(item.reorderLevel) || 0
+  return item.itemType === "SUPPLY" && qty > 0 && reorder > 0 && qty <= reorder
+}
+
+function supplyDisplayStatusToken(item) {
+  if (item.itemType !== "SUPPLY") return "IN_STOCK"
+  if (isSupplyNoStock(item)) return "NO_STOCK"
+  if (isSupplyLowStock(item)) return "LOW_STOCK"
+  return "IN_STOCK"
+}
+
 function StatusBadge({ status }) {
   const label = STATUS_LABELS[status] ?? status
   const ok = status === "IN_STOCK" || status === "DEPLOYED"
+  const noStock = status === "NO_STOCK"
   return (
     <Badge variant="outline" className="text-muted-foreground gap-1 px-1.5">
       {ok ? (
         <IconCircleCheckFilled className="size-3.5 fill-green-500 dark:fill-green-400" />
+      ) : noStock ? (
+        <IconAlertCircle className="size-3.5 text-red-600 dark:text-red-400" />
       ) : (
         <IconAlertCircle className="size-3.5 text-amber-600" />
       )}
@@ -398,7 +422,7 @@ function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, onArchive, 
       case "status":
         return (
           <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>
-            <StatusBadge status={item.status} />
+            <StatusBadge status={supplyDisplayStatusToken(item)} />
           </TableCell>
         )
       case "condition":
@@ -890,8 +914,14 @@ export default function CategoryItemsPage() {
       )
     }
     if (statusFilter === "LOW_STOCK") {
-      list = list.filter(
-        (i) => i.itemType === "SUPPLY" && Number(i.reorderLevel) > 0 && Number(i.quantityOnHand) <= Number(i.reorderLevel)
+      list = list.filter((i) => isSupplyLowStock(i))
+    } else if (statusFilter === "NO_STOCK") {
+      list = list.filter((i) => isSupplyNoStock(i))
+    } else if (statusFilter === "IN_STOCK") {
+      list = list.filter((i) =>
+        i.itemType === "SUPPLY"
+          ? supplyDisplayStatusToken(i) === "IN_STOCK"
+          : i.status === "IN_STOCK"
       )
     } else if (statusFilter) {
       list = list.filter((i) => i.status === statusFilter)
@@ -1172,11 +1202,13 @@ export default function CategoryItemsPage() {
   const colConfig = isSupply ? SUPPLY_COLUMNS : ASSET_COLUMNS
   // Normalize status string to consistent token like IN_STOCK, LOW_STOCK, DEPLOYED, etc.
   const normalizeStatus = (s) => (s || "").toString().trim().toUpperCase().replace(/\s+/g, "_")
-  const statuses = items.map((it) => normalizeStatus(it.status))
+  const statuses = items.map((it) =>
+    isSupply && it.itemType === "SUPPLY" ? supplyDisplayStatusToken(it) : normalizeStatus(it.status)
+  )
   // Supply summary counts
   const inStockCount = statuses.filter((st) => st === "IN_STOCK").length
   const lowStockCount = statuses.filter((st) => st === "LOW_STOCK").length
-  const otherCount = Math.max(0, items.length - inStockCount - lowStockCount)
+  const noStockCount = statuses.filter((st) => st === "NO_STOCK").length
   // Asset summary counts
   const deployedCount = statuses.filter((st) => st === "DEPLOYED").length
   const assetInStockCount = statuses.filter((st) => st === "IN_STOCK").length
@@ -1270,7 +1302,7 @@ export default function CategoryItemsPage() {
                       <>
                         <div className="h-3 bg-green-500" style={{ width: `${(inStockCount / items.length) * 100}%` }} />
                         <div className="h-3 bg-amber-500" style={{ width: `${(lowStockCount / items.length) * 100}%` }} />
-                        <div className="h-3 bg-zinc-400" style={{ width: `${(otherCount / items.length) * 100}%` }} />
+                        <div className="h-3 bg-red-500" style={{ width: `${(noStockCount / items.length) * 100}%` }} />
                       </>
                     ) : (
                       <>
@@ -1287,7 +1319,7 @@ export default function CategoryItemsPage() {
                 </div>
 
                 {isSupply ? (
-                  <div className="mt-3 flex items-center justify-between text-sm text-muted-foreground">
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 text-sm text-muted-foreground">
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
                       <span>In stock: {inStockCount}</span>
@@ -1297,8 +1329,8 @@ export default function CategoryItemsPage() {
                       <span>Low stock: {lowStockCount}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-zinc-400 inline-block" />
-                      <span>Other: {otherCount}</span>
+                      <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
+                      <span>No stock: {noStockCount}</span>
                     </div>
                   </div>
                 ) : (
@@ -1349,7 +1381,7 @@ export default function CategoryItemsPage() {
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
-                {(isSupply ? STATUS_FILTER_OPTIONS : STATUS_FILTER_OPTIONS.filter((o) => o.value !== "LOW_STOCK")).map((o) => (
+                {(isSupply ? STATUS_FILTER_OPTIONS : STATUS_FILTER_OPTIONS.filter((o) => o.value !== "LOW_STOCK" && o.value !== "NO_STOCK")).map((o) => (
                   <SelectItem key={o.value || "all"} value={o.value || "_"}>
                     {o.label}
                   </SelectItem>
@@ -2147,7 +2179,13 @@ export default function CategoryItemsPage() {
                 {/* Summary / status block */}
                 <div className="grid gap-2">
                   <div className="flex items-center gap-2 leading-none font-medium">
-                    <StatusBadge status={drawerItem.status} />
+                    <StatusBadge
+                      status={
+                        isSupply && drawerItem.itemType === "SUPPLY"
+                          ? supplyDisplayStatusToken(drawerItem)
+                          : drawerItem.status
+                      }
+                    />
                     <span className="text-muted-foreground text-sm">
                       {CONDITION_LABELS[drawerItem.condition] ?? drawerItem.condition ?? "N/A"} condition
                     </span>
@@ -2195,7 +2233,7 @@ export default function CategoryItemsPage() {
                         <div className="space-y-2">
                           <Label className="text-muted-foreground font-medium">Status</Label>
                           <div className="rounded-md border bg-muted/30 px-3 py-2">
-                            <StatusBadge status={drawerItem.status} />
+                            <StatusBadge status={supplyDisplayStatusToken(drawerItem)} />
                           </div>
                         </div>
                         <div className="space-y-2">

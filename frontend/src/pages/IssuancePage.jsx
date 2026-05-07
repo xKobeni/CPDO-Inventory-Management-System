@@ -183,7 +183,10 @@ export default function IssuancePage() {
     setTxLoading(true)
     try {
       // include ASSET_TRANSFER so transfers show up in the ledger
-      const data = await transactionsService.listTransactions({ type: "ISSUANCE,ASSET_ASSIGN,ASSET_TRANSFER" })
+      const data = await transactionsService.listTransactions({
+        type: "ISSUANCE,ASSET_ASSIGN,ASSET_TRANSFER",
+        limit: 800,
+      })
       setTransactions(data)
       if (showToast) toast.success("List refreshed.")
     } catch (err) {
@@ -385,6 +388,7 @@ export default function IssuancePage() {
       setAssetAccPosition("")
       setAssetAccOffice("CPDC")
       setAssetRemarks("")
+      fetchTransactions()
       if (fetchAssetsRef.current) fetchAssetsRef.current({ reset: true })
     } catch (err) {
       toast.error(getErrorMessage(err))
@@ -463,16 +467,18 @@ export default function IssuancePage() {
         const itemName = (row.item?.name ?? "").toLowerCase()
         const office = (row.issuedToOffice ?? "").toLowerCase()
         const person = (row.issuedToPerson ?? "").toLowerCase()
+        const accTx = (row.accountablePerson?.name ?? "").toLowerCase()
         const by = (row.createdBy?.name ?? "").toLowerCase()
         const remarks = (row.purpose ?? "").toLowerCase()
-        const acc = (row.item?.accountablePerson?.name ?? "").toLowerCase()
+        const accItem = (row.item?.accountablePerson?.name ?? "").toLowerCase()
         const match =
           itemName.includes(s) ||
           office.includes(s) ||
           person.includes(s) ||
+          accTx.includes(s) ||
+          accItem.includes(s) ||
           by.includes(s) ||
-          remarks.includes(s) ||
-          acc.includes(s)
+          remarks.includes(s)
         if (!match) return false
       }
       return true
@@ -1025,9 +1031,9 @@ export default function IssuancePage() {
                                 }}>Edit</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => {
                                   setActionRow(row)
-                                  setTransferName(row.item?.accountablePerson?.name ?? "")
-                                  setTransferPosition(row.item?.accountablePerson?.position ?? "")
-                                  setTransferOffice(row.item?.accountablePerson?.office ?? "CPDC")
+                                  setTransferName(row.item?.accountablePerson?.name ?? row.accountablePerson?.name ?? row.issuedToPerson ?? "")
+                                  setTransferPosition(row.item?.accountablePerson?.position ?? row.accountablePerson?.position ?? "")
+                                  setTransferOffice(row.item?.accountablePerson?.office ?? row.accountablePerson?.office ?? "CPDC")
                                   setTransferRemarks("")
                                   setTransferDialogOpen(true)
                                 }} disabled={row.txType === "ISSUANCE"}>{/* only assets can be transferred */}

@@ -46,11 +46,16 @@ export async function listTransactions(req, res) {
     else if (types.length > 1) filter.type = { $in: types }
   }
 
+  const rawLimit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : NaN;
+  const limit = Number.isFinite(rawLimit)
+    ? Math.min(Math.max(rawLimit, 1), 1000)
+    : 500;
+
   const txs = await Transaction.find(filter)
     .populate("createdBy", "name email role")
     .populate("items.itemId", "name unit category itemType dateAcquired unitCost propertyNumber accountablePerson transferredTo")
     .sort({ createdAt: -1 })
-    .limit(100)
+    .limit(limit)
     .lean();
 
   res.json(txs);
@@ -93,6 +98,23 @@ export async function createStockIn(req, res) {
 }
 
 export async function createIssuance(req, res) {
+  const lines = req.body.items || [];
+  const itemDocs = await Item.find({ _id: { $in: lines.map((l) => l.itemId) } })
+    .select("itemType name")
+    .lean();
+  const byId = new Map(itemDocs.map((it) => [String(it._id), it]));
+  for (const line of lines) {
+    const item = byId.get(String(line.itemId));
+    if (!item) {
+      return res.status(404).json({ message: "One or more items were not found" });
+    }
+    if (item.itemType !== "SUPPLY") {
+      return res.status(400).json({
+        message: `"${item.name}" is an asset. Open New Issuance → Assign asset and pick accountable person there — supply issuance is only for consumables.`,
+      });
+    }
+  }
+
   const session = await mongoose.startSession();
   try {
     session.startTransaction();
@@ -331,4 +353,32 @@ export async function deleteIssuanceLine(req, res) {
   } finally {
     session.endSession();
   }
+}
+
+/** Update remarks (purpose) on an issuance or asset-assignment transaction. */
+export async function patchIssuanceTransactionPurpose(req, res) {
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ message: "Invalid transaction id" });
+  }
+
+  const { purpose } = req.body;
+  const tx = await Transaction.findById(id);
+  if (!tx) return res.status(404).json({ message: "Transaction not found" });
+  if (tx.type !== "ISSUANCE" && tx.type !== "ASSET_ASSIGN") {
+    return res.status(400).json({ message: "Only issuance or asset assignment transactions support editing remarks" });
+  }
+
+  tx.purpose = typeof purpose === "string" ? purpose : "";
+  await tx.save();
+
+  await AuditLog.create({
+    actorId: req.user._id,
+    action: "TRANSACTION_UPDATE",
+    targetType: "Transaction",
+    targetId: id,
+    meta: { field: "purpose", txType: tx.type },
+  });
+
+  return res.json({ id: tx._id.toString(), purpose: tx.purpose });
 }

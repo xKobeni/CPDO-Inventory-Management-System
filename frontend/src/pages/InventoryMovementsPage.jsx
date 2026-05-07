@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react"
-import { Search, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react"
+import { Search, RefreshCw, ChevronLeft, ChevronRight, Columns3, ChevronUp, ChevronDown } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -31,6 +31,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Textarea } from "@/components/ui/textarea"
 import { FloatingHelpButton } from "@/components/HelpButton"
 import { inventoryMovementsTutorialSteps } from "@/constants/tutorialSteps"
 import { itemsService, transactionsService } from "@/services"
@@ -43,6 +56,69 @@ const TYPE_OPTIONS = [
   { value: "ISSUANCE", label: "Stock Out" },
   { value: "ADJUSTMENT", label: "Adjustment" },
 ]
+
+const MOVEMENTS_LAYOUT_STORAGE_KEY = "cpdo-movements-table-layout-v1"
+const MOVEMENT_COLUMN_IDS = ["date", "item", "type", "qtyChange", "balanceBefore", "balanceAfter", "remarks", "by"]
+const MOVEMENT_COLUMN_META = {
+  date: { label: "Date" },
+  item: { label: "Item" },
+  type: { label: "Type" },
+  qtyChange: { label: "Qty Change" },
+  balanceBefore: { label: "Balance Before" },
+  balanceAfter: { label: "Balance After" },
+  remarks: { label: "Remarks" },
+  by: { label: "By" },
+}
+const MOVEMENT_DEFAULT_LAYOUT = {
+  order: [...MOVEMENT_COLUMN_IDS],
+  visible: {
+    date: true,
+    item: true,
+    type: true,
+    qtyChange: true,
+    balanceBefore: true,
+    balanceAfter: true,
+    remarks: true,
+    by: true,
+  },
+}
+
+function loadMovementTableLayout() {
+  try {
+    const raw = localStorage.getItem(MOVEMENTS_LAYOUT_STORAGE_KEY)
+    if (!raw) return MOVEMENT_DEFAULT_LAYOUT
+    const parsed = JSON.parse(raw)
+    const visible = { ...MOVEMENT_DEFAULT_LAYOUT.visible }
+    if (parsed?.visible && typeof parsed.visible === "object") {
+      for (const id of MOVEMENT_COLUMN_IDS) {
+        if (typeof parsed.visible[id] === "boolean") visible[id] = parsed.visible[id]
+      }
+    }
+    const order = []
+    const seen = new Set()
+    ;(parsed?.order || []).forEach((id) => {
+      if (MOVEMENT_COLUMN_IDS.includes(id) && !seen.has(id)) {
+        seen.add(id)
+        order.push(id)
+      }
+    })
+    MOVEMENT_COLUMN_IDS.forEach((id) => {
+      if (!seen.has(id)) order.push(id)
+    })
+    if (!order.some((id) => visible[id])) visible.item = true
+    return { order, visible }
+  } catch {
+    return MOVEMENT_DEFAULT_LAYOUT
+  }
+}
+
+function shiftOrder(order, idx, delta) {
+  const j = idx + delta
+  if (j < 0 || j >= order.length) return order
+  const next = [...order]
+  ;[next[idx], next[j]] = [next[j], next[idx]]
+  return next
+}
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -70,6 +146,9 @@ export default function InventoryMovementsPage() {
   const [dateTo, setDateTo] = useState(todayStr())
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const [tableLayout, setTableLayout] = useState(loadMovementTableLayout)
+  const [remarksDraft, setRemarksDraft] = useState({})
+  const [savingRemarksTxId, setSavingRemarksTxId] = useState(null)
 
   const fetchTransactions = useCallback(async (showToast = false) => {
     setTxLoading(true)
@@ -215,10 +294,74 @@ export default function InventoryMovementsPage() {
   const paginatedRows = filteredRows.slice((page - 1) * pageSize, page * pageSize)
   const startRow = totalFiltered === 0 ? 0 : (page - 1) * pageSize + 1
   const endRow = Math.min(page * pageSize, totalFiltered)
+  const visibleColumns = useMemo(
+    () => tableLayout.order.filter((id) => tableLayout.visible[id]),
+    [tableLayout.order, tableLayout.visible]
+  )
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(MOVEMENTS_LAYOUT_STORAGE_KEY, JSON.stringify(tableLayout))
+    } catch {
+      // ignore
+    }
+  }, [tableLayout])
 
   useEffect(() => {
     setPage(1)
   }, [search, typeFilter, dateFrom, dateTo, pageSize])
+
+  const toggleColumnVisible = (colId, checked) => {
+    setTableLayout((prev) => {
+      const nextVisible = { ...prev.visible, [colId]: checked }
+      const shown = prev.order.filter((id) => nextVisible[id]).length
+      if (shown === 0) {
+        toast.info("Keep at least one column visible.")
+        return prev
+      }
+      return { ...prev, visible: nextVisible }
+    })
+  }
+
+  const resetColumns = () => {
+    setTableLayout({
+      order: [...MOVEMENT_DEFAULT_LAYOUT.order],
+      visible: { ...MOVEMENT_DEFAULT_LAYOUT.visible },
+    })
+  }
+
+  const saveRemarks = async (txId, nextValue, prevValue) => {
+    if (!txId || savingRemarksTxId) return
+    if (nextValue === prevValue) {
+      setRemarksDraft((d) => {
+        const n = { ...d }
+        delete n[txId]
+        return n
+      })
+      return
+    }
+    setSavingRemarksTxId(txId)
+    try {
+      await transactionsService.patchTransactionPurpose(txId, { purpose: nextValue })
+      setTransactions((prev) =>
+        (Array.isArray(prev) ? prev : []).map((tx) => {
+          const id = String(tx._id ?? tx.id)
+          if (id !== txId) return tx
+          return { ...tx, purpose: nextValue }
+        })
+      )
+      setRemarksDraft((d) => {
+        const n = { ...d }
+        delete n[txId]
+        return n
+      })
+      toast.success("Remarks saved.")
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setSavingRemarksTxId(null)
+    }
+  }
 
   return (
     <div className="mx-auto flex min-w-0 w-full max-w-[1400px] flex-col gap-6">
@@ -349,6 +492,69 @@ export default function InventoryMovementsPage() {
                 </SelectContent>
               </Select>
             </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5">
+                  <Columns3 className="size-4" />
+                  Columns
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-60">
+                <DropdownMenuLabel>Visible columns</DropdownMenuLabel>
+                {MOVEMENT_COLUMN_IDS.map((id) => (
+                  <DropdownMenuCheckboxItem
+                    key={id}
+                    checked={Boolean(tableLayout.visible[id])}
+                    onCheckedChange={(v) => toggleColumnVisible(id, Boolean(v))}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    {MOVEMENT_COLUMN_META[id].label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>Column order</DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="max-h-72 overflow-y-auto p-2">
+                    <p className="mb-2 px-1 text-[11px] text-muted-foreground">Use arrows to reorder</p>
+                    {tableLayout.order.map((id, idx) => (
+                      <div key={id} className="flex items-center gap-1 rounded-sm px-1 py-0.5 hover:bg-accent/60">
+                        <span className="min-w-0 flex-1 truncate text-xs">{MOVEMENT_COLUMN_META[id].label}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 shrink-0"
+                          disabled={idx === 0}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            setTableLayout((prev) => ({ ...prev, order: shiftOrder(prev.order, idx, -1) }))
+                          }}
+                        >
+                          <ChevronUp className="size-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 shrink-0"
+                          disabled={idx === tableLayout.order.length - 1}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            setTableLayout((prev) => ({ ...prev, order: shiftOrder(prev.order, idx, 1) }))
+                          }}
+                        >
+                          <ChevronDown className="size-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={resetColumns}>Reset columns</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -357,26 +563,23 @@ export default function InventoryMovementsPage() {
             <Table className="w-max min-w-full table-auto" data-tutorial="movements-table">
               <TableHeader className="bg-muted sticky top-0 z-10">
                 <TableRow>
-                  <TableHead className="px-3 whitespace-nowrap">Date</TableHead>
-                  <TableHead className="px-3 whitespace-nowrap">Item</TableHead>
-                  <TableHead className="px-3 whitespace-nowrap">Type</TableHead>
-                  <TableHead className="px-3 whitespace-nowrap">Qty Change</TableHead>
-                  <TableHead className="px-3 whitespace-nowrap">Balance Before</TableHead>
-                  <TableHead className="px-3 whitespace-nowrap">Balance After</TableHead>
-                  <TableHead className="px-3 whitespace-nowrap">Remarks</TableHead>
-                  <TableHead className="px-3 whitespace-nowrap">By</TableHead>
+                  {visibleColumns.map((col) => (
+                    <TableHead key={col} className="px-3 whitespace-nowrap">
+                      {MOVEMENT_COLUMN_META[col].label}
+                    </TableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {txLoading || itemsLoading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
+                    <TableCell colSpan={Math.max(visibleColumns.length, 1)} className="px-3 py-8 text-center text-muted-foreground">
                       Loading…
                     </TableCell>
                   </TableRow>
                 ) : filteredRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
+                    <TableCell colSpan={Math.max(visibleColumns.length, 1)} className="px-3 py-8 text-center text-muted-foreground">
                       No movements match your filters.
                     </TableCell>
                   </TableRow>
@@ -386,43 +589,93 @@ export default function InventoryMovementsPage() {
                     const itemName = row.item?.name || "Unknown item"
                     const itemMeta = [row.item?.category, row.item?.unit].filter(Boolean).join(" • ") || "N/A"
                     const remarks = row.tx?.purpose || row.tx?.remarks || "N/A"
+                    const txId = String(row.tx?._id ?? row.tx?.id ?? "")
+                    const draft = remarksDraft[txId]
+                    const remarksValue = draft !== undefined ? draft : remarks
                     return (
                       <TableRow key={row.key}>
-                        <TableCell className="px-3 whitespace-nowrap">
-                          {row.tx?.createdAt ? new Date(row.tx.createdAt).toLocaleDateString() : "N/A"}
-                        </TableCell>
-                        <TableCell className="px-3 min-w-[220px]">
-                          <div className="flex flex-col">
-                            <span className="font-medium text-zinc-900">{itemName}</span>
-                            <span className="text-xs text-muted-foreground">{itemMeta}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="px-3 whitespace-nowrap">
-                          <Badge variant={isIn ? "secondary" : "outline"}>
-                            {row.type === "ADJUSTMENT" ? "Adjustment" : isIn ? "Stock In" : "Stock Out"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="px-3 whitespace-nowrap">
-                          <span className={isIn ? "text-emerald-700 tabular-nums" : "text-rose-700 tabular-nums"}>
-                            {isIn ? "+" : "-"}{formatQty(Math.abs(row.delta))}{row.item?.unit ? ` ${row.item.unit}` : ""}
-                          </span>
-                        </TableCell>
-                        <TableCell className="px-3 whitespace-nowrap">
-                          <span className="tabular-nums">
-                            {typeof row.balanceBefore === "number" ? formatQty(row.balanceBefore) : "N/A"}
-                          </span>
-                        </TableCell>
-                        <TableCell className="px-3 whitespace-nowrap">
-                          <span className="tabular-nums">
-                            {typeof row.balanceAfter === "number" ? formatQty(row.balanceAfter) : "N/A"}
-                          </span>
-                        </TableCell>
-                        <TableCell className="px-3 min-w-[200px]">
-                          <span className="text-sm text-muted-foreground">{remarks}</span>
-                        </TableCell>
-                        <TableCell className="px-3 whitespace-nowrap">
-                          {row.tx?.createdBy?.name || "N/A"}
-                        </TableCell>
+                        {visibleColumns.map((col) => {
+                          if (col === "date") {
+                            return (
+                              <TableCell key={col} className="px-3 whitespace-nowrap">
+                                {row.tx?.createdAt ? new Date(row.tx.createdAt).toLocaleDateString() : "N/A"}
+                              </TableCell>
+                            )
+                          }
+                          if (col === "item") {
+                            return (
+                              <TableCell key={col} className="px-3 min-w-[220px]">
+                                <div className="flex flex-col">
+                                  <span className="font-medium text-zinc-900">{itemName}</span>
+                                  <span className="text-xs text-muted-foreground">{itemMeta}</span>
+                                </div>
+                              </TableCell>
+                            )
+                          }
+                          if (col === "type") {
+                            return (
+                              <TableCell key={col} className="px-3 whitespace-nowrap">
+                                <Badge variant={isIn ? "secondary" : "outline"}>
+                                  {row.type === "ADJUSTMENT" ? "Adjustment" : isIn ? "Stock In" : "Stock Out"}
+                                </Badge>
+                              </TableCell>
+                            )
+                          }
+                          if (col === "qtyChange") {
+                            return (
+                              <TableCell key={col} className="px-3 whitespace-nowrap">
+                                <span className={isIn ? "text-emerald-700 tabular-nums" : "text-rose-700 tabular-nums"}>
+                                  {isIn ? "+" : "-"}{formatQty(Math.abs(row.delta))}{row.item?.unit ? ` ${row.item.unit}` : ""}
+                                </span>
+                              </TableCell>
+                            )
+                          }
+                          if (col === "balanceBefore") {
+                            return (
+                              <TableCell key={col} className="px-3 whitespace-nowrap">
+                                <span className="tabular-nums">
+                                  {typeof row.balanceBefore === "number" ? formatQty(row.balanceBefore) : "N/A"}
+                                </span>
+                              </TableCell>
+                            )
+                          }
+                          if (col === "balanceAfter") {
+                            return (
+                              <TableCell key={col} className="px-3 whitespace-nowrap">
+                                <span className="tabular-nums">
+                                  {typeof row.balanceAfter === "number" ? formatQty(row.balanceAfter) : "N/A"}
+                                </span>
+                              </TableCell>
+                            )
+                          }
+                          if (col === "remarks") {
+                            return (
+                              <TableCell key={col} className="px-3 min-w-48">
+                                <Textarea
+                                  rows={2}
+                                  className="min-h-12 resize-y text-sm"
+                                  value={remarksValue}
+                                  disabled={savingRemarksTxId === txId}
+                                  onChange={(e) =>
+                                    setRemarksDraft((d) => ({
+                                      ...d,
+                                      [txId]: e.target.value,
+                                    }))
+                                  }
+                                  onBlur={(e) => void saveRemarks(txId, e.target.value, remarks)}
+                                />
+                              </TableCell>
+                            )
+                          }
+                          if (col === "by") {
+                            return (
+                              <TableCell key={col} className="px-3 whitespace-nowrap">
+                                {row.tx?.createdBy?.name || "N/A"}
+                              </TableCell>
+                            )
+                          }
+                          return null
+                        })}
                       </TableRow>
                     )
                   })

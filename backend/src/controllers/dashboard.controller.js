@@ -31,18 +31,20 @@ export async function getDashboardSummary(req, res) {
   });
 
   // ------------- LOW STOCK -------------
-  // Supply only, reorderLevel > 0, qty <= reorderLevel
+  // Supply only, reorderLevel > 0, on-hand > 0 and qty <= reorderLevel (qty 0 is out/no stock, not low stock)
   const [lowStockCount, lowStockPreview] = await Promise.all([
     Item.countDocuments({
       itemType: "SUPPLY",
       isArchived: false,
       reorderLevel: { $gt: 0 },
+      quantityOnHand: { $gt: 0 },
       $expr: { $lte: ["$quantityOnHand", "$reorderLevel"] },
     }),
     Item.find({
       itemType: "SUPPLY",
       isArchived: false,
       reorderLevel: { $gt: 0 },
+      quantityOnHand: { $gt: 0 },
       $expr: { $lte: ["$quantityOnHand", "$reorderLevel"] },
     })
       .select("name category unit quantityOnHand reorderLevel updatedAt")
