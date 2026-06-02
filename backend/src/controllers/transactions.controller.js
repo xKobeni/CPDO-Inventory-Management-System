@@ -187,7 +187,7 @@ export async function createAssetAssign(req, res) {
         accountablePerson,
         issuedToOffice: accountablePerson.office,
         issuedToPerson: accountablePerson.name,
-        purpose: req.body.purpose || req.body.remarks || "Asset assignment",
+        purpose: req.body.purpose || req.body.remarks || "",
         createdBy: req.user._id,
       }],
       { session }

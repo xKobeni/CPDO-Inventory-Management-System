@@ -119,7 +119,7 @@ function buildCsvBlob(headers, rows) {
   for (const row of rows) {
     lines.push(headers.map((h) => csvEscape(row[h] ?? "")).join(","))
   }
-  return new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" })
+  return new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" })
 }
 
 function buildXlsxBlob(headers, rows, sheetName = "Report") {
@@ -518,13 +518,13 @@ function buildIssuanceRowParts(tx, line) {
   const item = typeof line.itemId === "object" && line.itemId != null ? line.itemId : null
   const acc = item?.accountablePerson ?? tx.accountablePerson ?? {}
   const accName = (typeof acc === "object" ? acc.name : null) ?? tx.issuedToPerson ?? ""
-  const txDate = tx.createdAt ?? tx.date
+  const acquiredDate = item?.dateAcquired ?? tx.createdAt ?? tx.date
   const lineQty = line.qty ?? line.quantity ?? 1
   return {
     item,
     acc,
     accName,
-    txDate,
+    acquiredDate,
     lineQty,
     txType: tx.type ?? "—",
     remarks: tx.purpose ?? "—",
@@ -532,10 +532,10 @@ function buildIssuanceRowParts(tx, line) {
 }
 
 function issuanceCellText(colId, parts) {
-  const { item, acc, accName, txDate, lineQty, txType, remarks } = parts
+  const { item, acc, accName, acquiredDate, lineQty, txType, remarks } = parts
   switch (colId) {
     case "acquiredDate":
-      return txDate ? new Date(txDate).toLocaleDateString() : "—"
+      return acquiredDate ? new Date(acquiredDate).toLocaleDateString() : "—"
     case "itemName":
       return item?.name ?? "—"
     case "category":
@@ -546,7 +546,7 @@ function issuanceCellText(colId, parts) {
       return String(lineQty)
     case "amount":
       return item?.unitCost != null && Number(item.unitCost) > 0
-        ? `₱${Number(item.unitCost).toLocaleString()}`
+        ? Number(item.unitCost).toLocaleString()
         : "—"
     case "property":
       return item?.propertyNumber ?? "—"
@@ -710,6 +710,18 @@ export default function ReportsPage() {
       /* quota / private mode */
     }
   }, [issuanceTableLayout])
+
+  const filteredCategoryOptions = useMemo(() => {
+    if (reportType !== "issuance" || issuanceItemType === "all") return categories
+    return (categories || []).filter((c) => c.itemType === issuanceItemType)
+  }, [categories, issuanceItemType, reportType])
+
+  useEffect(() => {
+    if (reportType === "issuance" && filterCategory) {
+      const stillValid = (filteredCategoryOptions || []).some((c) => c.name === filterCategory)
+      if (!stillValid) setFilterCategory("")
+    }
+  }, [reportType, issuanceItemType, filterCategory, filteredCategoryOptions])
 
   const reportSearchTokens = useMemo(
     () => parseIssuanceItemSearchTokens(reportSearchText),
@@ -1222,13 +1234,26 @@ export default function ReportsPage() {
           bounds == null
             ? list
             : list.filter((tx) => {
+                if (reportType === "issuance") {
+                  const items = tx.items ?? []
+                  if (items.length === 0) return false
+                  return items.some((line) => {
+                    const item = typeof line.itemId === "object" && line.itemId != null ? line.itemId : null
+                    if (!item) return false
+                    const dateVal = item.dateAcquired
+                    if (!dateVal) return false
+                    const itemDate = new Date(dateVal)
+                    if (Number.isNaN(itemDate.getTime())) return false
+                    const itemLocalDate = formatLocalYYYYMMDD(itemDate)
+                    return itemLocalDate >= bounds.from && itemLocalDate <= bounds.to
+                  })
+                }
                 const dateVal = tx.createdAt ?? tx.date ?? tx.transactionDate ?? tx.updatedAt
                 if (!dateVal) return true
                 const txDate = new Date(dateVal)
                 if (Number.isNaN(txDate.getTime())) return true
-                const fromStart = new Date(bounds.from + "T00:00:00.000Z")
-                const toEnd = new Date(bounds.to + "T23:59:59.999Z")
-                return txDate >= fromStart && txDate <= toEnd
+                const txLocalDate = formatLocalYYYYMMDD(txDate)
+                return txLocalDate >= bounds.from && txLocalDate <= bounds.to
               })
         const filtered = applyFilters(byDate, false)
         setTxResults(Array.isArray(filtered) ? filtered : [])
@@ -1597,7 +1622,7 @@ export default function ReportsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="_all">All categories</SelectItem>
-                      {(categories || []).map((c) => (
+                      {(reportType === "issuance" ? filteredCategoryOptions : categories || []).map((c) => (
                         <SelectItem key={c.id || c.slug} value={c.name}>
                           {c.name}
                         </SelectItem>

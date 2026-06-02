@@ -128,7 +128,7 @@ export async function createItem(req, res) {
             accountablePerson,
             issuedToOffice: accountablePerson.office,
             issuedToPerson: accountablePerson.name,
-            purpose: req.body.purpose || req.body.remarks || "Asset assignment",
+            purpose: req.body.purpose || req.body.remarks || "",
             createdBy: req.user._id,
           },
         ], { session });
@@ -348,7 +348,7 @@ export async function assignAsset(req, res) {
     accountablePerson,
     issuedToOffice: accountablePerson.office,
     issuedToPerson: accountablePerson.name,
-    purpose: req.body.purpose || "Asset assignment",
+    purpose: req.body.purpose || "",
     createdBy: req.user._id,
   });
 
@@ -392,7 +392,7 @@ export async function returnAsset(req, res) {
     type: "ASSET_RETURN",
     items: [{ itemId: item._id, qty: 1 }],
     createdBy: req.user._id,
-    purpose: "Asset return",
+    purpose: "",
   });
 
   await AuditLog.create({
@@ -444,7 +444,7 @@ export async function transferAsset(req, res) {
       items: [{ itemId: item._id, qty: 1 }],
       issuedToOffice: req.body.office || undefined,
       issuedToPerson: transferredTo || req.body.issuedToPerson || undefined,
-      purpose: req.body.purpose || req.body.remarks || "Asset transfer",
+      purpose: req.body.purpose || req.body.remarks || "",
       createdBy: req.user._id,
     });
   }
