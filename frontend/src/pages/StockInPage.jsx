@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { Search, Plus, Trash2, Package, RefreshCw, ChevronLeft, ChevronRight, TrendingUp, AlertCircle } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
@@ -91,6 +91,7 @@ export default function StockInPage() {
   const [lines, setLines] = useState([{ itemId: "", qty: 1, searchQuery: "" }])
   const [transactionDate, setTransactionDate] = useState(todayStr())
   const [remarks, setRemarks] = useState("")
+  const [categoryFilter, setCategoryFilter] = useState("_all")
   const [submitting, setSubmitting] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
@@ -146,6 +147,12 @@ export default function StockInPage() {
     })
   }
 
+  // Derive unique sorted categories from supplies
+  const categories = useMemo(() => {
+    const cats = new Set(supplies.map((s) => s.category).filter(Boolean))
+    return [...cats].sort()
+  }, [supplies])
+
   // Get supply item by ID
   const getSupplyItem = useCallback((itemId) => {
     return supplies.find((item) => item._id === itemId)
@@ -153,13 +160,15 @@ export default function StockInPage() {
 
   // Get filtered supplies for search
   const getFilteredSupplies = useCallback((query) => {
-    if (!query.trim()) return supplies
+    if (!query.trim() && categoryFilter === "_all") return supplies
     return supplies.filter((item) => 
-      item.name.toLowerCase().includes(query.toLowerCase()) ||
-      (item.description && item.description.toLowerCase().includes(query.toLowerCase())) ||
-      (item.brand && item.brand.toLowerCase().includes(query.toLowerCase()))
+      (categoryFilter === "_all" || item.category === categoryFilter) &&
+      (!query.trim() ||
+        item.name.toLowerCase().includes(query.toLowerCase()) ||
+        (item.description && item.description.toLowerCase().includes(query.toLowerCase())) ||
+        (item.brand && item.brand.toLowerCase().includes(query.toLowerCase())))
     )
-  }, [supplies])
+  }, [supplies, categoryFilter])
 
   const doSubmit = async (items) => {
     setSubmitting(true)
@@ -170,6 +179,7 @@ export default function StockInPage() {
         date: transactionDate,
       })
       toast.success("Stock In recorded.")
+      setPage(1)
       setLines([{ itemId: "", qty: 1, searchQuery: "" }])
       setRemarks("")
       setTransactionDate(todayStr())
@@ -377,6 +387,20 @@ export default function StockInPage() {
           <CardContent className="space-y-4">
             {mode === STOCK_IN_MODE_SUPPLY ? (
               <>
+              <div className="w-full">
+                <Label htmlFor="si-category">Category (filter)</Label>
+                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                  <SelectTrigger id="si-category">
+                    <SelectValue placeholder="All categories" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_all">All categories</SelectItem>
+                    {categories.map((cat) => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             {lines.map((line, idx) => {
               const selectedItem = line.itemId ? getSupplyItem(line.itemId) : null
               const currentStock = selectedItem ? Number(selectedItem.quantityOnHand ?? selectedItem.quantity ?? 0) : 0

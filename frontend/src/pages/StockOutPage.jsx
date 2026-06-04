@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { Search, RefreshCw, ChevronLeft, ChevronRight, Plus, Trash2, TrendingDown, AlertTriangle, Package } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
@@ -88,6 +88,7 @@ export default function StockOutPage() {
   const [purpose, setPurpose] = useState("usage")
   const [transactionDate, setTransactionDate] = useState(todayStr())
   const [remarks, setRemarks] = useState("")
+  const [categoryFilter, setCategoryFilter] = useState("_all")
   const [submitting, setSubmitting] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
@@ -140,6 +141,12 @@ export default function StockOutPage() {
     setLines([...lines, { itemId: "", qty: 1, searchQuery: "" }])
   }
 
+  // Derive unique sorted categories from supplies
+  const categories = useMemo(() => {
+    const cats = new Set(supplies.map((s) => s.category).filter(Boolean))
+    return [...cats].sort()
+  }, [supplies])
+
   // Get supply item by ID
   const getSupplyItem = useCallback((itemId) => {
     return supplies.find((item) => item._id === itemId)
@@ -147,13 +154,15 @@ export default function StockOutPage() {
 
   // Get filtered supplies for search
   const getFilteredSupplies = useCallback((query) => {
-    if (!query.trim()) return supplies
+    if (!query.trim() && categoryFilter === "_all") return supplies
     return supplies.filter((item) => 
-      item.name.toLowerCase().includes(query.toLowerCase()) ||
-      (item.description && item.description.toLowerCase().includes(query.toLowerCase())) ||
-      (item.brand && item.brand.toLowerCase().includes(query.toLowerCase()))
+      (categoryFilter === "_all" || item.category === categoryFilter) &&
+      (!query.trim() ||
+        item.name.toLowerCase().includes(query.toLowerCase()) ||
+        (item.description && item.description.toLowerCase().includes(query.toLowerCase())) ||
+        (item.brand && item.brand.toLowerCase().includes(query.toLowerCase())))
     )
-  }, [supplies])
+  }, [supplies, categoryFilter])
 
   const removeLine = (idx) => {
     if (lines.length > 1) {
@@ -361,6 +370,20 @@ export default function StockOutPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="w-full">
+              <Label htmlFor="so-category" className="text-xs">Category (filter)</Label>
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger id="so-category" className="h-8">
+                  <SelectValue placeholder="All categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_all">All categories</SelectItem>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             {lines.map((line, idx) => {
               const selectedItem = line.itemId ? getSupplyItem(line.itemId) : null
               const currentStock = selectedItem ? Number(selectedItem.quantityOnHand ?? selectedItem.quantity ?? 0) : 0

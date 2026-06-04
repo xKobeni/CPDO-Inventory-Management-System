@@ -278,6 +278,7 @@ const SUPPLY_COLUMNS = [
   { id: "serialNo", label: "Serial No." },
   { id: "status", label: "Status" },
   { id: "condition", label: "Condition" },
+  { id: "unitCost", label: "Unit Cost" },
   { id: "accountablePerson", label: "Accountable Person" },
   { id: "dateAcquired", label: "Date Acquired" },
 ]
@@ -293,7 +294,7 @@ const ASSET_COLUMNS = [
   { id: "accountability", label: "Accountability" },
   { id: "remarks", label: "Remarks" },
 ]
-const SUPPLY_COL_ORDER = ["drag", "propertyNo", "name", "category", "quantity", "reorderLevel", "unit", "serialNo", "status", "condition", "accountablePerson", "dateAcquired", "actions"]
+const SUPPLY_COL_ORDER = ["drag", "propertyNo", "name", "category", "quantity", "reorderLevel", "unit", "serialNo", "status", "condition", "unitCost", "accountablePerson", "dateAcquired", "actions"]
 const ASSET_COL_ORDER = ["drag", "name", "category", "propertyNo", "serialNo", "quantity", "details", "status", "condition", "accountability", "remarks", "actions"]
 const FIXED_COLUMNS = new Set(["drag", "actions", "name", "quantity"])
 const isColVisible = (id, visibility) => FIXED_COLUMNS.has(id) || visibility[id] === true
@@ -311,6 +312,7 @@ const COLUMN_WIDTHS = {
   serialNo: "6rem",
   status: "7rem",
   condition: "6rem",
+  unitCost: "6rem",
   accountablePerson: "8rem",
   dateAcquired: "6.5rem",
   details: "12rem",
@@ -329,6 +331,7 @@ const COLUMN_ALIGNMENT = {
   serialNo: "text-left",
   status: "text-center",
   condition: "text-center",
+  unitCost: "text-right tabular-nums",
   accountablePerson: "text-left",
   dateAcquired: "text-right tabular-nums",
   details: "text-left",
@@ -455,6 +458,12 @@ function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, onArchive, 
             <Badge variant="outline" className="text-muted-foreground px-1.5">
               {CONDITION_LABELS[item.condition] ?? item.condition ?? "—"}
             </Badge>
+          </TableCell>
+        )
+      case "unitCost":
+        return (
+          <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>
+            {item.unitCost != null && Number(item.unitCost) > 0 ? `₱${Number(item.unitCost).toLocaleString()}` : "—"}
           </TableCell>
         )
       case "accountablePerson":
@@ -836,9 +845,12 @@ export default function CategoryItemsPage() {
   const [editingItem, setEditingItem] = useState(null)
   const [form, setForm] = useState(() => getEmptyForm(true, "General"))
   const [submitting, setSubmitting] = useState(false)
-  const [supplyColumnVisibility, setSupplyColumnVisibility] = useState(() =>
-    Object.fromEntries(SUPPLY_COLUMNS.map((c) => [c.id, true]))
-  )
+  const [supplyColumnVisibility, setSupplyColumnVisibility] = useState(() => {
+    const defaultHidden = new Set(["category", "accountablePerson"])
+    return Object.fromEntries(
+      SUPPLY_COLUMNS.map((c) => [c.id, !defaultHidden.has(c.id)])
+    )
+  })
   const [assetColumnVisibility, setAssetColumnVisibility] = useState(() => {
     const defaultHidden = new Set(["serialNo", "accountability", "category"])
     return Object.fromEntries(
