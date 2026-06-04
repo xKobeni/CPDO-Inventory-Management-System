@@ -10,6 +10,7 @@ import {
   createAssetAssign,
   deleteIssuance,
   deleteIssuanceLine,
+  deleteStockIn,
   patchIssuanceTransactionPurpose,
 } from "../controllers/transactions.controller.js";
 
@@ -30,6 +31,7 @@ const stockInSchema = z.object({
   items: z.array(txItemSchema).min(1),
   supplier: z.string().max(200).optional(),
   referenceNo: z.string().max(80).optional(),
+  date: z.string().optional(),
 });
 
 const issuanceSchema = z.object({
@@ -38,6 +40,7 @@ const issuanceSchema = z.object({
   issuedToPerson: z.string().max(200).optional(),
   purpose: z.string().max(300).optional(),
   accountablePerson: accountablePersonSchema.optional(),
+  date: z.string().optional(),
 });
 
 const assetAssignSchema = z.object({
@@ -68,6 +71,7 @@ r.patch(
   validateBody(patchIssuancePurposeSchema),
   patchIssuanceTransactionPurpose
 );
+r.delete("/stock-in/:id", requireAuth, requireRole("ADMIN", "STAFF"), deleteStockIn);
 r.delete("/:id/line/:itemId", requireAuth, requireRole("ADMIN", "STAFF"), deleteIssuanceLine);
 r.delete("/:id", requireAuth, requireRole("ADMIN", "STAFF"), deleteIssuance);
 

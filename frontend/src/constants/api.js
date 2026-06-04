@@ -28,6 +28,7 @@ export const API_PATHS = {
   transactions: "/transactions",
   transaction: (id) => `/transactions/${id}`,
   transactionLine: (txId, itemId) => `/transactions/${txId}/line/${itemId}`,
+  transactionStockIn: (id) => `/transactions/stock-in/${id}`,
   stockIn: "/transactions/stock-in",
   issuance: "/transactions/issuance",
   assetAssign: "/transactions/asset-assign",

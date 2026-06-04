@@ -2,7 +2,7 @@ import { http } from "@/lib/http"
 import { API_PATHS } from "@/constants/api"
 
 /**
- * @param {{ type?: string }} params
+ * @param {{ type?: string, from?: string, to?: string, limit?: number }} params
  * @returns {Promise<Array>}
  */
 export async function listTransactions(params = {}) {
@@ -11,7 +11,7 @@ export async function listTransactions(params = {}) {
 }
 
 /**
- * @param {{ items: Array<{ itemId: string, qty: number }>, supplier?: string, referenceNo?: string }} body
+ * @param {{ items: Array<{ itemId: string, qty: number }>, supplier?: string, referenceNo?: string, date?: string }} body
  * @returns {Promise<Object>}
  */
 export async function createStockIn(body) {
@@ -20,7 +20,7 @@ export async function createStockIn(body) {
 }
 
 /**
- * @param {{ items: Array<{ itemId: string, qty: number }>, issuedToOffice: string, issuedToPerson?: string, purpose?: string, accountablePerson?: { name?, position?, office? } }} body
+ * @param {{ items: Array<{ itemId: string, qty: number }>, issuedToOffice: string, issuedToPerson?: string, purpose?: string, accountablePerson?: { name?, position?, office? }, date?: string }} body
  * @returns {Promise<Object>}
  */
 export async function createIssuance(body) {
@@ -35,6 +35,16 @@ export async function createIssuance(body) {
  */
 export async function createAssetAssign(body) {
   const { data } = await http.post(API_PATHS.assetAssign, body)
+  return data
+}
+
+/**
+ * Remove a stock-in transaction and reverse the stock change. Only STOCK_IN type.
+ * @param {string} id - Transaction ID
+ * @returns {Promise<Object>}
+ */
+export async function deleteStockIn(id) {
+  const { data } = await http.delete(API_PATHS.transactionStockIn(id))
   return data
 }
 

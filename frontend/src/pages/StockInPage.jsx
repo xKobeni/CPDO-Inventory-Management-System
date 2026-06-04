@@ -24,6 +24,16 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -43,13 +53,21 @@ import { itemsService, transactionsService } from "@/services"
 import { getErrorMessage } from "@/utils/api"
 import { FloatingHelpButton } from "@/components/HelpButton"
 import { stockInTutorialSteps } from "@/constants/tutorialSteps"
+import DateRangeFilter from "@/components/DateRangeFilter"
 
 const STOCK_IN_MODE_SUPPLY = "supply"
 const STOCK_IN_MODE_ASSET = "asset"
 const PAGE_SIZE_OPTIONS = [10, 25, 50]
+const LARGE_QTY_THRESHOLD = 1000
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
+}
+function formatDateLabel(dateStr) {
+  if (!dateStr) return null
+  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+  })
 }
 function lastMonthStr() {
   const d = new Date()
@@ -71,8 +89,13 @@ export default function StockInPage() {
   const [pageSize, setPageSize] = useState(10)
 
   const [lines, setLines] = useState([{ itemId: "", qty: 1, searchQuery: "" }])
+  const [transactionDate, setTransactionDate] = useState(todayStr())
   const [remarks, setRemarks] = useState("")
   const [submitting, setSubmitting] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
+  const [confirmWarnings, setConfirmWarnings] = useState("")
 
   const fetchSupplies = useCallback(async () => {
     try {
@@ -109,19 +132,6 @@ export default function StockInPage() {
     fetchTransactions()
   }, [fetchTransactions])
 
-  const stockInToday = transactions.filter((t) => {
-    const d = t.createdAt ? new Date(t.createdAt) : null
-    if (!d) return false
-    const today = new Date()
-    return d.getDate() === today.getDate() && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear()
-  }).length
-  const stockInMonth = transactions.filter((t) => {
-    const d = t.createdAt ? new Date(t.createdAt) : null
-    if (!d) return false
-    const now = new Date()
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-  }).length
-
   const addLine = () => setLines((prev) => [...prev, { itemId: "", qty: 1, searchQuery: "" }])
   const removeLine = (idx) => setLines((prev) => prev.filter((_, i) => i !== idx))
   const setLine = (idx, field, value) => {
@@ -151,6 +161,26 @@ export default function StockInPage() {
     )
   }, [supplies])
 
+  const doSubmit = async (items) => {
+    setSubmitting(true)
+    try {
+      await transactionsService.createStockIn({
+        items,
+        referenceNo: remarks.trim() || undefined,
+        date: transactionDate,
+      })
+      toast.success("Stock In recorded.")
+      setLines([{ itemId: "", qty: 1, searchQuery: "" }])
+      setRemarks("")
+      setTransactionDate(todayStr())
+      fetchTransactions()
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const handleSubmit = async () => {
     const items = lines
       .filter((l) => l.itemId && l.qty > 0)
@@ -159,20 +189,51 @@ export default function StockInPage() {
       toast.error("Add at least one item with quantity.")
       return
     }
-    setSubmitting(true)
-    try {
-      await transactionsService.createStockIn({
-        items,
-        referenceNo: remarks.trim() || undefined,
+
+    const itemIds = items.map((i) => i.itemId)
+    const seen = new Set()
+    const duplicateIds = itemIds.filter((id) => {
+      const dup = seen.has(id)
+      seen.add(id)
+      return dup
+    })
+    const uniqueDuplicates = [...new Set(duplicateIds)]
+    const largeQtyItems = items.filter((i) => i.qty > LARGE_QTY_THRESHOLD)
+
+    const warnings = []
+    if (uniqueDuplicates.length > 0) {
+      const names = uniqueDuplicates
+        .map((id) => supplies.find((s) => s._id === id)?.name || id)
+      warnings.push(`Duplicate items: ${names.join(", ")}`)
+    }
+    if (largeQtyItems.length > 0) {
+      largeQtyItems.forEach((i) => {
+        const name = supplies.find((s) => s._id === i.itemId)?.name || i.itemId
+        warnings.push(`Large quantity (${i.qty}×): ${name}`)
       })
-      toast.success("Stock In recorded.")
-      setLines([{ itemId: "", qty: 1, searchQuery: "" }])
-      setRemarks("")
+    }
+
+    if (warnings.length > 0) {
+      setConfirmWarnings(warnings.join("\n"))
+      setConfirmDialogOpen(true)
+      return
+    }
+
+    await doSubmit(items)
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    const tx = deleteTarget
+    setDeleteDialogOpen(false)
+    try {
+      await transactionsService.deleteStockIn(tx._id)
+      toast.success("Stock-in record removed (stock reversed).")
       fetchTransactions()
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
-      setSubmitting(false)
+      setDeleteTarget(null)
     }
   }
 
@@ -256,19 +317,23 @@ export default function StockInPage() {
       <section className="@container/main grid grid-cols-1 gap-4 sm:grid-cols-3" data-tutorial="stats-cards">
         <Card>
           <CardHeader>
-            <CardDescription>Today Entries</CardDescription>
-            <CardTitle className="text-2xl font-semibold tabular-nums">{stockInToday}</CardTitle>
+            <CardDescription>Filtered Records</CardDescription>
+            <CardTitle className="text-2xl font-semibold tabular-nums">{filteredTx.length}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader>
-            <CardDescription>This Month</CardDescription>
-            <CardTitle className="text-2xl font-semibold tabular-nums">{stockInMonth}</CardTitle>
+            <CardDescription>Period</CardDescription>
+            <CardTitle className="text-lg font-semibold">
+              {!dateFrom && !dateTo
+                ? "All Time"
+                : `${formatDateLabel(dateFrom) || "Start"} – ${formatDateLabel(dateTo) || "Today"}`}
+            </CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader>
-            <CardDescription>Total Stock In</CardDescription>
+            <CardDescription>All Time Total</CardDescription>
             <CardTitle className="text-2xl font-semibold tabular-nums">{transactions.length}</CardTitle>
           </CardHeader>
         </Card>
@@ -407,6 +472,33 @@ export default function StockInPage() {
               Add line
             </Button>
             <div className="space-y-2">
+              <Label htmlFor="date-si">Transaction Date</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="date-si"
+                  type="date"
+                  value={transactionDate}
+                  onChange={(e) => setTransactionDate(e.target.value)}
+                />
+                {[1, 2, 3, 4].map((q) => (
+                  <Button
+                    key={q}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 px-2 text-xs"
+                    onClick={() => {
+                      const now = new Date()
+                      const d = new Date(now.getFullYear(), (q - 1) * 3, 15)
+                      setTransactionDate(d.toISOString().slice(0, 10))
+                    }}
+                  >
+                    Q{q}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="remarks-in">Remarks (optional)</Label>
               <Input
                 id="remarks-in"
@@ -443,26 +535,7 @@ export default function StockInPage() {
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
-              <div className="flex items-center gap-2">
-                <Label htmlFor="date-from-si" className="text-muted-foreground text-xs whitespace-nowrap">From</Label>
-                <Input
-                  id="date-from-si"
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  className="w-[140px]"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <Label htmlFor="date-to-si" className="text-muted-foreground text-xs whitespace-nowrap">To</Label>
-                <Input
-                  id="date-to-si"
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  className="w-[140px]"
-                />
-              </div>
+              <DateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
             </div>
           </div>
           <div className="w-full min-w-0 overflow-x-auto px-4 lg:px-6">
@@ -474,18 +547,19 @@ export default function StockInPage() {
                     <TableHead className="px-3 whitespace-nowrap">Items Added</TableHead>
                     <TableHead className="px-3 whitespace-nowrap">Remarks</TableHead>
                     <TableHead className="px-3 whitespace-nowrap">Recorded By</TableHead>
+                    <TableHead className="px-3 whitespace-nowrap w-12"><span className="sr-only">Actions</span></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {txLoading ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="px-3 py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
                         Loading…
                       </TableCell>
                     </TableRow>
                   ) : filteredTx.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="px-3 py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
                         No stock-in records match your filters.
                       </TableCell>
                     </TableRow>
@@ -503,6 +577,16 @@ export default function StockInPage() {
                         </TableCell>
                         <TableCell className="px-3">{tx.referenceNo ?? "N/A"}</TableCell>
                         <TableCell className="px-3">{tx.createdBy?.name ?? "N/A"}</TableCell>
+                        <TableCell className="px-3">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => { setDeleteTarget(tx); setDeleteDialogOpen(true) }}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))
                   )}
@@ -539,6 +623,44 @@ export default function StockInPage() {
           )}
         </section>
       </section>
+      <AlertDialog open={deleteDialogOpen} onOpenChange={(open) => { if (!open) { setDeleteDialogOpen(false); setDeleteTarget(null) } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete stock-in record?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the stock-in record and reduce inventory quantities. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={confirmDelete}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Review before saving</AlertDialogTitle>
+            <AlertDialogDescription className="whitespace-pre-wrap">
+              {confirmWarnings}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmDialogOpen(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={async () => {
+              setConfirmDialogOpen(false)
+              const items = lines
+                .filter((l) => l.itemId && l.qty > 0)
+                .map((l) => ({ itemId: l.itemId, qty: l.qty }))
+              await doSubmit(items)
+            }}>
+              Continue anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

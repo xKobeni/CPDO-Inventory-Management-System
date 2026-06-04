@@ -38,12 +38,21 @@ async function applyAccountableToItems(session, tx, itemIds) {
 }
 
 export async function listTransactions(req, res) {
-  const { type } = req.query;
+  const { type, from, to } = req.query;
   const filter = {};
   if (type) {
     const types = typeof type === "string" ? type.split(",").map((t) => t.trim()).filter(Boolean) : [type]
     if (types.length === 1) filter.type = types[0]
     else if (types.length > 1) filter.type = { $in: types }
+  }
+  if (from || to) {
+    filter.createdAt = {};
+    if (from) filter.createdAt.$gte = new Date(from);
+    if (to) {
+      const end = new Date(to);
+      end.setHours(23, 59, 59, 999);
+      filter.createdAt.$lte = end;
+    }
   }
 
   const rawLimit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : NaN;
@@ -66,16 +75,17 @@ export async function createStockIn(req, res) {
   try {
     session.startTransaction();
 
-    const tx = await Transaction.create(
-      [{
-        type: "STOCK_IN",
-        items: req.body.items,
-        supplier: req.body.supplier,
-        referenceNo: req.body.referenceNo,
-        createdBy: req.user._id,
-      }],
-      { session }
-    );
+    const txPayload = {
+      type: "STOCK_IN",
+      items: req.body.items,
+      supplier: req.body.supplier,
+      referenceNo: req.body.referenceNo,
+      createdBy: req.user._id,
+    };
+    if (req.body.date) {
+      txPayload.createdAt = new Date(req.body.date);
+    }
+    const tx = await Transaction.create([txPayload], { session });
 
     await applyStockChange(session, req.body.items, +1);
 
@@ -126,18 +136,19 @@ export async function createIssuance(req, res) {
       office: (acc.office || req.body.issuedToOffice || "CPDC").trim(),
     };
 
-    const tx = await Transaction.create(
-      [{
-        type: "ISSUANCE",
-        items: req.body.items,
-        accountablePerson,
-        issuedToOffice: req.body.issuedToOffice ?? accountablePerson.office,
-        issuedToPerson: req.body.issuedToPerson ?? accountablePerson.name,
-        purpose: req.body.purpose,
-        createdBy: req.user._id,
-      }],
-      { session }
-    );
+    const txPayload = {
+      type: "ISSUANCE",
+      items: req.body.items,
+      accountablePerson,
+      issuedToOffice: req.body.issuedToOffice ?? accountablePerson.office,
+      issuedToPerson: req.body.issuedToPerson ?? accountablePerson.name,
+      purpose: req.body.purpose,
+      createdBy: req.user._id,
+    };
+    if (req.body.date) {
+      txPayload.createdAt = new Date(req.body.date);
+    }
+    const tx = await Transaction.create([txPayload], { session });
 
     await applyStockChange(session, req.body.items, -1);
 
@@ -347,6 +358,49 @@ export async function deleteIssuanceLine(req, res) {
 
     await session.commitTransaction();
     return res.status(200).json({ ok: true });
+  } catch (e) {
+    await session.abortTransaction();
+    throw e;
+  } finally {
+    session.endSession();
+  }
+}
+
+/** Delete a STOCK_IN transaction and reverse the stock change. */
+export async function deleteStockIn(req, res) {
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ message: "Invalid transaction id" });
+  }
+
+  const session = await mongoose.startSession();
+  try {
+    session.startTransaction();
+
+    const tx = await Transaction.findById(id).session(session);
+    if (!tx) return res.status(404).json({ message: "Transaction not found" });
+    if (tx.type !== "STOCK_IN") {
+      return res.status(400).json({ message: "Only stock-in transactions can be removed via this endpoint" });
+    }
+
+    const itemsToReverse = (tx.items || []).map((line) => ({
+      itemId: line.itemId?.toString?.() ?? line.itemId,
+      qty: line.qty,
+    }));
+    await applyStockChange(session, itemsToReverse, -1);
+
+    await Transaction.findByIdAndDelete(id).session(session);
+
+    await AuditLog.create([{
+      actorId: req.user._id,
+      action: "STOCK_IN_DELETE",
+      targetType: "Transaction",
+      targetId: id,
+      meta: { referenceNo: tx.referenceNo || null },
+    }], { session });
+
+    await session.commitTransaction();
+    return res.status(200).json({ message: "Stock-in transaction removed", id });
   } catch (e) {
     await session.abortTransaction();
     throw e;

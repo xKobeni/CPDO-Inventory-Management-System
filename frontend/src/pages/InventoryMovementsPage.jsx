@@ -46,6 +46,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { FloatingHelpButton } from "@/components/HelpButton"
 import { inventoryMovementsTutorialSteps } from "@/constants/tutorialSteps"
+import DateRangeFilter from "@/components/DateRangeFilter"
 import { itemsService, transactionsService } from "@/services"
 import { getErrorMessage } from "@/utils/api"
 
@@ -459,26 +460,7 @@ export default function InventoryMovementsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-center gap-2" data-tutorial="date-filters">
-              <Label htmlFor="date-from-mv" className="text-muted-foreground text-xs whitespace-nowrap">From</Label>
-              <Input
-                id="date-from-mv"
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="w-[140px]"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Label htmlFor="date-to-mv" className="text-muted-foreground text-xs whitespace-nowrap">To</Label>
-              <Input
-                id="date-to-mv"
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="w-[140px]"
-              />
-            </div>
+            <DateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
             <div className="flex items-center gap-2" data-tutorial="page-size">
               <Label className="text-muted-foreground text-xs whitespace-nowrap">Rows</Label>
               <Select value={String(pageSize)} onValueChange={(v) => setPageSize(parseInt(v, 10))}>

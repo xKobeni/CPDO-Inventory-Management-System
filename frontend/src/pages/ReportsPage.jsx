@@ -299,11 +299,13 @@ function formatLocalYYYYMMDD(d) {
  * @param {string} preset
  * @param {string} customFrom
  * @param {string} customTo
+ * @param {number} [selectedYear]
  * @returns {{ from: string, to: string } | null}
  */
-function boundsForDatePreset(preset, customFrom, customTo) {
+function boundsForDatePreset(preset, customFrom, customTo, selectedYear) {
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const year = selectedYear || now.getFullYear()
   if (preset === "all") return null
   if (preset === "range") {
     return { from: (customFrom || "").trim(), to: (customTo || "").trim() }
@@ -343,6 +345,31 @@ function boundsForDatePreset(preset, customFrom, customTo) {
     const start = new Date(today.getFullYear(), 0, 1)
     return { from: formatLocalYYYYMMDD(start), to: formatLocalYYYYMMDD(today) }
   }
+  if (preset === "calendar_year") {
+    const start = new Date(year, 0, 1)
+    const end = new Date(year, 11, 31)
+    return { from: formatLocalYYYYMMDD(start), to: formatLocalYYYYMMDD(end) }
+  }
+  if (preset === "q1") {
+    const start = new Date(year, 0, 1)
+    const end = new Date(year, 2, 31)
+    return { from: formatLocalYYYYMMDD(start), to: formatLocalYYYYMMDD(end) }
+  }
+  if (preset === "q2") {
+    const start = new Date(year, 3, 1)
+    const end = new Date(year, 5, 30)
+    return { from: formatLocalYYYYMMDD(start), to: formatLocalYYYYMMDD(end) }
+  }
+  if (preset === "q3") {
+    const start = new Date(year, 6, 1)
+    const end = new Date(year, 8, 30)
+    return { from: formatLocalYYYYMMDD(start), to: formatLocalYYYYMMDD(end) }
+  }
+  if (preset === "q4") {
+    const start = new Date(year, 9, 1)
+    const end = new Date(year, 11, 31)
+    return { from: formatLocalYYYYMMDD(start), to: formatLocalYYYYMMDD(end) }
+  }
   return { from: (customFrom || "").trim(), to: (customTo || "").trim() }
 }
 
@@ -363,6 +390,11 @@ const DATE_RANGE_PRESET_OPTIONS = [
   { value: "this_month", label: "This month" },
   { value: "last_month", label: "Last month" },
   { value: "this_year", label: "This year" },
+  { value: "calendar_year", label: "Calendar year…" },
+  { value: "q1", label: "Q1 (Jan–Mar)" },
+  { value: "q2", label: "Q2 (Apr–Jun)" },
+  { value: "q3", label: "Q3 (Jul–Sep)" },
+  { value: "q4", label: "Q4 (Oct–Dec)" },
   { value: "all", label: "All time" },
   { value: "range", label: "Custom dates…" },
 ]
@@ -649,6 +681,7 @@ export default function ReportsPage() {
   const [dateRangePreset, setDateRangePreset] = useState("last30")
   const [dateFrom, setDateFrom] = useState(() => boundsForDatePreset("last30", "", "").from)
   const [dateTo, setDateTo] = useState(() => boundsForDatePreset("last30", "", "").to)
+  const [reportYear, setReportYear] = useState(() => new Date().getFullYear())
   const [issuanceItemType, setIssuanceItemType] = useState("all")
   const [issuanceItemSearch, setIssuanceItemSearch] = useState("")
   const [issuancePeopleView, setIssuancePeopleView] = useState("lines")
@@ -680,8 +713,8 @@ export default function ReportsPage() {
   const results = isInventory ? inventoryResults : txResults
 
   const effectiveReportBounds = useMemo(
-    () => boundsForDatePreset(dateRangePreset, dateFrom, dateTo),
-    [dateRangePreset, dateFrom, dateTo]
+    () => boundsForDatePreset(dateRangePreset, dateFrom, dateTo, reportYear),
+    [dateRangePreset, dateFrom, dateTo, reportYear]
   )
 
   const issuanceSearchTokens = useMemo(
@@ -1132,7 +1165,7 @@ export default function ReportsPage() {
 
   const handleDatePresetChange = (value) => {
     if (value === "range") {
-      const seed = boundsForDatePreset(dateRangePreset, dateFrom, dateTo)
+      const seed = boundsForDatePreset(dateRangePreset, dateFrom, dateTo, reportYear)
       if (seed?.from && seed?.to) {
         setDateFrom(seed.from)
         setDateTo(seed.to)
@@ -1218,7 +1251,7 @@ export default function ReportsPage() {
         const filtered = applyFilters(data, true)
         setInventoryResults(Array.isArray(filtered) ? filtered : [])
       } else {
-        const bounds = boundsForDatePreset(dateRangePreset, dateFrom, dateTo)
+        const bounds = boundsForDatePreset(dateRangePreset, dateFrom, dateTo, reportYear)
         if (dateRangePreset === "range" && bounds && (!bounds.from || !bounds.to)) {
           toast.error("Choose both a start date and an end date.")
           return
@@ -1487,6 +1520,31 @@ export default function ReportsPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {["q1", "q2", "q3", "q4", "calendar_year"].includes(dateRangePreset) && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <Label htmlFor="report-year" className="text-xs font-normal text-muted-foreground">
+                        Year
+                      </Label>
+                      <Select
+                        value={String(reportYear)}
+                        onValueChange={(v) => setReportYear(parseInt(v, 10))}
+                      >
+                        <SelectTrigger id="report-year" className="h-8 w-[100px] text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(() => {
+                            const cur = new Date().getFullYear()
+                            const years = []
+                            for (let y = cur - 10; y <= cur + 5; y++) years.push(y)
+                            return years.map((y) => (
+                              <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                            ))
+                          })()}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   {dateRangePreset !== "range" && dateRangePreset !== "all" && effectiveReportBounds && (
                     <p className="text-xs text-muted-foreground">
                       {describeBoundsHuman(effectiveReportBounds)}

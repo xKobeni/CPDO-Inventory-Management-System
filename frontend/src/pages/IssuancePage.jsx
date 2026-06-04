@@ -70,6 +70,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { FloatingHelpButton } from "@/components/HelpButton"
 import { issuanceTutorialSteps } from "@/constants/tutorialSteps"
+import DateRangeFilter from "@/components/DateRangeFilter"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { getErrorMessage } from "@/utils/api"
 import { usePeople } from "@/contexts/PeopleContext"
@@ -882,26 +883,7 @@ export default function IssuancePage() {
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
-              <div className="flex items-center gap-2" data-tutorial="issuance-filters">
-                <Label htmlFor="date-from-iss" className="text-muted-foreground text-xs whitespace-nowrap">From</Label>
-                <Input
-                  id="date-from-iss"
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  className="w-[140px]"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <Label htmlFor="date-to-iss" className="text-muted-foreground text-xs whitespace-nowrap">To</Label>
-                <Input
-                  id="date-to-iss"
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  className="w-[140px]"
-                />
-              </div>
+              <DateRangeFilter dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
               <Select value={filterType} onValueChange={setFilterType}>
                 <SelectTrigger className="w-[120px]">
                   <SelectValue />
