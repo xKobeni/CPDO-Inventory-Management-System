@@ -91,6 +91,26 @@ import { FloatingHelpButton } from "@/components/HelpButton"
 import { categoryItemsTutorialSteps } from "@/constants/tutorialSteps"
 
 const UNIT_OPTIONS = ["pcs", "boxes", "units", "sets"]
+const SUPPLY_UNIT_OPTIONS = [
+  "pcs",
+  "boxes",
+  "units",
+  "sets",
+  "ore",
+  "reams",
+  "pc/s",
+  "pack",
+  "rl",
+  "btls",
+  "pc",
+  "pads",
+  "packs",
+  "cart",
+  "roll",
+  "bot/s",
+  "can/s",
+  "kilo",
+]
 
 const STATUS_OPTIONS = [
   { value: "IN_STOCK", label: "In Stock" },
@@ -142,6 +162,8 @@ function getEmptyForm(isSupply, categoryName = "General") {
       quantityOnHand: "",
       reorderLevel: "",
       serialNumber: "",
+      status: "IN_STOCK",
+      condition: "GOOD",
     }
   }
   return {
@@ -228,6 +250,8 @@ function itemToForm(item, isSupply) {
       quantityOnHand: item.quantityOnHand != null && item.quantityOnHand !== "" ? String(item.quantityOnHand) : "0",
       reorderLevel: item.reorderLevel != null && item.reorderLevel !== "" ? String(item.reorderLevel) : "0",
       serialNumber: item.serialNumber ?? "",
+      status: item.status ?? "IN_STOCK",
+      condition: item.condition ?? "GOOD",
     }
   }
   return {
@@ -772,6 +796,8 @@ function formToUpdatePayload(form, isSupply) {
       quantityOnHand: parseInt(form.quantityOnHand, 10) || 0,
       reorderLevel: parseInt(form.reorderLevel, 10) || 0,
       serialNumber: (form.serialNumber || "").trim() || null,
+      status: form.status || "IN_STOCK",
+      condition: form.condition || "GOOD",
     }
   }
   return {
@@ -1722,7 +1748,7 @@ export default function CategoryItemsPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {UNIT_OPTIONS.map((u) => (
+                        {(isSupply ? SUPPLY_UNIT_OPTIONS : UNIT_OPTIONS).map((u) => (
                           <SelectItem key={u} value={u}>{u}</SelectItem>
                         ))}
                       </SelectContent>
@@ -1995,7 +2021,7 @@ export default function CategoryItemsPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {UNIT_OPTIONS.map((u) => (
+                        {(isSupply ? SUPPLY_UNIT_OPTIONS : UNIT_OPTIONS).map((u) => (
                           <SelectItem key={u} value={u}>{u}</SelectItem>
                         ))}
                       </SelectContent>
@@ -2511,7 +2537,7 @@ export default function CategoryItemsPage() {
                       <Select value={copyForm.unit} onValueChange={(v) => setCopyForm((f) => ({ ...f, unit: v }))}>
                         <SelectTrigger id="copy-unit"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {UNIT_OPTIONS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                          {(itemToCopy?.itemType === "SUPPLY" ? SUPPLY_UNIT_OPTIONS : UNIT_OPTIONS).map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>

@@ -173,7 +173,7 @@ export default function StockOutPage() {
       const payload = {
         items,
         issuedToOffice: "INVENTORY ADJUSTMENT",
-        issuedToPerson: "System",
+        issuedToPerson: "",
         purpose: `Stock Out - ${purpose}${remarks.trim() ? ": " + remarks.trim() : ""}`,
         date: transactionDate,
       }
