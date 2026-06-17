@@ -128,13 +128,16 @@ export default function StockOutPage() {
   }, [fetchTransactions, fetchSupplies])
 
   const setLine = (idx, field, value) => {
-    const updated = [...lines]
-    updated[idx] = { ...updated[idx], [field]: value }
-    // Reset search query when item changes
-    if (field === "itemId" && value !== updated[idx].itemId) {
-      updated[idx].searchQuery = ""
-    }
-    setLines(updated)
+    setLines((prev) => {
+      const next = [...prev]
+      next[idx] = { ...next[idx], [field]: field === "qty" ? (value === "" ? "" : (parseInt(value, 10) || 0)) : value }
+      // Set search query to selected item name when item changes
+      if (field === "itemId" && value) {
+        const selected = supplies.find((s) => s._id === value)
+        next[idx].searchQuery = selected ? selected.name : ""
+      }
+      return next
+    })
   }
 
   const addLine = () => {
@@ -398,12 +401,18 @@ export default function StockOutPage() {
                       <Combobox
                         value={line.itemId}
                         onValueChange={(value) => setLine(idx, "itemId", value)}
+                        inputValue={line.searchQuery}
+                        onInputValueChange={(value) => setLine(idx, "searchQuery", value)}
+                        itemToStringLabel={(id) => {
+                          if (!id) return ""
+                          const item = supplies.find((s) => s._id === id)
+                          return item ? item.name : id
+                        }}
+                        filter={null}
                       >
                         <ComboboxInput
                           placeholder="Search for an item..."
                           className="h-8"
-                          value={selectedItem ? selectedItem.name : line.searchQuery}
-                          onValueChange={(value) => setLine(idx, "searchQuery", value)}
                         />
                         <ComboboxContent>
                           <ComboboxList>
@@ -614,7 +623,11 @@ export default function StockOutPage() {
                         <TableCell className="px-3 text-sm">
                           <div className="flex items-center gap-2">
                             <TrendingDown className="size-4 text-red-500 shrink-0" />
-                            <span>{(tx.items ?? []).map((i) => `${i.qty}× ${i.itemId?.name ?? "N/A"}`).join(", ")}</span>
+                            <div className="flex flex-col gap-0.5">
+                              {(tx.items ?? []).map((i, idx) => (
+                                <span key={idx}>{i.qty}× {i.itemId?.name ?? "N/A"}</span>
+                              ))}
+                            </div>
                           </div>
                         </TableCell>
                         <TableCell className="px-3">{tx.purpose ?? "N/A"}</TableCell>

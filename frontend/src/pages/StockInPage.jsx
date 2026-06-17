@@ -138,10 +138,11 @@ export default function StockInPage() {
   const setLine = (idx, field, value) => {
     setLines((prev) => {
       const next = [...prev]
-      next[idx] = { ...next[idx], [field]: field === "qty" ? (parseInt(value, 10) || 0) : value }
-      // Reset search query when item changes
-      if (field === "itemId" && value !== next[idx].itemId) {
-        next[idx].searchQuery = ""
+      next[idx] = { ...next[idx], [field]: field === "qty" ? (value === "" ? "" : (parseInt(value, 10) || 0)) : value }
+      // Reset search query to selected item name when item changes
+      if (field === "itemId" && value) {
+        const selected = supplies.find((s) => s._id === value)
+        next[idx].searchQuery = selected ? selected.name : ""
       }
       return next
     })
@@ -173,17 +174,19 @@ export default function StockInPage() {
   const doSubmit = async (items) => {
     setSubmitting(true)
     try {
-      await transactionsService.createStockIn({
-        items,
-        referenceNo: remarks.trim() || undefined,
-        date: transactionDate,
-      })
+      for (const item of items) {
+        await transactionsService.createStockIn({
+          items: [item],
+          referenceNo: remarks.trim() || undefined,
+          date: transactionDate,
+        })
+      }
       toast.success("Stock In recorded.")
       setPage(1)
       setLines([{ itemId: "", qty: 1, searchQuery: "" }])
       setRemarks("")
       setTransactionDate(todayStr())
-      fetchTransactions()
+      await fetchTransactions()
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
@@ -200,22 +203,9 @@ export default function StockInPage() {
       return
     }
 
-    const itemIds = items.map((i) => i.itemId)
-    const seen = new Set()
-    const duplicateIds = itemIds.filter((id) => {
-      const dup = seen.has(id)
-      seen.add(id)
-      return dup
-    })
-    const uniqueDuplicates = [...new Set(duplicateIds)]
     const largeQtyItems = items.filter((i) => i.qty > LARGE_QTY_THRESHOLD)
 
     const warnings = []
-    if (uniqueDuplicates.length > 0) {
-      const names = uniqueDuplicates
-        .map((id) => supplies.find((s) => s._id === id)?.name || id)
-      warnings.push(`Duplicate items: ${names.join(", ")}`)
-    }
     if (largeQtyItems.length > 0) {
       largeQtyItems.forEach((i) => {
         const name = supplies.find((s) => s._id === i.itemId)?.name || i.itemId
@@ -414,11 +404,17 @@ export default function StockInPage() {
                       <Combobox
                         value={line.itemId}
                         onValueChange={(value) => setLine(idx, "itemId", value)}
+                        inputValue={line.searchQuery}
+                        onInputValueChange={(value) => setLine(idx, "searchQuery", value)}
+                        itemToStringLabel={(id) => {
+                          if (!id) return ""
+                          const item = supplies.find((s) => s._id === id)
+                          return item ? item.name : id
+                        }}
+                        filter={null}
                       >
                         <ComboboxInput
                           placeholder="Search for an item..."
-                          value={selectedItem ? selectedItem.name : line.searchQuery}
-                          onValueChange={(value) => setLine(idx, "searchQuery", value)}
                         />
                         <ComboboxContent>
                           <ComboboxList>
@@ -531,7 +527,7 @@ export default function StockInPage() {
                 placeholder="Additional notes or reference"
               />
             </div>
-            <Button className="w-full" onClick={handleSubmit} disabled={submitting || loading} data-tutorial="submit-btn">
+            <Button className="w-full" onClick={handleSubmit} disabled={submitting || loading || !lines.some(l => l.itemId && l.qty > 0)} data-tutorial="submit-btn">
               {submitting ? "Saving…" : "Save Stock In"}
             </Button>
               </>
@@ -596,7 +592,11 @@ export default function StockInPage() {
                         <TableCell className="px-3 text-sm">
                           <div className="flex items-center gap-2">
                             <TrendingUp className="size-4 text-green-500 shrink-0" />
-                            <span>{(tx.items ?? []).map((i) => `${i.qty}× ${i.itemId?.name ?? "N/A"}`).join(", ")}</span>
+                            <div className="flex flex-col gap-0.5">
+                              {(tx.items ?? []).map((i, idx) => (
+                                <span key={idx}>{i.qty}× {i.itemId?.name ?? "N/A"}</span>
+                              ))}
+                            </div>
                           </div>
                         </TableCell>
                         <TableCell className="px-3">{tx.referenceNo ?? "N/A"}</TableCell>
