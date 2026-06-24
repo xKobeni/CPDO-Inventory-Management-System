@@ -58,3 +58,8 @@ export async function deleteUser(id) {
   const { data } = await http.delete(API_PATHS.user(id))
   return data
 }
+
+export async function verifyUser(id) {
+  const { data } = await http.post(API_PATHS.userVerify(id))
+  return data
+}

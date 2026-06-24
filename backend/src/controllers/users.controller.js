@@ -265,3 +265,29 @@ export async function adminResendVerificationEmail(req, res) {
 
   res.json({ ok: true, message: "Verification email sent" });
 }
+
+export async function adminVerifyUser(req, res) {
+  const { id } = req.params;
+
+  const user = await User.findById(id);
+  if (!user) return res.status(404).json({ message: "User not found" });
+
+  if (user.isVerified) {
+    return res.status(400).json({ message: "User is already verified" });
+  }
+
+  user.isVerified = true;
+  user.emailVerificationToken = null;
+  user.emailVerificationTokenExpires = null;
+  await user.save();
+
+  await AuditLog.create({
+    actorId: req.user._id,
+    action: "ADMIN_USER_VERIFY",
+    targetType: "User",
+    targetId: user._id.toString(),
+    meta: { email: user.email },
+  });
+
+  res.json({ ok: true });
+}

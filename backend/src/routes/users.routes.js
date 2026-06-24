@@ -11,6 +11,7 @@ import {
   adminActivateUser,
   adminDeleteUser,
   adminResendVerificationEmail,
+  adminVerifyUser,
   adminCreateUserSchema,
   adminUpdateUserSchema,
   adminResetPasswordSchema,
@@ -27,6 +28,7 @@ r.put("/:id", validateBody(adminUpdateUserSchema), adminUpdateUser);
 
 r.post("/:id/reset-password", validateBody(adminResetPasswordSchema), adminResetPassword);
 r.post("/:id/resend-verification", adminResendVerificationEmail);
+r.post("/:id/verify", adminVerifyUser);
 
 r.post("/:id/deactivate", adminDeactivateUser);
 r.post("/:id/activate", adminActivateUser);

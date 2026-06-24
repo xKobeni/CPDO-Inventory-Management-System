@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
-import { Users, Search, MoreHorizontal, RefreshCw, Copy, KeyRound } from "lucide-react"
+import { Users, Search, MoreHorizontal, RefreshCw, Copy, KeyRound, Eye, EyeOff } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -104,6 +104,8 @@ export default function UsersPage() {
   const [editForm, setEditForm] = useState({ name: "", role: "STAFF", isActive: true })
   const [resetForm, setResetForm] = useState({ newPassword: "" })
   const [submitting, setSubmitting] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showResetPassword, setShowResetPassword] = useState(false)
 
   const generateRandomPassword = () => {
     const length = 12
@@ -273,6 +275,21 @@ export default function UsersPage() {
     try {
       await usersService.deleteUser(actionConfirm.user._id)
       toast.success("User deleted successfully.")
+      setActionConfirm(null)
+      fetchUsers()
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleVerify = async () => {
+    if (!actionConfirm?.user) return
+    setSubmitting(true)
+    try {
+      await usersService.verifyUser(actionConfirm.user._id)
+      toast.success("User verified.")
       setActionConfirm(null)
       fetchUsers()
     } catch (err) {
@@ -495,6 +512,7 @@ export default function UsersPage() {
                     onResendVerification={() => openResend(user)}
                     onDeactivate={() => setActionConfirm({ type: "deactivate", user })}
                     onActivate={() => setActionConfirm({ type: "activate", user })}
+                    onVerify={() => setActionConfirm({ type: "verify", user })}
                     onDelete={() => setActionConfirm({ type: "delete", user })}
                   />
                 ))
@@ -556,15 +574,29 @@ export default function UsersPage() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <Input
-                  id="add-password"
-                  type={useGeneratedPassword ? "text" : "password"}
-                  value={addForm.password}
-                  onChange={(e) => setAddForm((p) => ({ ...p, password: e.target.value }))}
-                  placeholder="Min 8 characters"
-                  readOnly={useGeneratedPassword}
-                  className={useGeneratedPassword ? "font-mono" : ""}
-                />
+                <div className="relative flex-1">
+                  <Input
+                    id="add-password"
+                    type={useGeneratedPassword ? "text" : showPassword ? "text" : "password"}
+                    value={addForm.password}
+                    onChange={(e) => setAddForm((p) => ({ ...p, password: e.target.value }))}
+                    placeholder="Min 8 characters"
+                    readOnly={useGeneratedPassword}
+                    className={useGeneratedPassword ? "font-mono" : ""}
+                  />
+                  {!useGeneratedPassword && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setShowPassword((p) => !p)}
+                      className="absolute right-1 top-1/2 -translate-y-1/2 size-7 text-muted-foreground hover:text-foreground"
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                    </Button>
+                  )}
+                </div>
                 {useGeneratedPassword && (
                   <>
                     <Button
@@ -688,13 +720,25 @@ export default function UsersPage() {
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="new-password">New password</Label>
-              <Input
-                id="new-password"
-                type="password"
-                value={resetForm.newPassword}
-                onChange={(e) => setResetForm({ newPassword: e.target.value })}
-                placeholder="Min 8 characters"
-              />
+              <div className="relative">
+                <Input
+                  id="new-password"
+                  type={showResetPassword ? "text" : "password"}
+                  value={resetForm.newPassword}
+                  onChange={(e) => setResetForm({ newPassword: e.target.value })}
+                  placeholder="Min 8 characters"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowResetPassword((p) => !p)}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 size-7 text-muted-foreground hover:text-foreground"
+                  tabIndex={-1}
+                >
+                  {showResetPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </Button>
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -740,6 +784,8 @@ export default function UsersPage() {
                 ? "Deactivate user?" 
                 : actionConfirm?.type === "delete" 
                 ? "Delete user?" 
+                : actionConfirm?.type === "verify"
+                ? "Verify account?"
                 : "Activate user?"}
             </AlertDialogTitle>
             <AlertDialogDescription>
@@ -752,17 +798,19 @@ export default function UsersPage() {
                     <p className="text-destructive font-semibold">⚠️ This action cannot be undone. All user data will be permanently removed.</p>
                   </div>
                 )
+                : actionConfirm?.type === "verify"
+                ? `Mark ${actionConfirm?.user?.name ?? actionConfirm?.user?.email}'s email as verified. They will be able to log in without clicking the verification link.`
                 : `Reactivate ${actionConfirm?.user?.name ?? actionConfirm?.user?.email} so they can log in again.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={actionConfirm?.type === "deactivate" ? handleDeactivate : actionConfirm?.type === "delete" ? handleDelete : handleActivate}
+              onClick={actionConfirm?.type === "deactivate" ? handleDeactivate : actionConfirm?.type === "delete" ? handleDelete : actionConfirm?.type === "verify" ? handleVerify : handleActivate}
               disabled={submitting}
               className={(actionConfirm?.type === "deactivate" || actionConfirm?.type === "delete") ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}
             >
-              {submitting ? "…" : actionConfirm?.type === "deactivate" ? "Deactivate" : actionConfirm?.type === "delete" ? "Delete" : "Activate"}
+              {submitting ? "…" : actionConfirm?.type === "deactivate" ? "Deactivate" : actionConfirm?.type === "delete" ? "Delete" : actionConfirm?.type === "verify" ? "Verify" : "Activate"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -986,7 +1034,7 @@ export default function UsersPage() {
   )
 }
 
-function UserRow({ user, onEdit, onResetPassword, onResendVerification, onDeactivate, onActivate, onDelete }) {
+function UserRow({ user, onEdit, onResetPassword, onResendVerification, onDeactivate, onActivate, onVerify, onDelete }) {
   const roleLabel = user.role === "ADMIN" ? "Admin" : user.role === "STAFF" ? "Staff" : user.role ?? "—"
   const status = user.isActive !== false ? "Active" : "Inactive"
   const created = user.createdAt
@@ -1034,7 +1082,10 @@ function UserRow({ user, onEdit, onResetPassword, onResendVerification, onDeacti
             <DropdownMenuItem onClick={onEdit}>Edit</DropdownMenuItem>
             <DropdownMenuItem onClick={onResetPassword}>Reset password</DropdownMenuItem>
             {user.isVerified === false && (
-              <DropdownMenuItem onClick={onResendVerification}>Resend verification email</DropdownMenuItem>
+              <>
+                <DropdownMenuItem onClick={onVerify}>Verify Account</DropdownMenuItem>
+                <DropdownMenuItem onClick={onResendVerification}>Resend verification email</DropdownMenuItem>
+              </>
             )}
             {user.isActive !== false ? (
               <DropdownMenuItem onClick={onDeactivate} className="text-destructive">

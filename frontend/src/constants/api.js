@@ -41,6 +41,7 @@ export const API_PATHS = {
   userResendVerification: (id) => `/users/${id}/resend-verification`,
   userDeactivate: (id) => `/users/${id}/deactivate`,
   userActivate: (id) => `/users/${id}/activate`,
+  userVerify: (id) => `/users/${id}/verify`,
   dashboard: {
     summary: "/dashboard/summary",
     categories: "/dashboard/categories",
