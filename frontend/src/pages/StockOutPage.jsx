@@ -77,8 +77,8 @@ export default function StockOutPage() {
   const [txLoading, setTxLoading] = useState(true)
   const [error, setError] = useState(null)
   const [search, setSearch] = useState("")
-  const [dateFrom, setDateFrom] = useState(lastMonthStr())
-  const [dateTo, setDateTo] = useState(todayStr())
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 

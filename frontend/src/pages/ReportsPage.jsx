@@ -342,7 +342,7 @@ function boundsForDatePreset(preset, customFrom, customTo, selectedYear) {
     return { from: formatLocalYYYYMMDD(firstPrev), to: formatLocalYYYYMMDD(lastDayPrev) }
   }
   if (preset === "this_year") {
-    const start = new Date(today.getFullYear(), 0, 1)
+    const start = new Date(year, 0, 1)
     return { from: formatLocalYYYYMMDD(start), to: formatLocalYYYYMMDD(today) }
   }
   if (preset === "calendar_year") {
@@ -678,9 +678,9 @@ function personNameFromIssuanceLine(tx, line) {
 export default function ReportsPage() {
   const { categories } = useCategories()
   const [reportType, setReportType] = useState("inventory")
-  const [dateRangePreset, setDateRangePreset] = useState("last30")
-  const [dateFrom, setDateFrom] = useState(() => boundsForDatePreset("last30", "", "").from)
-  const [dateTo, setDateTo] = useState(() => boundsForDatePreset("last30", "", "").to)
+  const [dateRangePreset, setDateRangePreset] = useState("all")
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
   const [reportYear, setReportYear] = useState(() => new Date().getFullYear())
   const [issuanceItemType, setIssuanceItemType] = useState("all")
   const [issuanceItemSearch, setIssuanceItemSearch] = useState("")
@@ -745,16 +745,27 @@ export default function ReportsPage() {
   }, [issuanceTableLayout])
 
   const filteredCategoryOptions = useMemo(() => {
-    if (reportType !== "issuance" || issuanceItemType === "all") return categories
-    return (categories || []).filter((c) => c.itemType === issuanceItemType)
-  }, [categories, issuanceItemType, reportType])
+    const itemType = reportType === "issuance" ? issuanceItemType : filterItemType
+    if (!itemType || itemType === "all" || itemType === "_all") return categories
+    return (categories || []).filter((c) => c.itemType === itemType)
+  }, [categories, issuanceItemType, filterItemType, reportType])
 
   useEffect(() => {
-    if (reportType === "issuance" && filterCategory) {
-      const stillValid = (filteredCategoryOptions || []).some((c) => c.name === filterCategory)
-      if (!stillValid) setFilterCategory("")
+    if (!filterCategory) return
+    const stillValid = (filteredCategoryOptions || []).some((c) => c.name === filterCategory)
+    if (!stillValid) setFilterCategory("")
+  }, [filterCategory, filteredCategoryOptions])
+
+  useEffect(() => {
+    if (!filterCategory) return
+    const cat = (categories || []).find((c) => c.name === filterCategory)
+    if (!cat?.itemType) return
+    if (reportType === "issuance") {
+      if (issuanceItemType !== cat.itemType) setIssuanceItemType(cat.itemType)
+    } else {
+      if (filterItemType !== cat.itemType) setFilterItemType(cat.itemType)
     }
-  }, [reportType, issuanceItemType, filterCategory, filteredCategoryOptions])
+  }, [filterCategory, categories, reportType])
 
   const reportSearchTokens = useMemo(
     () => parseIssuanceItemSearchTokens(reportSearchText),
@@ -824,13 +835,13 @@ export default function ReportsPage() {
 
     const out = []
     byItem.forEach((list) => {
-      list.sort((a, b) => new Date(b.tx?.createdAt || 0) - new Date(a.tx?.createdAt || 0))
-      let running = Number(list[0]?.item?.quantityOnHand ?? 0)
+      list.sort((a, b) => new Date(a.tx?.createdAt || 0) - new Date(b.tx?.createdAt || 0))
+      let running = 0
       list.forEach((r) => {
+        const balanceBefore = running
+        running += r.delta
         const balanceAfter = running
-        const balanceBefore = running - r.delta
         out.push({ ...r, balanceBefore, balanceAfter })
-        running = balanceBefore
       })
     })
     out.sort((a, b) => new Date(b.tx?.createdAt || 0) - new Date(a.tx?.createdAt || 0))
@@ -1520,7 +1531,7 @@ export default function ReportsPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                  {["q1", "q2", "q3", "q4", "calendar_year"].includes(dateRangePreset) && (
+                  {["this_year", "q1", "q2", "q3", "q4", "calendar_year"].includes(dateRangePreset) && (
                     <div className="mt-2 flex items-center gap-2">
                       <Label htmlFor="report-year" className="text-xs font-normal text-muted-foreground">
                         Year
@@ -1680,7 +1691,7 @@ export default function ReportsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="_all">All categories</SelectItem>
-                      {(reportType === "issuance" ? filteredCategoryOptions : categories || []).map((c) => (
+                      {(filteredCategoryOptions || []).map((c) => (
                         <SelectItem key={c.id || c.slug} value={c.name}>
                           {c.name}
                         </SelectItem>

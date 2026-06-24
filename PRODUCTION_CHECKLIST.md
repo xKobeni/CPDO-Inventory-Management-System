@@ -122,7 +122,6 @@ SEED_ADMIN_NAME=System Administrator
 ### Frontend (Static Site)
 
 **Required:**
-```
 VITE_API_BASE_URL=https://your-backend-url.onrender.com/api
 ```
 

@@ -48,15 +48,6 @@ function getActionVariant(action) {
 }
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50]
-function todayStr() {
-  return new Date().toISOString().slice(0, 10)
-}
-function lastMonthStr() {
-  const d = new Date()
-  d.setMonth(d.getMonth() - 1)
-  return d.toISOString().slice(0, 10)
-}
-
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement("a")
@@ -72,8 +63,8 @@ export default function AuditLogsPage() {
   const [error, setError] = useState(null)
   const [search, setSearch] = useState("")
   const [actionFilter, setActionFilter] = useState("all")
-  const [dateFrom, setDateFrom] = useState(lastMonthStr())
-  const [dateTo, setDateTo] = useState(todayStr())
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [downloading, setDownloading] = useState(false)

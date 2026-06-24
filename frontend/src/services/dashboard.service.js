@@ -2,10 +2,11 @@ import { http } from "@/lib/http"
 import { API_PATHS } from "@/constants/api"
 
 /**
+ * @param {{ supplyDays?: number }} [params]
  * @returns {Promise<{ kpis: Object, charts: Object, previews: Object }>}
  */
-export async function getSummary() {
-  const { data } = await http.get(API_PATHS.dashboard.summary)
+export async function getSummary(params = {}) {
+  const { data } = await http.get(API_PATHS.dashboard.summary, { params })
   return data
 }
 

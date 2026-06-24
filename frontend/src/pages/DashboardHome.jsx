@@ -11,7 +11,6 @@ import {
   Users,
   TrendingDown,
   FileText,
-  Activity,
   Cpu,
 } from "lucide-react"
 import {
@@ -326,9 +325,7 @@ function ValueByCategoryPieChart({ data }) {
   )
 }
 
-function SupplyMovementsChart({ data }) {
-  // Fill missing days with 0 for last 14 days
-  const days = 14
+function SupplyMovementsChart({ data, days }) {
   const end = new Date()
   end.setHours(0, 0, 0, 0)
   const map = new Map((data || []).map((d) => [d.date, { stockIn: d.stockIn || 0, stockOut: d.stockOut || 0 }]))
@@ -344,7 +341,7 @@ function SupplyMovementsChart({ data }) {
   return (
     <Card className="bg-white border-zinc-200">
       <CardHeader>
-        <CardTitle className="text-base">Supply Movements (last 14 days)</CardTitle>
+        <CardTitle className="text-base">Supply Movements (last {days} days)</CardTitle>
         <CardDescription>Daily stock in vs stock out transactions</CardDescription>
       </CardHeader>
       <CardContent>
@@ -416,11 +413,12 @@ export default function DashboardHome() {
   const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [supplyDays, setSupplyDays] = useState(14)
 
   useEffect(() => {
     let cancelled = false
     dashboardService
-      .getSummary()
+      .getSummary({ supplyDays })
       .then((data) => {
         if (!cancelled) setSummary(data)
       })
@@ -433,7 +431,7 @@ export default function DashboardHome() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [supplyDays])
 
   const kpis = summary?.kpis ?? {}
   const charts = summary?.charts ?? {}
@@ -555,20 +553,27 @@ export default function DashboardHome() {
             href="/users"
           />
           <StatCard
-            title="Transactions today"
-            value={loading ? "…" : kpis.txToday}
-            description="Recorded today"
-            icon={Activity}
-          />
-          <StatCard
             title="This month"
             value={loading ? "…" : kpis.txThisMonth}
             description="Total this month"
             icon={FileText}
           />
         </div>
-        <div>
-          <SupplyMovementsChart data={charts?.supplyMovementsByDay || []} />
+        <div className="space-y-3">
+          <div className="flex items-center justify-end gap-2">
+            <label className="text-xs text-muted-foreground">Range</label>
+            <select
+              value={supplyDays}
+              onChange={(e) => setSupplyDays(Number(e.target.value))}
+              className="h-7 rounded-md border border-input bg-background px-2 text-xs"
+            >
+              <option value={7}>7 days</option>
+              <option value={14}>14 days</option>
+              <option value={30}>30 days</option>
+              <option value={90}>90 days</option>
+            </select>
+          </div>
+          <SupplyMovementsChart data={charts?.supplyMovementsByDay || []} days={supplyDays} />
         </div>
       </section>
 

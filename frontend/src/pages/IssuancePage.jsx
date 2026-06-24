@@ -101,15 +101,6 @@ const FILTER_TYPE_ALL = "all"
 const FILTER_TYPE_SUPPLY = "supply"
 const FILTER_TYPE_ASSET = "asset"
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10)
-}
-function lastMonthStr() {
-  const d = new Date()
-  d.setMonth(d.getMonth() - 1)
-  return d.toISOString().slice(0, 10)
-}
-
 export default function IssuancePage() {
   const { peopleOptions } = usePeople()
   const isMobile = useIsMobile()
@@ -134,8 +125,8 @@ export default function IssuancePage() {
   const [filterAccountable, setFilterAccountable] = useState("")
   const [filterItem, setFilterItem] = useState("")
   const [filterType, setFilterType] = useState(FILTER_TYPE_ALL)
-  const [dateFrom, setDateFrom] = useState(lastMonthStr())
-  const [dateTo, setDateTo] = useState(todayStr())
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   // deletingTxId removed (was not used for UI state)

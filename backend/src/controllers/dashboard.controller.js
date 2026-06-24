@@ -115,16 +115,24 @@ export async function getDashboardSummary(req, res) {
   startOf14DaysAgo.setDate(startOf14DaysAgo.getDate() - 14);
   startOf14DaysAgo.setHours(0, 0, 0, 0);
 
-  // Supply movements (Stock In vs Stock Out) for last 14 days
+  // Supply movements date range (from query params or default 14 days)
+  const rawSupplyDays = parseInt(req.query.supplyDays, 10);
+  const supplyDays = !isNaN(rawSupplyDays) && rawSupplyDays > 0 ? rawSupplyDays : 14;
+  const supplyFrom = new Date(now);
+  supplyFrom.setDate(supplyFrom.getDate() - supplyDays);
+  supplyFrom.setHours(0, 0, 0, 0);
+
+  // Supply movements (Stock In vs Stock Out) — sums actual item quantities
   const supplyMovementsByDay = await Transaction.aggregate([
-    { $match: { createdAt: { $gte: startOf14DaysAgo }, type: { $in: ["STOCK_IN", "ISSUANCE"] } } },
+    { $match: { createdAt: { $gte: supplyFrom }, type: { $in: ["STOCK_IN", "ISSUANCE"] } } },
+    { $unwind: "$items" },
     {
       $group: {
         _id: {
           date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
           type: "$type"
         },
-        count: { $sum: 1 }
+        qty: { $sum: "$items.qty" }
       }
     },
     { $sort: { "_id.date": 1 } },
@@ -132,10 +140,10 @@ export async function getDashboardSummary(req, res) {
       $group: {
         _id: "$_id.date",
         stockIn: {
-          $sum: { $cond: [{ $eq: ["$_id.type", "STOCK_IN"] }, "$count", 0] }
+          $sum: { $cond: [{ $eq: ["$_id.type", "STOCK_IN"] }, "$qty", 0] }
         },
         stockOut: {
-          $sum: { $cond: [{ $eq: ["$_id.type", "ISSUANCE"] }, "$count", 0] }
+          $sum: { $cond: [{ $eq: ["$_id.type", "ISSUANCE"] }, "$qty", 0] }
         }
       }
     },

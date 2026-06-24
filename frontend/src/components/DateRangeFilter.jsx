@@ -27,9 +27,9 @@ function startOfMonthStr() {
   return d.toISOString().slice(0, 10)
 }
 
-function startOfYearStr() {
-  const d = new Date()
-  d.setMonth(0, 1)
+function startOfYearStr(year) {
+  const d = year ? new Date(year, 0, 1) : new Date()
+  if (!year) d.setMonth(0, 1)
   return d.toISOString().slice(0, 10)
 }
 
@@ -58,8 +58,8 @@ const DYNAMIC_PRESETS = [
 
 function matchPreset(from, to, year) {
   for (const p of DYNAMIC_PRESETS) {
-    const { from: pf, to: pt } = p.range()
-    if (from === pf && to === pt) return p.key
+    const range = p.key === "thisYear" ? { from: startOfYearStr(year), to: todayStr() } : p.range()
+    if (from === range.from && to === range.to) return p.key
   }
   for (let q = 1; q <= 4; q++) {
     const { from: pf, to: pt } = quarterRangeStr(year, q)
@@ -92,11 +92,13 @@ export default function DateRangeFilter({ dateFrom, dateTo, onDateFromChange, on
     isInternal.current = true
     setActivePreset(preset.key)
     if (preset.range) {
-      const { from, to } = preset.range()
+      const { from, to } = preset.key === "thisYear"
+        ? { from: startOfYearStr(quarterYear), to: todayStr() }
+        : preset.range()
       onDateFromChange(from)
       onDateToChange(to)
     }
-  }, [onDateFromChange, onDateToChange])
+  }, [onDateFromChange, onDateToChange, quarterYear])
 
   const applyQuarter = useCallback((q) => {
     const { from, to } = quarterRangeStr(quarterYear, q)

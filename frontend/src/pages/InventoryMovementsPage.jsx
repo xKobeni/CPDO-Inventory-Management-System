@@ -121,16 +121,6 @@ function shiftOrder(order, idx, delta) {
   return next
 }
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function lastMonthStr() {
-  const d = new Date()
-  d.setMonth(d.getMonth() - 1)
-  return d.toISOString().slice(0, 10)
-}
-
 function formatQty(value) {
   return Number(value || 0).toLocaleString()
 }
@@ -143,8 +133,8 @@ export default function InventoryMovementsPage() {
   const [error, setError] = useState(null)
   const [search, setSearch] = useState("")
   const [typeFilter, setTypeFilter] = useState("all")
-  const [dateFrom, setDateFrom] = useState(lastMonthStr())
-  const [dateTo, setDateTo] = useState(todayStr())
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [tableLayout, setTableLayout] = useState(loadMovementTableLayout)
@@ -171,7 +161,7 @@ export default function InventoryMovementsPage() {
   const fetchSupplies = useCallback(async () => {
     setItemsLoading(true)
     try {
-      const data = await itemsService.listItems({ type: "SUPPLY", archived: "false" })
+      const data = await itemsService.listItems({ type: "SUPPLY" })
       const map = new Map()
       ;(data || []).forEach((item) => {
         const id = String(item._id ?? item.id)
@@ -217,7 +207,6 @@ export default function InventoryMovementsPage() {
         }
         if (!delta) return
         const itemId = String(item?._id ?? item?.id ?? "")
-        const currentQty = itemId ? Number(itemsById.get(itemId)?.quantityOnHand ?? 0) : 0
         out.push({
           key: `${tx._id || "tx"}-${item._id || item.id || idx}`,
           tx,
@@ -226,7 +215,6 @@ export default function InventoryMovementsPage() {
           qty,
           delta,
           type,
-          currentQty,
         })
       })
     })
@@ -247,8 +235,8 @@ export default function InventoryMovementsPage() {
       list.sort((a, b) => new Date(b.tx?.createdAt || 0) - new Date(a.tx?.createdAt || 0))
       let running = Number(itemsById.get(itemId)?.quantityOnHand ?? 0)
       list.forEach((row) => {
-        const balanceAfter = running
-        const balanceBefore = running - row.delta
+        const balanceAfter = Math.max(0, running)
+        const balanceBefore = Math.max(0, running - row.delta)
         out.push({ ...row, balanceAfter, balanceBefore })
         running = balanceBefore
       })
