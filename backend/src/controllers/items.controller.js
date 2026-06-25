@@ -52,7 +52,7 @@ export async function listItems(req, res) {
   const skip = (p - 1) * ps;
 
   const items = await Item.find(finalFilter)
-    .select("name category itemType unit status condition propertyNumber serialNumber quantityOnHand reorderLevel accountablePerson isArchived dateAcquired unitCost brand model division remarks transferredTo assignedDate returnedDate createdAt updatedAt")
+    .select("name category itemType unit status condition propertyNumber serialNumber quantityOnHand reorderLevel expirationDate accountablePerson isArchived dateAcquired unitCost brand model division remarks transferredTo assignedDate returnedDate createdAt updatedAt")
     .sort({ updatedAt: -1 })
     .skip(skip)
     .limit(ps)
@@ -82,6 +82,7 @@ export async function createItem(req, res) {
 
   // Normalize dates
   body.dateAcquired = toDateOrNull(body.dateAcquired);
+  body.expirationDate = toDateOrNull(body.expirationDate);
 
   if (body.itemType === "SUPPLY") {
     body.propertyNumber = null;
@@ -166,6 +167,7 @@ export async function updateItem(req, res) {
 
   const patch = { ...req.body };
   if ("dateAcquired" in patch) patch.dateAcquired = toDateOrNull(patch.dateAcquired);
+  if ("expirationDate" in patch) patch.expirationDate = toDateOrNull(patch.expirationDate);
 
   // Strip protected accountability/assignment fields — those must go through
   // assign/transfer/return endpoints which create Transaction records.

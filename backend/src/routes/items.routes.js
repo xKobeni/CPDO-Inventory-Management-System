@@ -41,6 +41,7 @@ const itemSchemaShape = z.object({
   // SUPPLY fields
   quantityOnHand: z.number().int().min(0).optional().default(0),
   reorderLevel: z.number().int().min(0).optional().default(0),
+  expirationDate: z.string().datetime().optional().nullable().default(null),
 
   // ASSET fields
   propertyNumber: z.string().max(80).optional().nullable().default(null),

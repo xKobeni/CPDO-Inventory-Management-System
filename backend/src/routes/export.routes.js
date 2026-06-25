@@ -11,6 +11,9 @@ import {
   exportBackupXlsx,
   exportBackupJson,
   exportBackupCsv,
+  getBackupStatus,
+  listBackups,
+  downloadBackup,
 } from "../controllers/export.controller.js";
 
 const r = Router();
@@ -26,5 +29,10 @@ r.get("/dashboard-summary.xlsx", exportDashboardSummaryXlsx);
 r.get("/backup.xlsx", exportBackupXlsx);
 r.get("/backup.json", exportBackupJson);
 r.get("/backup.csv", exportBackupCsv);
+
+// Backup file management
+r.get("/backup/status", getBackupStatus);
+r.get("/backups", listBackups);
+r.get("/backups/:filename", downloadBackup);
 
 export default r;

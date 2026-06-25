@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react"
-import { Search, RefreshCw, ChevronLeft, ChevronRight, Columns3, ChevronUp, ChevronDown } from "lucide-react"
+import { Search, RefreshCw, ChevronLeft, ChevronRight, Columns3, ChevronUp, ChevronDown, Trash2 } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -44,6 +44,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { FloatingHelpButton } from "@/components/HelpButton"
 import { inventoryMovementsTutorialSteps } from "@/constants/tutorialSteps"
 import DateRangeFilter from "@/components/DateRangeFilter"
@@ -140,6 +150,8 @@ export default function InventoryMovementsPage() {
   const [tableLayout, setTableLayout] = useState(loadMovementTableLayout)
   const [remarksDraft, setRemarksDraft] = useState({})
   const [savingRemarksTxId, setSavingRemarksTxId] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
   const fetchTransactions = useCallback(async (showToast = false) => {
     setTxLoading(true)
@@ -317,6 +329,25 @@ export default function InventoryMovementsPage() {
       order: [...MOVEMENT_DEFAULT_LAYOUT.order],
       visible: { ...MOVEMENT_DEFAULT_LAYOUT.visible },
     })
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    const { txId, itemId, txType } = deleteTarget
+    setDeleteDialogOpen(false)
+    try {
+      if (txType === "STOCK_IN") {
+        await transactionsService.deleteStockIn(txId)
+        toast.success("Stock-in record deleted.")
+      } else if (txType === "ISSUANCE") {
+        await transactionsService.deleteIssuanceLine(txId, itemId)
+        toast.success("Movement line deleted.")
+      }
+      setDeleteTarget(null)
+      fetchTransactions()
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    }
   }
 
   const saveRemarks = async (txId, nextValue, prevValue) => {
@@ -538,18 +569,19 @@ export default function InventoryMovementsPage() {
                       {MOVEMENT_COLUMN_META[col].label}
                     </TableHead>
                   ))}
+                  <TableHead className="px-3 w-12"><span className="sr-only">Actions</span></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {txLoading || itemsLoading ? (
                   <TableRow>
-                    <TableCell colSpan={Math.max(visibleColumns.length, 1)} className="px-3 py-8 text-center text-muted-foreground">
+                    <TableCell colSpan={Math.max(visibleColumns.length + 1, 1)} className="px-3 py-8 text-center text-muted-foreground">
                       Loading…
                     </TableCell>
                   </TableRow>
                 ) : filteredRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={Math.max(visibleColumns.length, 1)} className="px-3 py-8 text-center text-muted-foreground">
+                    <TableCell colSpan={Math.max(visibleColumns.length + 1, 1)} className="px-3 py-8 text-center text-muted-foreground">
                       No movements match your filters.
                     </TableCell>
                   </TableRow>
@@ -646,6 +678,21 @@ export default function InventoryMovementsPage() {
                           }
                           return null
                         })}
+                        <TableCell className="px-3 w-12">
+                          {row.type !== "ADJUSTMENT" && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 text-muted-foreground hover:text-destructive"
+                              onClick={() => {
+                                setDeleteTarget({ txId, itemId: row.itemId, itemName, txType: row.type })
+                                setDeleteDialogOpen(true)
+                              }}
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          )}
+                        </TableCell>
                       </TableRow>
                     )
                   })
@@ -680,6 +727,27 @@ export default function InventoryMovementsPage() {
           </div>
         </div>
       </section>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={(open) => { if (!open) { setDeleteDialogOpen(false); setDeleteTarget(null) } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete movement record?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget?.txType === "STOCK_IN"
+                ? "This will remove the entire stock-in record and reverse the stock change for all items in that transaction."
+                : deleteTarget?.txType === "ISSUANCE"
+                  ? `This will return "${deleteTarget?.itemName ?? "this item"}" back to inventory.`
+                  : "This action cannot be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDelete}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       
       <FloatingHelpButton steps={inventoryMovementsTutorialSteps} pageId="inventoryMovements" />
     </div>

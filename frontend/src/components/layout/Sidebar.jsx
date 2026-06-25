@@ -30,6 +30,10 @@ const adminNav = [
   { to: "/settings", label: "Settings", icon: Settings },
 ]
 
+const staffNav = [
+  { to: "/staff/settings", label: "Staff Settings", icon: Settings },
+]
+
 const linkBase =
   "flex items-center gap-3 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2"
 const linkActive = "bg-sidebar-primary text-sidebar-primary-foreground"
@@ -96,6 +100,21 @@ export default function Sidebar({ collapsed = false }) {
                 <NavItem key={item.to} {...item} collapsed={collapsed} />
               ))}
             </nav>
+
+            {user?.role === "staff" && (
+              <>
+                {!collapsed && (
+                  <div className="mb-1 mt-4 px-3 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/60">
+                    Staff
+                  </div>
+                )}
+                <nav className={collapsed ? "mt-6 flex flex-col items-center space-y-2" : "mt-1 space-y-0.5"}>
+                  {staffNav.map((item) => (
+                    <NavItem key={item.to} {...item} collapsed={collapsed} />
+                  ))}
+                </nav>
+              </>
+            )}
 
             {user?.role === "admin" && (
               <>

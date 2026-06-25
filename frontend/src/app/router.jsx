@@ -14,6 +14,8 @@ import CategoryItemsPage from "@/pages/CategoryItemsPage"
 import ManageCategoriesPage from "@/pages/ManageCategoriesPage"
 import LowStockPage from "@/pages/LowStockPage"
 import OutOfStockPage from "@/pages/OutOfStockPage"
+import ExpiredPage from "@/pages/ExpiredPage"
+import ExpiringSoonPage from "@/pages/ExpiringSoonPage"
 
 // placeholders you’ll create:
 import StockInPage from "@/pages/StockInPage"
@@ -50,6 +52,8 @@ export const router = createBrowserRouter([
           { path: "/items/manage-categories", element: <ManageCategoriesPage /> },
           { path: "/items/low-stock", element: <LowStockPage /> },
           { path: "/items/out-of-stock", element: <OutOfStockPage /> },
+          { path: "/items/expired", element: <ExpiredPage /> },
+          { path: "/items/expiring-soon", element: <ExpiringSoonPage /> },
           { path: "/items/category/:categorySlug", element: <CategoryItemsPage /> },
           { path: "/stock/in", element: <StockInPage /> },
           { path: "/stock/out", element: <StockOutPage /> },

@@ -1,8 +1,11 @@
+import fs from "fs";
+import path from "path";
 import ExcelJS from "exceljs";
 import { Parser as Json2CsvParser } from "json2csv";
 import Item from "../models/Item.js";
 import Transaction from "../models/Transaction.js";
 import AuditLog from "../models/AuditLog.js";
+import User from "../models/User.js";
 
 function dateOnly(d) {
   if (!d) return "";
@@ -486,14 +489,14 @@ export async function exportDashboardSummaryXlsx(req, res) {
 // ─────────────────────────────────────────────────────────────────────
 
 /**
- * Export full database backup as Excel (.xlsx) with 3 sheets: Items, Transactions, Audit Logs
+ * Export full database backup as Excel (.xlsx) with sheets: Items, Transactions, Audit Logs, Users
  */
 export async function exportBackupXlsx(req, res) {
-  // Fetch all data
-  const [items, transactions, auditLogs] = await Promise.all([
+  const [items, transactions, auditLogs, users] = await Promise.all([
     Item.find({}).sort({ updatedAt: -1 }).lean(),
-    Transaction.find({}).sort({ createdAt: -1 }).lean(),
+    Transaction.find({}).populate("createdBy", "name email").populate("items.itemId", "name unit category").sort({ createdAt: -1 }).lean(),
     AuditLog.find({}).sort({ createdAt: -1 }).lean(),
+    User.find({}).select("-passwordHash -refreshTokenHash -emailVerificationToken -emailVerificationTokenExpires -passwordResetOtpHash -passwordResetOtpExpires").sort({ createdAt: -1 }).lean(),
   ]);
 
   const wb = new ExcelJS.Workbook();
@@ -507,15 +510,22 @@ export async function exportBackupXlsx(req, res) {
     { header: "Unit", key: "unit", width: 10 },
     { header: "Quantity", key: "quantityOnHand", width: 12 },
     { header: "Reorder Level", key: "reorderLevel", width: 14 },
+    { header: "Expiration Date", key: "expirationDate", width: 14 },
     { header: "Property Number", key: "propertyNumber", width: 18 },
     { header: "Serial Number", key: "serialNumber", width: 18 },
+    { header: "Brand", key: "brand", width: 15 },
+    { header: "Model", key: "model", width: 15 },
     { header: "Division", key: "division", width: 25 },
     { header: "Status", key: "status", width: 12 },
     { header: "Condition", key: "condition", width: 12 },
     { header: "Date Acquired", key: "dateAcquired", width: 14 },
     { header: "Unit Cost", key: "unitCost", width: 14 },
     { header: "Accountable Person", key: "accountablePersonName", width: 25 },
+    { header: "Accountable Position", key: "accountablePersonPosition", width: 20 },
     { header: "Accountable Office", key: "accountablePersonOffice", width: 25 },
+    { header: "Transferred To", key: "transferredTo", width: 25 },
+    { header: "Assigned Date", key: "assignedDate", width: 14 },
+    { header: "Returned Date", key: "returnedDate", width: 14 },
     { header: "Remarks", key: "remarks", width: 35 },
     { header: "Is Archived", key: "isArchived", width: 12 },
     { header: "Created At", key: "createdAt", width: 20 },
@@ -530,15 +540,22 @@ export async function exportBackupXlsx(req, res) {
       unit: item.unit || "",
       quantityOnHand: item.quantityOnHand ?? 0,
       reorderLevel: item.reorderLevel ?? 0,
+      expirationDate: dateOnly(item.expirationDate),
       propertyNumber: item.propertyNumber || "",
       serialNumber: item.serialNumber || "",
+      brand: item.brand || "",
+      model: item.model || "",
       division: item.division || "",
       status: item.status || "",
       condition: item.condition || "",
       dateAcquired: dateOnly(item.dateAcquired),
       unitCost: item.unitCost ?? 0,
       accountablePersonName: item.accountablePerson?.name || "",
+      accountablePersonPosition: item.accountablePerson?.position || "",
       accountablePersonOffice: item.accountablePerson?.office || "",
+      transferredTo: item.transferredTo || "",
+      assignedDate: dateOnly(item.assignedDate),
+      returnedDate: dateOnly(item.returnedDate),
       remarks: item.remarks || "",
       isArchived: item.isArchived ? "Yes" : "No",
       createdAt: item.createdAt ? new Date(item.createdAt).toISOString() : "",
@@ -546,7 +563,6 @@ export async function exportBackupXlsx(req, res) {
     });
   });
 
-  // Freeze header row
   itemsSheet.views = [{ state: "frozen", ySplit: 1 }];
 
   // ─── Transactions Sheet ────────────────────────────────────────────
@@ -554,26 +570,42 @@ export async function exportBackupXlsx(req, res) {
   txSheet.columns = [
     { header: "Type", key: "type", width: 14 },
     { header: "Created At", key: "createdAt", width: 20 },
-    { header: "Created By", key: "createdBy", width: 30 },
+    { header: "Created By", key: "createdByName", width: 30 },
+    { header: "Created By Email", key: "createdByEmail", width: 30 },
     { header: "Issued To Office", key: "issuedToOffice", width: 20 },
     { header: "Issued To Person", key: "issuedToPerson", width: 25 },
+    { header: "Accountable Person", key: "accountablePersonName", width: 25 },
+    { header: "Accountable Position", key: "accountablePersonPosition", width: 20 },
+    { header: "Accountable Office", key: "accountablePersonOffice", width: 25 },
     { header: "Purpose", key: "purpose", width: 30 },
     { header: "Supplier", key: "supplier", width: 20 },
     { header: "Reference No", key: "referenceNo", width: 18 },
-    { header: "Items (JSON)", key: "items", width: 60 },
+    { header: "Items", key: "itemsSummary", width: 60 },
   ];
 
   transactions.forEach((tx) => {
+    const createdByUser = tx.createdBy || {};
+    const itemsSummary = (tx.items || [])
+      .map((it) => {
+        const itemName = it.itemId?.name || it.itemId?.toString() || "(deleted)";
+        const unit = it.itemId?.unit || "";
+        return `${itemName}${unit ? ` (${unit})` : ""} × ${it.qty}`;
+      })
+      .join("; ");
     txSheet.addRow({
       type: tx.type || "",
       createdAt: tx.createdAt ? new Date(tx.createdAt).toISOString() : "",
-      createdBy: tx.createdBy || "",
+      createdByName: createdByUser.name || createdByUser._id?.toString() || "",
+      createdByEmail: createdByUser.email || "",
       issuedToOffice: tx.issuedToOffice || "",
       issuedToPerson: tx.issuedToPerson || "",
+      accountablePersonName: tx.accountablePerson?.name || "",
+      accountablePersonPosition: tx.accountablePerson?.position || "",
+      accountablePersonOffice: tx.accountablePerson?.office || "",
       purpose: tx.purpose || "",
       supplier: tx.supplier || "",
       referenceNo: tx.referenceNo || "",
-      items: JSON.stringify(tx.items || []),
+      itemsSummary,
     });
   });
 
@@ -603,6 +635,38 @@ export async function exportBackupXlsx(req, res) {
 
   auditSheet.views = [{ state: "frozen", ySplit: 1 }];
 
+  // ─── Users Sheet ───────────────────────────────────────────────────
+  const usersSheet = wb.addWorksheet("Users");
+  usersSheet.columns = [
+    { header: "Name", key: "name", width: 25 },
+    { header: "Email", key: "email", width: 30 },
+    { header: "Role", key: "role", width: 12 },
+    { header: "Is Active", key: "isActive", width: 12 },
+    { header: "Is Verified", key: "isVerified", width: 12 },
+    { header: "Login Attempts", key: "loginAttempts", width: 14 },
+    { header: "Last Login", key: "lastLoginAt", width: 20 },
+    { header: "Locked Until", key: "lockUntil", width: 20 },
+    { header: "Created At", key: "createdAt", width: 20 },
+    { header: "Updated At", key: "updatedAt", width: 20 },
+  ];
+
+  users.forEach((user) => {
+    usersSheet.addRow({
+      name: user.name || "",
+      email: user.email || "",
+      role: user.role || "",
+      isActive: user.isActive ? "Yes" : "No",
+      isVerified: user.isVerified ? "Yes" : "No",
+      loginAttempts: user.loginAttempts ?? 0,
+      lastLoginAt: user.lastLoginAt ? new Date(user.lastLoginAt).toISOString() : "",
+      lockUntil: user.lockUntil ? new Date(user.lockUntil).toISOString() : "",
+      createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : "",
+      updatedAt: user.updatedAt ? new Date(user.updatedAt).toISOString() : "",
+    });
+  });
+
+  usersSheet.views = [{ state: "frozen", ySplit: 1 }];
+
   // Send response
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="cpdc_backup_${dateOnly(new Date())}.xlsx"`);
@@ -615,11 +679,11 @@ export async function exportBackupXlsx(req, res) {
  * Export full database backup as JSON
  */
 export async function exportBackupJson(req, res) {
-  // Fetch all data
-  const [items, transactions, auditLogs] = await Promise.all([
+  const [items, transactions, auditLogs, users] = await Promise.all([
     Item.find({}).sort({ updatedAt: -1 }).lean(),
-    Transaction.find({}).sort({ createdAt: -1 }).lean(),
+    Transaction.find({}).populate("createdBy", "name email").populate("items.itemId", "name unit category").sort({ createdAt: -1 }).lean(),
     AuditLog.find({}).sort({ createdAt: -1 }).lean(),
+    User.find({}).select("-passwordHash -refreshTokenHash -emailVerificationToken -emailVerificationTokenExpires -passwordResetOtpHash -passwordResetOtpExpires").sort({ createdAt: -1 }).lean(),
   ]);
 
   const backup = {
@@ -627,6 +691,7 @@ export async function exportBackupJson(req, res) {
     items,
     transactions,
     auditLogs,
+    users,
   };
 
   res.setHeader("Content-Type", "application/json");
@@ -635,19 +700,16 @@ export async function exportBackupJson(req, res) {
 }
 
 /**
- * Export full database backup as CSV (zipped with 3 CSV files)
- * For simplicity, we'll return items CSV only for now, or you can use a zip library
- * to bundle multiple CSVs. For this implementation, we'll return Items CSV.
+ * Export full database backup as CSV with sections: Items, Transactions, Audit Logs, Users
  */
 export async function exportBackupCsv(req, res) {
-  // Fetch all data
-  const [items, transactions, auditLogs] = await Promise.all([
+  const [items, transactions, auditLogs, users] = await Promise.all([
     Item.find({}).sort({ updatedAt: -1 }).lean(),
-    Transaction.find({}).sort({ createdAt: -1 }).lean(),
+    Transaction.find({}).populate("createdBy", "name email").populate("items.itemId", "name unit category").sort({ createdAt: -1 }).lean(),
     AuditLog.find({}).sort({ createdAt: -1 }).lean(),
+    User.find({}).select("-passwordHash -refreshTokenHash -emailVerificationToken -emailVerificationTokenExpires -passwordResetOtpHash -passwordResetOtpExpires").sort({ createdAt: -1 }).lean(),
   ]);
 
-  // Prepare items data
   const itemsData = items.map((item) => ({
     itemType: item.itemType || "",
     name: item.name || "",
@@ -655,35 +717,54 @@ export async function exportBackupCsv(req, res) {
     unit: item.unit || "",
     quantityOnHand: item.quantityOnHand ?? 0,
     reorderLevel: item.reorderLevel ?? 0,
+    expirationDate: dateOnly(item.expirationDate),
     propertyNumber: item.propertyNumber || "",
     serialNumber: item.serialNumber || "",
+    brand: item.brand || "",
+    model: item.model || "",
     division: item.division || "",
     status: item.status || "",
     condition: item.condition || "",
     dateAcquired: dateOnly(item.dateAcquired),
     unitCost: item.unitCost ?? 0,
     accountablePersonName: item.accountablePerson?.name || "",
+    accountablePersonPosition: item.accountablePerson?.position || "",
     accountablePersonOffice: item.accountablePerson?.office || "",
+    transferredTo: item.transferredTo || "",
+    assignedDate: dateOnly(item.assignedDate),
+    returnedDate: dateOnly(item.returnedDate),
     remarks: item.remarks || "",
     isArchived: item.isArchived ? "Yes" : "No",
     createdAt: item.createdAt ? new Date(item.createdAt).toISOString() : "",
     updatedAt: item.updatedAt ? new Date(item.updatedAt).toISOString() : "",
   }));
 
-  // Prepare transactions data
-  const txData = transactions.map((tx) => ({
-    type: tx.type || "",
-    createdAt: tx.createdAt ? new Date(tx.createdAt).toISOString() : "",
-    createdBy: tx.createdBy || "",
-    issuedToOffice: tx.issuedToOffice || "",
-    issuedToPerson: tx.issuedToPerson || "",
-    purpose: tx.purpose || "",
-    supplier: tx.supplier || "",
-    referenceNo: tx.referenceNo || "",
-    items: JSON.stringify(tx.items || []),
-  }));
+  const txData = transactions.map((tx) => {
+    const createdByUser = tx.createdBy || {};
+    const itemsSummary = (tx.items || [])
+      .map((it) => {
+        const itemName = it.itemId?.name || it.itemId?.toString() || "(deleted)";
+        const unit = it.itemId?.unit || "";
+        return `${itemName}${unit ? ` (${unit})` : ""} × ${it.qty}`;
+      })
+      .join("; ");
+    return {
+      type: tx.type || "",
+      createdAt: tx.createdAt ? new Date(tx.createdAt).toISOString() : "",
+      createdByName: createdByUser.name || createdByUser._id?.toString() || "",
+      createdByEmail: createdByUser.email || "",
+      issuedToOffice: tx.issuedToOffice || "",
+      issuedToPerson: tx.issuedToPerson || "",
+      accountablePersonName: tx.accountablePerson?.name || "",
+      accountablePersonPosition: tx.accountablePerson?.position || "",
+      accountablePersonOffice: tx.accountablePerson?.office || "",
+      purpose: tx.purpose || "",
+      supplier: tx.supplier || "",
+      referenceNo: tx.referenceNo || "",
+      itemsSummary,
+    };
+  });
 
-  // Prepare audit logs data
   const auditData = auditLogs.map((log) => ({
     createdAt: log.createdAt ? new Date(log.createdAt).toISOString() : "",
     actorId: log.actorId?.toString() || "",
@@ -693,12 +774,24 @@ export async function exportBackupCsv(req, res) {
     meta: JSON.stringify(log.meta || {}),
   }));
 
-  // Create CSV parsers
+  const usersData = users.map((user) => ({
+    name: user.name || "",
+    email: user.email || "",
+    role: user.role || "",
+    isActive: user.isActive ? "Yes" : "No",
+    isVerified: user.isVerified ? "Yes" : "No",
+    loginAttempts: user.loginAttempts ?? 0,
+    lastLoginAt: user.lastLoginAt ? new Date(user.lastLoginAt).toISOString() : "",
+    lockUntil: user.lockUntil ? new Date(user.lockUntil).toISOString() : "",
+    createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : "",
+    updatedAt: user.updatedAt ? new Date(user.updatedAt).toISOString() : "",
+  }));
+
   const itemsCsv = new Json2CsvParser().parse(itemsData);
   const txCsv = new Json2CsvParser().parse(txData);
   const auditCsv = new Json2CsvParser().parse(auditData);
+  const usersCsv = new Json2CsvParser().parse(usersData);
 
-  // Combine all CSVs into one file with separators
   const combinedCsv = `
 ===== ITEMS =====
 ${itemsCsv}
@@ -708,9 +801,60 @@ ${txCsv}
 
 ===== AUDIT LOGS =====
 ${auditCsv}
+
+===== USERS =====
+${usersCsv}
 `.trim();
 
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="cpdc_backup_${dateOnly(new Date())}.csv"`);
   res.send(combinedCsv);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Backup file management (list / download / status)
+// ─────────────────────────────────────────────────────────────────────
+
+export async function getBackupStatus(req, res) {
+  const backupDir = path.resolve(process.cwd(), "backups");
+  const enabled = String(process.env.BACKUP_ENABLED || "false").toLowerCase() === "true";
+  let files = [];
+  let lastBackup = null;
+  if (fs.existsSync(backupDir)) {
+    files = fs.readdirSync(backupDir)
+      .filter(f => f.startsWith("cpdc_backup_") && f.endsWith(".xlsx"))
+      .sort((a, b) => b.localeCompare(a));
+    if (files.length > 0) {
+      const stat = fs.statSync(path.join(backupDir, files[0]));
+      lastBackup = { filename: files[0], size: stat.size, mtime: stat.mtime };
+    }
+  }
+  res.json({
+    enabled,
+    schedule: process.env.BACKUP_SCHEDULE || "0 18 * * *",
+    keepDays: Number(process.env.BACKUP_KEEP_DAYS || 30),
+    backupDir: path.resolve(process.cwd(), "backups"),
+    totalBackups: files.length,
+    lastBackup,
+  });
+}
+
+export async function listBackups(req, res) {
+  const backupDir = path.resolve(process.cwd(), "backups");
+  if (!fs.existsSync(backupDir)) return res.json([]);
+  const files = fs.readdirSync(backupDir)
+    .filter(f => f.startsWith("cpdc_backup_") && f.endsWith(".xlsx"))
+    .map(f => {
+      const stat = fs.statSync(path.join(backupDir, f));
+      return { filename: f, size: stat.size, mtime: stat.mtime, createdAt: stat.birthtime };
+    })
+    .sort((a, b) => new Date(b.mtime) - new Date(a.mtime));
+  res.json(files);
+}
+
+export async function downloadBackup(req, res) {
+  const { filename } = req.params;
+  const filepath = path.resolve(process.cwd(), "backups", filename);
+  if (!fs.existsSync(filepath)) return res.status(404).json({ message: "Backup not found" });
+  res.download(filepath, filename);
 }

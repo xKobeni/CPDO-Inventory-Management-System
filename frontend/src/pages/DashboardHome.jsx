@@ -12,6 +12,7 @@ import {
   TrendingDown,
   FileText,
   Cpu,
+  CalendarX,
 } from "lucide-react"
 import {
   BarChart,
@@ -325,6 +326,25 @@ function ValueByCategoryPieChart({ data }) {
   )
 }
 
+function ExpirationBadgeDashboard({ date }) {
+  const d = new Date(date)
+  const now = new Date()
+  const diffDays = Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+  let cls = "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium"
+  let label
+  if (diffDays < 0) {
+    cls += " border-red-300 bg-red-50 text-red-700"
+    label = `Expired (${d.toLocaleDateString()})`
+  } else if (diffDays <= 7) {
+    cls += " border-amber-300 bg-amber-50 text-amber-700"
+    label = `${diffDays}d left (${d.toLocaleDateString()})`
+  } else {
+    cls += " border-zinc-200 bg-white text-zinc-600"
+    label = d.toLocaleDateString()
+  }
+  return <span className={cls}>{label}</span>
+}
+
 function SupplyMovementsChart({ data, days }) {
   const end = new Date()
   end.setHours(0, 0, 0, 0)
@@ -495,7 +515,7 @@ export default function DashboardHome() {
       )}
 
       {/* KPI Cards */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5" data-tutorial="kpi-cards">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-7" data-tutorial="kpi-cards">
         <div data-tutorial="total-items-card">
           <StatCard
             title="Total items"
@@ -540,7 +560,75 @@ export default function DashboardHome() {
             href="/items/low-stock"
           />
         </div>
+        <div data-tutorial="expired-card">
+          <StatCard
+            title="Expired"
+            value={loading ? "…" : kpis.expiredCount}
+            description="Supplies past expiration date"
+            icon={CalendarX}
+            variant="danger"
+            href="/items/expired"
+          />
+        </div>
+        <div data-tutorial="expiring-card">
+          <StatCard
+            title="Expiring (30d)"
+            value={loading ? "…" : kpis.expiringSoonCount}
+            description="Supplies expiring within 30 days"
+            icon={CalendarX}
+            variant="warning"
+            href="/items/expiring-soon"
+          />
+        </div>
       </section>
+
+      {/* Expiring soon preview */}
+      {!loading && (kpis.expiredCount > 0 || kpis.expiringSoonCount > 0) && (
+        <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+          <div className="border-b border-zinc-200 px-4 py-4 lg:px-6">
+            <h2 className="text-lg font-semibold text-zinc-900">Expiration alerts</h2>
+            <p className="text-sm text-zinc-500">
+              Supplies that are expired or expiring within 30 days
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-zinc-200 hover:bg-transparent">
+                  <TableHead className="font-medium">Name</TableHead>
+                  <TableHead className="font-medium">Category</TableHead>
+                  <TableHead className="font-medium">Quantity</TableHead>
+                  <TableHead className="font-medium">Expiration</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(summary?.previews?.expiringSoonPreview || []).map((item, idx) => {
+                  const d = new Date(item.expirationDate)
+                  const now = new Date()
+                  const expired = d < now
+                  return (
+                    <TableRow key={item._id || idx} className="border-zinc-100">
+                      <TableCell className="font-medium">{item.name}</TableCell>
+                      <TableCell className="text-zinc-600">{item.category}</TableCell>
+                      <TableCell className="tabular-nums">{(Number(item.quantityOnHand) || 0).toLocaleString()}</TableCell>
+                      <TableCell>
+                        <ExpirationBadgeDashboard date={item.expirationDate} />
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+                {(!summary?.previews?.expiringSoonPreview || summary.previews.expiringSoonPreview.length === 0) && (
+                  <TableRow className="border-zinc-100">
+                    <TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-8">
+                      No expiring items (preview limited to 8)
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </section>
+      )}
 
       {/* People + Transactions + Supply movements */}
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-2" data-tutorial="people-stats">
@@ -550,7 +638,6 @@ export default function DashboardHome() {
             value={peopleLoading ? "…" : peopleCounts.total}
             description="All registered people"
             icon={Users}
-            href="/users"
           />
           <StatCard
             title="This month"

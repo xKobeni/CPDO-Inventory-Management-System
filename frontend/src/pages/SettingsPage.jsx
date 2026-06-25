@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { User, Shield, Palette, Database, Download } from "lucide-react"
+import { User, Shield, Palette, Database, Download, FileSpreadsheet, FileJson, FileText, Calendar, Clock, HardDrive, Loader2, Package } from "lucide-react"
 import { Link, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -7,9 +7,19 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { authService } from "@/services"
-import { downloadBackupXlsx, downloadBackupJson, downloadBackupCsv } from "@/services/export.service"
+import {
+  downloadBackupXlsx,
+  downloadBackupJson,
+  downloadBackupCsv,
+  downloadItemsXlsx,
+  downloadItemsCsv,
+  downloadTransactionsXlsx,
+  downloadAuditXlsx,
+  downloadDashboardSummaryXlsx,
+} from "@/services/export.service"
 import { getErrorMessage } from "@/utils/api"
 import { getAuth, setAuth } from "@/lib/auth"
 import { useTheme } from "@/contexts/ThemeContext"
@@ -31,9 +41,15 @@ export default function SettingsPage() {
 
   const [downloadingBackup, setDownloadingBackup] = useState(false)
 
+  const [exporting, setExporting] = useState(false)
+  const [exportDateFrom, setExportDateFrom] = useState("")
+  const [exportDateTo, setExportDateTo] = useState("")
+
   useEffect(() => {
     fetchProfile()
   }, [])
+
+
 
   async function fetchProfile() {
     setLoading(true)
@@ -135,6 +151,51 @@ export default function SettingsPage() {
       setDownloadingBackup(false)
     }
   }
+
+  async function handleExport(type) {
+    setExporting(true)
+    try {
+      let blob
+      let filename
+
+      if (type === "items-xlsx") {
+        blob = await downloadItemsXlsx()
+        filename = `cpdc_items_${new Date().toISOString().slice(0, 10)}.xlsx`
+      } else if (type === "items-csv") {
+        blob = await downloadItemsCsv()
+        filename = `cpdc_items_${new Date().toISOString().slice(0, 10)}.csv`
+      } else if (type === "transactions") {
+        const params = {}
+        if (exportDateFrom) params.from = exportDateFrom
+        if (exportDateTo) params.to = exportDateTo
+        blob = await downloadTransactionsXlsx(params)
+        filename = `cpdc_transactions_${new Date().toISOString().slice(0, 10)}.xlsx`
+      } else if (type === "audit") {
+        blob = await downloadAuditXlsx()
+        filename = `cpdc_audit_${new Date().toISOString().slice(0, 10)}.xlsx`
+      } else if (type === "dashboard") {
+        blob = await downloadDashboardSummaryXlsx()
+        filename = `cpdc_dashboard_${new Date().toISOString().slice(0, 10)}.xlsx`
+      }
+
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+
+      toast.success(`${filename} downloaded successfully.`)
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setExporting(false)
+    }
+  }
+
+
 
   const formatDate = (dateStr) => {
     if (!dateStr) return "—"
@@ -317,70 +378,192 @@ export default function SettingsPage() {
         </Card>
       </section>
 
+      {/* Full Database Backup */}
       <section className="grid grid-cols-1 gap-6">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Database className="size-4" />
-              Data Backup & Export
+              Full Database Backup
             </CardTitle>
             <CardDescription>
-              Download a complete backup of all system data including items, transactions, and audit logs
+              Download a complete snapshot of all system data
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
-                <p className="text-sm text-zinc-700 mb-4">
-                  Choose a format to export all your data. The backup includes:
-                </p>
-                <ul className="text-sm text-zinc-600 space-y-1 ml-4 mb-4">
-                  <li className="list-disc">All items (supplies and assets)</li>
-                  <li className="list-disc">All transactions (stock-in, stock-out, issuance)</li>
-                  <li className="list-disc">Complete audit log history</li>
-                </ul>
-                <p className="text-xs text-zinc-500">
-                  💡 Backups are also created automatically every day at 4:00 PM and stored in the server.
-                </p>
-              </div>
+          <CardContent className="space-y-4">
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+              <p className="text-sm text-zinc-700 mb-3">The backup includes:</p>
+              <ul className="text-sm text-zinc-600 space-y-1 ml-4 mb-3">
+                <li className="list-disc">All items (supplies and assets)</li>
+                <li className="list-disc">All transactions (stock-in, stock-out, issuance)</li>
+                <li className="list-disc">Complete audit log history</li>
+              </ul>
+            </div>
 
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  onClick={() => handleDownloadBackup("xlsx")}
-                  disabled={downloadingBackup}
-                  className="flex items-center gap-2"
-                >
-                  <Download className="size-4" />
-                  {downloadingBackup ? "Downloading..." : "Excel (.xlsx)"}
-                </Button>
-                
-                <Button
-                  onClick={() => handleDownloadBackup("json")}
-                  disabled={downloadingBackup}
-                  variant="outline"
-                  className="flex items-center gap-2"
-                >
-                  <Download className="size-4" />
-                  {downloadingBackup ? "Downloading..." : "JSON (.json)"}
-                </Button>
-                
-                <Button
-                  onClick={() => handleDownloadBackup("csv")}
-                  disabled={downloadingBackup}
-                  variant="outline"
-                  className="flex items-center gap-2"
-                >
-                  <Download className="size-4" />
-                  {downloadingBackup ? "Downloading..." : "CSV (.csv)"}
-                </Button>
-              </div>
+            <div className="flex flex-wrap gap-3">
+              <Button
+                onClick={() => handleDownloadBackup("xlsx")}
+                disabled={downloadingBackup}
+              >
+                {downloadingBackup ? (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                ) : (
+                  <FileSpreadsheet className="mr-2 size-4" />
+                )}
+                Excel (.xlsx)
+              </Button>
+              <Button
+                onClick={() => handleDownloadBackup("json")}
+                disabled={downloadingBackup}
+                variant="outline"
+              >
+                {downloadingBackup ? (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                ) : (
+                  <FileJson className="mr-2 size-4" />
+                )}
+                JSON (.json)
+              </Button>
+              <Button
+                onClick={() => handleDownloadBackup("csv")}
+                disabled={downloadingBackup}
+                variant="outline"
+              >
+                {downloadingBackup ? (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                ) : (
+                  <FileText className="mr-2 size-4" />
+                )}
+                CSV (.csv)
+              </Button>
+            </div>
 
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-                <p className="text-xs text-amber-800">
-                  <strong>Note:</strong> The backup file may be large depending on your data volume. 
-                  Store it securely and use it for disaster recovery or data migration purposes.
-                </p>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <p className="text-xs text-amber-800">
+                <strong>Note:</strong> The backup file may be large depending on your data volume.
+                Store it securely and use it for disaster recovery or data migration purposes.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Individual Exports */}
+      <section className="grid grid-cols-1 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <HardDrive className="size-4" />
+              Individual Exports
+            </CardTitle>
+            <CardDescription>
+              Export specific data sets without the full backup overhead
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Items */}
+            <div>
+              <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                <Package className="size-4 text-zinc-500" />
+                Items
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleExport("items-xlsx")}
+                  disabled={exporting}
+                >
+                  {exporting ? <Loader2 className="mr-2 size-3 animate-spin" /> : <FileSpreadsheet className="mr-2 size-3" />}
+                  Excel
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleExport("items-csv")}
+                  disabled={exporting}
+                >
+                  {exporting ? <Loader2 className="mr-2 size-3 animate-spin" /> : <FileText className="mr-2 size-3" />}
+                  CSV
+                </Button>
               </div>
+            </div>
+
+            <Separator />
+
+            {/* Transactions */}
+            <div>
+              <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                <Calendar className="size-4 text-zinc-500" />
+                Transactions
+              </h4>
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">From</Label>
+                  <Input
+                    type="date"
+                    value={exportDateFrom}
+                    onChange={(e) => setExportDateFrom(e.target.value)}
+                    className="h-8 w-40"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">To</Label>
+                  <Input
+                    type="date"
+                    value={exportDateTo}
+                    onChange={(e) => setExportDateTo(e.target.value)}
+                    className="h-8 w-40"
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleExport("transactions")}
+                  disabled={exporting}
+                >
+                  {exporting ? <Loader2 className="mr-2 size-3 animate-spin" /> : <FileSpreadsheet className="mr-2 size-3" />}
+                  Export Excel
+                </Button>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Audit Logs */}
+            <div>
+              <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                <Clock className="size-4 text-zinc-500" />
+                Audit Logs
+              </h4>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleExport("audit")}
+                disabled={exporting}
+              >
+                {exporting ? <Loader2 className="mr-2 size-3 animate-spin" /> : <FileSpreadsheet className="mr-2 size-3" />}
+                Export Excel
+              </Button>
+            </div>
+
+            <Separator />
+
+            {/* Dashboard Summary */}
+            <div>
+              <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                <HardDrive className="size-4 text-zinc-500" />
+                Dashboard Summary
+              </h4>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleExport("dashboard")}
+                disabled={exporting}
+              >
+                {exporting ? <Loader2 className="mr-2 size-3 animate-spin" /> : <FileSpreadsheet className="mr-2 size-3" />}
+                Export Excel
+              </Button>
             </div>
           </CardContent>
         </Card>

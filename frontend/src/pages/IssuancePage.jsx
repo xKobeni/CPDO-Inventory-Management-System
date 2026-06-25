@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from "react"
-import { ClipboardList, Search, Plus, Trash2, Filter, RefreshCw, ChevronLeft, ChevronRight, MoreVertical } from "lucide-react"
+import { Package, TrendingUp, Search, Plus, Trash2, Filter, RefreshCw, ChevronLeft, ChevronRight, MoreVertical } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -31,16 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  Drawer,
-  DrawerContent,
-  DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerClose,
-} from "@/components/ui/drawer"
-import { itemsService, transactionsService } from "@/services"
+import { itemsService, transactionsService, dashboardService } from "@/services"
 import { FixedSizeList as List } from "react-window"
 import {
   DropdownMenu,
@@ -71,7 +61,6 @@ import {
 import { FloatingHelpButton } from "@/components/HelpButton"
 import { issuanceTutorialSteps } from "@/constants/tutorialSteps"
 import DateRangeFilter from "@/components/DateRangeFilter"
-import { useIsMobile } from "@/hooks/use-mobile"
 import { getErrorMessage } from "@/utils/api"
 import { usePeople } from "@/contexts/PeopleContext"
 
@@ -103,9 +92,8 @@ const FILTER_TYPE_ASSET = "asset"
 
 export default function IssuancePage() {
   const { peopleOptions } = usePeople()
-  const isMobile = useIsMobile()
   const [issueMode, setIssueMode] = useState(ISSUE_MODE_SUPPLY)
-  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [modalOpen, setModalOpen] = useState(false)
   const [supplies, setSupplies] = useState([])
   const [assets, setAssets] = useState([])
   const [assetsLoading, setAssetsLoading] = useState(false)
@@ -138,12 +126,15 @@ export default function IssuancePage() {
   const [transferOffice, setTransferOffice] = useState("CPDC")
   const [transferRemarks, setTransferRemarks] = useState("")
 
-  const [lines, setLines] = useState([{ itemId: "", qty: 1 }])
+  const [lines, setLines] = useState([{ itemId: "", qty: 1, searchQuery: "" }])
   const [issuedToOffice, setIssuedToOffice] = useState("")
   const [issuedToPerson, setIssuedToPerson] = useState("")
   const [remarks, setRemarks] = useState("")
   const [submitting, setSubmitting] = useState(false)
+  const [categoryFilter, setCategoryFilter] = useState("_all")
+  const [focusedLine, setFocusedLine] = useState(null)
 
+  const [assetCategoryOptions, setAssetCategoryOptions] = useState([])
   const [selectedAssetIds, setSelectedAssetIds] = useState(new Set())
   const [assetAccName, setAssetAccName] = useState("")
   const [assetAccPosition, setAssetAccPosition] = useState("")
@@ -257,6 +248,13 @@ export default function IssuancePage() {
   }, [issueMode, assetQuery, assetCategoryFilter, assetAssignedFilter])
 
   useEffect(() => {
+    if (issueMode !== ISSUE_MODE_ASSET) return
+    dashboardService.getCategories({ type: "ASSET", archived: "false" })
+      .then((data) => setAssetCategoryOptions(data?.asset?.map((c) => c.category) ?? []))
+      .catch(() => {})
+  }, [issueMode])
+
+  useEffect(() => {
     fetchSupplies()
   }, [fetchSupplies])
 
@@ -287,8 +285,6 @@ export default function IssuancePage() {
     })
   }, [assets])
 
-  // memoized category/location lists to avoid recalculating each render
-  const assetCategories = useMemo(() => Array.from(new Set(assets.map((a) => a.category).filter(Boolean))), [assets])
   // location filter removed; assetLocations no longer needed
 
   const handleItemsRendered = useCallback(
@@ -300,12 +296,36 @@ export default function IssuancePage() {
     [assetsHasMore, assets.length, assetsLoading]
   )
 
-  const addLine = () => setLines((prev) => [...prev, { itemId: "", qty: 1 }])
+  const categories = useMemo(() => {
+    const cats = new Set(supplies.map((s) => s.category).filter(Boolean))
+    return [...cats].sort()
+  }, [supplies])
+
+  const getSupplyItem = useCallback((itemId) => {
+    return supplies.find((item) => item._id === itemId)
+  }, [supplies])
+
+  const getFilteredSupplies = useCallback((query) => {
+    if (!query.trim() && categoryFilter === "_all") return supplies
+    return supplies.filter((item) =>
+      (categoryFilter === "_all" || item.category === categoryFilter) &&
+      (!query.trim() ||
+        item.name.toLowerCase().includes(query.toLowerCase()) ||
+        (item.description && item.description.toLowerCase().includes(query.toLowerCase())) ||
+        (item.brand && item.brand.toLowerCase().includes(query.toLowerCase())))
+    )
+  }, [supplies, categoryFilter])
+
+  const addLine = () => setLines((prev) => [...prev, { itemId: "", qty: 1, searchQuery: "" }])
   const removeLine = (idx) => setLines((prev) => prev.filter((_, i) => i !== idx))
   const setLine = (idx, field, value) => {
     setLines((prev) => {
       const next = [...prev]
-      next[idx] = { ...next[idx], [field]: field === "qty" ? (parseInt(value, 10) || 0) : value }
+      next[idx] = { ...next[idx], [field]: field === "qty" ? (value === "" ? "" : (parseInt(value, 10) || 0)) : value }
+      if (field === "itemId" && value) {
+        const selected = supplies.find((s) => s._id === value)
+        next[idx].searchQuery = selected ? selected.name : ""
+      }
       return next
     })
   }
@@ -322,6 +342,19 @@ export default function IssuancePage() {
     if (!issuedToPerson || !issuedToPerson.trim()) {
       toast.error("Issued to Person is required.")
       return
+    }
+
+    // validate quantity doesn't exceed current stock
+    for (const line of lines) {
+      if (!line.itemId || !line.qty) continue
+      const item = getSupplyItem(line.itemId)
+      if (item) {
+        const stock = Number(item.quantityOnHand ?? item.quantity ?? 0)
+        if (line.qty > stock) {
+          toast.error(`"${item.name}" only has ${stock} in stock.`)
+          return
+        }
+      }
     }
 
     // derive office from selected person if available, otherwise default to CPDC
@@ -341,10 +374,11 @@ export default function IssuancePage() {
         },
       })
       toast.success("Issuance recorded.")
-      setLines([{ itemId: "", qty: 1 }])
+      setLines([{ itemId: "", qty: 1, searchQuery: "" }])
       setIssuedToOffice("")
       setIssuedToPerson("")
       setRemarks("")
+      setCategoryFilter("_all")
       fetchTransactions()
     } catch (err) {
       toast.error(getErrorMessage(err))
@@ -565,7 +599,7 @@ export default function IssuancePage() {
             <RefreshCw className="size-4" />
             <span className="sr-only">Refresh</span>
           </Button>
-          <Button onClick={() => setDrawerOpen(true)} data-tutorial="new-issuance-btn">New Issuance</Button>
+          <Button onClick={() => setModalOpen(true)} data-tutorial="new-issuance-btn">New Issuance</Button>
           <Button asChild>
             <Link to="/items">View inventory</Link>
           </Button>
@@ -584,87 +618,179 @@ export default function IssuancePage() {
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Left card removed — New Issuance is opened via header button */}
 
-        {/* Issuance Drawer */}
-        <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} direction={isMobile ? "bottom" : "right"}>
-          <DrawerContent className="data-[vaul-drawer-direction=right]:sm:max-w-md h-full flex flex-col">
-            <DrawerHeader>
-              <div className="flex items-center justify-between">
-                <DrawerTitle>New Issuance</DrawerTitle>
-                <DrawerClose />
-              </div>
-              <DrawerDescription>
+        {/* Issuance Modal */}
+        <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+          <DialogContent
+            className="sm:max-w-2xl max-h-[90vh] overflow-y-auto"
+            onPointerDownOutside={(e) => {
+              if (e.target?.closest?.('[data-slot="combobox-content"], [data-slot="combobox-item"]')) {
+                e.preventDefault()
+              }
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>New Issuance</DialogTitle>
+              <DialogDescription>
                 {issueMode === ISSUE_MODE_SUPPLY ? "Issue supplies to division/person" : "Assign assets to accountable person"}
-              </DrawerDescription>
-            </DrawerHeader>
+              </DialogDescription>
+            </DialogHeader>
 
-            <div className="p-4 space-y-4 overflow-auto flex-1">
-              <div className="flex items-center gap-2" data-tutorial="issuance-mode-tabs">
-                <Button
-                  type="button"
-                  variant={issueMode === ISSUE_MODE_SUPPLY ? "secondary" : "ghost"}
-                  size="sm"
-                  className="h-7 px-2.5 text-xs"
-                  onClick={() => setIssueMode(ISSUE_MODE_SUPPLY)}
-                >
-                  Supply
-                </Button>
-                <Button
-                  type="button"
-                  variant={issueMode === ISSUE_MODE_ASSET ? "secondary" : "ghost"}
-                  size="sm"
-                  className="h-7 px-2.5 text-xs"
-                  onClick={() => setIssueMode(ISSUE_MODE_ASSET)}
-                >
-                  Asset
-                </Button>
-              </div>
+            <div className="flex items-center gap-2" data-tutorial="issuance-mode-tabs">
+              <Button
+                type="button"
+                variant={issueMode === ISSUE_MODE_SUPPLY ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 px-2.5 text-xs"
+                onClick={() => setIssueMode(ISSUE_MODE_SUPPLY)}
+              >
+                Supply
+              </Button>
+              <Button
+                type="button"
+                variant={issueMode === ISSUE_MODE_ASSET ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 px-2.5 text-xs"
+                onClick={() => setIssueMode(ISSUE_MODE_ASSET)}
+              >
+                Asset
+              </Button>
+            </div>
 
+            <div className="space-y-4">
               {issueMode === ISSUE_MODE_SUPPLY ? (
                 <>
-                  <div data-tutorial="supply-item-selector">
-                  {lines.map((line, idx) => (
-                    <div key={idx} className="flex gap-2 items-end">
-                      <div className="flex-1 grid gap-2">
-                        <Label>Item</Label>
-                        <Select
-                          value={line.itemId}
-                          onValueChange={(v) => setLine(idx, "itemId", v)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select item" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {supplies.map((item) => (
-                              <SelectItem key={item._id} value={item._id}>
-                                {item.name}
-                              </SelectItem>
-                            ))}
-                            {supplies.length === 0 && !loading && (
-                              <SelectItem value="_" disabled>No supplies</SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
+                  {/* Category filter */}
+                  <div className="w-full">
+                    <Label htmlFor="iss-category">Category (filter)</Label>
+                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                      <SelectTrigger id="iss-category">
+                        <SelectValue placeholder="All categories" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_all">All categories</SelectItem>
+                        {categories.map((cat) => (
+                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div data-tutorial="supply-item-selector" className="space-y-3">
+                  {lines.map((line, idx) => {
+                    const selectedItem = line.itemId ? getSupplyItem(line.itemId) : null
+                    const currentStock = selectedItem ? Number(selectedItem.quantityOnHand ?? selectedItem.quantity ?? 0) : 0
+                    const filteredItems = getFilteredSupplies(line.searchQuery)
+                    const exceedsStock = selectedItem && line.qty > currentStock
+
+                    return (
+                      <div key={idx} className="space-y-1.5">
+                        <div className="flex gap-2 items-end">
+                          <div className="flex-1 grid gap-2">
+                            <Label>Item</Label>
+                            <div className="relative">
+                              <Input
+                                placeholder="Search for an item..."
+                                value={line.searchQuery}
+                                onChange={(e) => {
+                                  const val = e.target.value
+                                  setLine(idx, "searchQuery", val)
+                                  if (line.itemId) {
+                                    const sel = supplies.find((s) => s._id === line.itemId)
+                                    if (sel && sel.name !== val) setLine(idx, "itemId", "")
+                                  }
+                                }}
+                                onFocus={() => setFocusedLine(idx)}
+                                onBlur={() => setTimeout(() => setFocusedLine(null), 200)}
+                              />
+                              {focusedLine === idx && (line.searchQuery || filteredItems.length > 0) && (
+                                <div className="absolute z-[70] mt-1 w-full max-h-60 overflow-y-auto rounded-md border bg-popover shadow-lg p-1">
+                                  {filteredItems.length === 0 ? (
+                                    <div className="py-2 text-sm text-muted-foreground text-center">No items found</div>
+                                  ) : (
+                                    filteredItems.map((item) => (
+                                      <div
+                                        key={item._id}
+                                        className="relative flex w-full cursor-default items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-none hover:bg-accent hover:text-accent-foreground select-none"
+                                        onMouseDown={() => {
+                                          setLine(idx, "itemId", item._id)
+                                          setLine(idx, "searchQuery", item.name)
+                                          setFocusedLine(null)
+                                        }}
+                                      >
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center justify-between">
+                                            <span className="truncate">{item.name}</span>
+                                            <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0 ml-2">
+                                              <Package className="size-3" />
+                                              <span className={`font-medium ${
+                                                Number(item.quantityOnHand ?? item.quantity ?? 0) <= 0 ? 'text-red-500' :
+                                                Number(item.quantityOnHand ?? item.quantity ?? 0) <= 10 ? 'text-orange-500' : 'text-green-600'
+                                              }`}>
+                                                {Number(item.quantityOnHand ?? item.quantity ?? 0)}
+                                              </span>
+                                            </div>
+                                          </div>
+                                          {item.description && (
+                                            <div className="text-xs text-muted-foreground truncate">
+                                              {item.description}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="w-24 grid gap-2">
+                            <Label>Qty</Label>
+                            <Input
+                              type="number"
+                              min={1}
+                              value={line.qty}
+                              onChange={(e) => setLine(idx, "qty", e.target.value)}
+                              className={exceedsStock ? "border-red-500 focus-visible:ring-red-500" : ""}
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeLine(idx)}
+                            disabled={lines.length <= 1}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </div>
+
+                        {selectedItem && (
+                          <div className="flex items-center justify-between text-xs px-2 py-1 bg-muted/30 rounded">
+                            <div className="flex items-center gap-2">
+                              <Package className="size-3" />
+                              <span>Current stock:</span>
+                              <span className={`font-medium ${
+                                currentStock <= 0 ? 'text-red-500' :
+                                currentStock <= 10 ? 'text-orange-500' : 'text-green-600'
+                              }`}>
+                                {currentStock}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 text-amber-600">
+                              <TrendingUp className="size-3" />
+                              <span>Issuing stock</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {exceedsStock && (
+                          <p className="text-xs text-red-500 flex items-center gap-1">
+                            Only {currentStock} available in stock. Reduce quantity.
+                          </p>
+                        )}
                       </div>
-                      <div className="w-24 grid gap-2">
-                        <Label>Qty</Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          value={line.qty}
-                          onChange={(e) => setLine(idx, "qty", e.target.value)}
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeLine(idx)}
-                        disabled={lines.length <= 1}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
-                    </div>
-                  ))}
+                    )
+                  })}
                   <Button type="button" variant="outline" size="sm" onClick={addLine}>
                     <Plus className="size-4" />
                     Add line
@@ -704,13 +830,6 @@ export default function IssuancePage() {
                       placeholder="Remarks"
                     />
                   </div>
-
-                  <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => setDrawerOpen(false)}>Cancel</Button>
-                    <Button className="flex-1" onClick={() => { handleSubmit(); setDrawerOpen(false); }} disabled={submitting || loading}>
-                      {submitting ? "Submitting…" : "Issue Items"}
-                    </Button>
-                  </div>
                 </>
               ) : (
                 <>
@@ -742,7 +861,7 @@ export default function IssuancePage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="_">All categories</SelectItem>
-                            {assetCategories.map((c) => (
+                            {assetCategoryOptions.map((c) => (
                               <SelectItem key={c} value={c}>{c}</SelectItem>
                             ))}
                           </SelectContent>
@@ -805,7 +924,6 @@ export default function IssuancePage() {
                           {AssetRow}
                         </List>
                       )}
-                      {/* removed 'Loading more…' indicator to reduce UI noise */}
                     </div>
                   </div>
 
@@ -846,20 +964,24 @@ export default function IssuancePage() {
                       placeholder="Remarks"
                     />
                   </div>
-
-                  <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => setDrawerOpen(false)}>Cancel</Button>
-                    <Button className="flex-1" onClick={() => { handleSubmitAsset(); setDrawerOpen(false); }} disabled={submitting || assetsLoading || selectedAssetIds.size === 0}>
-                      {submitting ? "Assigning…" : `Assign ${selectedAssetIds.size > 0 ? selectedAssetIds.size : ""} asset(s)`}
-                    </Button>
-                  </div>
                 </>
               )}
             </div>
 
-            <DrawerFooter />
-          </DrawerContent>
-        </Drawer>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
+              {issueMode === ISSUE_MODE_SUPPLY ? (
+                <Button onClick={() => { handleSubmit(); setModalOpen(false); }} disabled={submitting || loading || lines.some(l => l.itemId && getSupplyItem(l.itemId) && l.qty > Number(getSupplyItem(l.itemId)?.quantityOnHand ?? getSupplyItem(l.itemId)?.quantity ?? 0))}>
+                  {submitting ? "Submitting…" : "Issue Items"}
+                </Button>
+              ) : (
+                <Button onClick={() => { handleSubmitAsset(); setModalOpen(false); }} disabled={submitting || assetsLoading || selectedAssetIds.size === 0}>
+                  {submitting ? "Assigning…" : `Assign ${selectedAssetIds.size > 0 ? selectedAssetIds.size : ""} asset(s)`}
+                </Button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <section className="lg:col-span-3 min-w-0 overflow-hidden rounded-xl border bg-white">
           <div className="flex flex-col gap-3 border-b px-4 py-3 lg:px-6">

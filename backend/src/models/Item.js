@@ -34,6 +34,7 @@ const ItemSchema = new mongoose.Schema(
     // SUPPLY fields
     reorderLevel: { type: Number, default: 0, min: 0 },
     quantityOnHand: { type: Number, default: 0, min: 0 },
+    expirationDate: { type: Date, default: null },
 
     // ASSET fields
     propertyNumber: { type: String, trim: true, default: null },

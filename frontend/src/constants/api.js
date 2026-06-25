@@ -57,6 +57,9 @@ export const API_PATHS = {
     backupXlsx: "/export/backup.xlsx",
     backupJson: "/export/backup.json",
     backupCsv: "/export/backup.csv",
+    backups: "/export/backups",
+    backupStatus: "/export/backup/status",
+    backupDownload: (name) => `/export/backups/${name}`,
   },
   import: {
     items: "/import/items",

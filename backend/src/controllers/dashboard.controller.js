@@ -52,6 +52,32 @@ export async function getDashboardSummary(req, res) {
       .limit(8),
   ]);
 
+  // ------------- EXPIRATION (supplies only) -------------
+  const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const [expiredCount, expiringSoonCount, expiringSoonPreview] = await Promise.all([
+    Item.countDocuments({
+      itemType: "SUPPLY",
+      isArchived: false,
+      quantityOnHand: { $gt: 0 },
+      expirationDate: { $ne: null, $lt: now },
+    }),
+    Item.countDocuments({
+      itemType: "SUPPLY",
+      isArchived: false,
+      quantityOnHand: { $gt: 0 },
+      expirationDate: { $gte: now, $lte: thirtyDaysFromNow },
+    }),
+    Item.find({
+      itemType: "SUPPLY",
+      isArchived: false,
+      quantityOnHand: { $gt: 0 },
+      expirationDate: { $lte: thirtyDaysFromNow },
+    })
+      .select("name category unit quantityOnHand expirationDate")
+      .sort({ expirationDate: 1 })
+      .limit(8),
+  ]);
+
   // ------------- ASSET BREAKDOWNS -------------
   const assetsByStatus = await Item.aggregate([
     { $match: { itemType: "ASSET", isArchived: false } },
@@ -212,6 +238,8 @@ export async function getDashboardSummary(req, res) {
       deployedAssets,
       outOfStockCount,
       lowStockCount,
+      expiredCount,
+      expiringSoonCount,
       totalSupplyQty,
       txToday,
       txThisMonth,
@@ -227,6 +255,7 @@ export async function getDashboardSummary(req, res) {
     },
     previews: {
       lowStockPreview,
+      expiringSoonPreview,
       recentActivity: combinedActivity,
       recentAuditLogs,
     },

@@ -835,13 +835,13 @@ export default function ReportsPage() {
 
     const out = []
     byItem.forEach((list) => {
-      list.sort((a, b) => new Date(a.tx?.createdAt || 0) - new Date(b.tx?.createdAt || 0))
-      let running = 0
+      list.sort((a, b) => new Date(b.tx?.createdAt || 0) - new Date(a.tx?.createdAt || 0))
+      let running = Number(list[0]?.item?.quantityOnHand ?? 0)
       list.forEach((r) => {
-        const balanceBefore = running
-        running += r.delta
-        const balanceAfter = running
+        const balanceAfter = Math.max(0, running)
+        const balanceBefore = Math.max(0, running - r.delta)
         out.push({ ...r, balanceBefore, balanceAfter })
+        running = balanceBefore
       })
     })
     out.sort((a, b) => new Date(b.tx?.createdAt || 0) - new Date(a.tx?.createdAt || 0))

@@ -62,6 +62,7 @@ export async function resetPassword(payload) {
  */
 export async function getMe() {
   const { data } = await http.get(API_PATHS.auth.me)
+  if (data?.role) data.role = data.role.toLowerCase()
   return data
 }
 

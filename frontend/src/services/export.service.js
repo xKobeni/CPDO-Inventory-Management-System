@@ -75,3 +75,32 @@ export async function downloadBackupCsv() {
   })
   return data
 }
+
+/**
+ * Fetch backup system status (enabled, schedule, keepDays, lastBackup, totalBackups)
+ */
+export async function getBackupStatus() {
+  const { data } = await http.get(API_PATHS.export.backupStatus)
+  return data
+}
+
+/**
+ * List available backup files on the server
+ * @returns {Promise<Array<{ filename: string, size: number, mtime: string, createdAt: string }>>}
+ */
+export async function listBackups() {
+  const { data } = await http.get(API_PATHS.export.backups)
+  return data
+}
+
+/**
+ * Download a specific backup file by filename
+ * @param {string} filename
+ * @returns {Promise<Blob>}
+ */
+export async function downloadBackupFile(filename) {
+  const { data } = await http.get(API_PATHS.export.backupDownload(filename), {
+    responseType: "blob",
+  })
+  return data
+}

@@ -156,12 +156,13 @@ function getEmptyForm(isSupply, categoryName = "General") {
     accountablePerson: defaultAccountablePerson(),
     transferredTo: "",
   }
-  if (isSupply) {
+    if (isSupply) {
     return {
       ...base,
       quantityOnHand: "",
       reorderLevel: "",
       serialNumber: "",
+      expirationDate: "",
       status: "IN_STOCK",
       condition: "GOOD",
     }
@@ -187,6 +188,7 @@ function formToItem(form, isSupply, newId) {
   if (isSupply) {
     const qty = parseInt(form.quantityOnHand, 10) || 0
     const reorder = parseInt(form.reorderLevel, 10) || 0
+    const expirationDate = form.expirationDate ? new Date(form.expirationDate).toISOString() : null
     return {
       id: newId,
       itemType: "SUPPLY",
@@ -198,6 +200,7 @@ function formToItem(form, isSupply, newId) {
       remarks: (form.remarks || "").trim(),
       quantityOnHand: qty,
       reorderLevel: reorder,
+      expirationDate,
       status: qty === 0 ? "NO_STOCK" : qty <= reorder && reorder > 0 ? "LOW_STOCK" : "IN_STOCK",
       condition: "GOOD",
       accountablePerson: { ...acc },
@@ -245,11 +248,15 @@ function itemToForm(item, isSupply) {
     transferredTo: item.transferredTo ?? "",
   }
   if (isSupply) {
+    const expirationDate = item.expirationDate
+      ? (typeof item.expirationDate === "string" ? item.expirationDate : new Date(item.expirationDate).toISOString()).slice(0, 10)
+      : ""
     return {
       ...base,
       quantityOnHand: item.quantityOnHand != null && item.quantityOnHand !== "" ? String(item.quantityOnHand) : "0",
       reorderLevel: item.reorderLevel != null && item.reorderLevel !== "" ? String(item.reorderLevel) : "0",
       serialNumber: item.serialNumber ?? "",
+      expirationDate,
       status: item.status ?? "IN_STOCK",
       condition: item.condition ?? "GOOD",
     }
@@ -281,6 +288,7 @@ const SUPPLY_COLUMNS = [
   { id: "unitCost", label: "Unit Cost" },
   { id: "accountablePerson", label: "Accountable Person" },
   { id: "dateAcquired", label: "Date Acquired" },
+  { id: "expirationDate", label: "Expiration" },
 ]
 const ASSET_COLUMNS = [
   { id: "name", label: "Name" },
@@ -294,7 +302,7 @@ const ASSET_COLUMNS = [
   { id: "accountability", label: "Accountability" },
   { id: "remarks", label: "Remarks" },
 ]
-const SUPPLY_COL_ORDER = ["drag", "propertyNo", "name", "category", "quantity", "reorderLevel", "unit", "serialNo", "status", "condition", "unitCost", "accountablePerson", "dateAcquired", "actions"]
+const SUPPLY_COL_ORDER = ["drag", "propertyNo", "name", "category", "quantity", "reorderLevel", "unit", "serialNo", "status", "condition", "unitCost", "accountablePerson", "dateAcquired", "expirationDate", "actions"]
 const ASSET_COL_ORDER = ["drag", "name", "category", "propertyNo", "serialNo", "quantity", "details", "status", "condition", "accountability", "remarks", "actions"]
 const FIXED_COLUMNS = new Set(["drag", "actions", "name", "quantity"])
 const isColVisible = (id, visibility) => FIXED_COLUMNS.has(id) || visibility[id] === true
@@ -315,6 +323,7 @@ const COLUMN_WIDTHS = {
   unitCost: "6rem",
   accountablePerson: "8rem",
   dateAcquired: "6.5rem",
+  expirationDate: "6.5rem",
   details: "12rem",
   accountability: "12rem",
   remarks: "7rem",
@@ -334,6 +343,7 @@ const COLUMN_ALIGNMENT = {
   unitCost: "text-right tabular-nums",
   accountablePerson: "text-left",
   dateAcquired: "text-right tabular-nums",
+  expirationDate: "text-right tabular-nums",
   details: "text-left",
   accountability: "text-left",
   remarks: "text-left",
@@ -384,6 +394,29 @@ function StatusBadge({ status }) {
       )}
       {label}
     </Badge>
+  )
+}
+
+function ExpirationBadge({ date }) {
+  const d = new Date(date)
+  const now = new Date()
+  const diffDays = Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+  let variant = "default"
+  let label = d.toLocaleDateString()
+  if (diffDays < 0) {
+    variant = "danger"
+    label = `Expired ${d.toLocaleDateString()}`
+  } else if (diffDays <= 7) {
+    variant = "warning"
+    label = `${diffDays}d left (${d.toLocaleDateString()})`
+  }
+  const cls = variant === "danger"
+    ? "border-red-300 bg-red-50 text-red-700"
+    : variant === "warning"
+      ? "border-amber-300 bg-amber-50 text-amber-700"
+      : "border-zinc-200 bg-white text-zinc-600"
+  return (
+    <Badge variant="outline" className={`${cls} px-1.5`}>{label}</Badge>
   )
 }
 
@@ -476,6 +509,14 @@ function SortableRowSupply({ item, selectedIds, toggleRow, openEdit, onArchive, 
         return (
           <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>
             {item.dateAcquired ? new Date(item.dateAcquired).toLocaleDateString() : "N/A"}
+          </TableCell>
+        )
+      case "expirationDate":
+        return (
+          <TableCell key={id} className={`px-3 py-2 ${getColAlignment(id)}`}>
+            {item.expirationDate ? (
+              <ExpirationBadge date={item.expirationDate} />
+            ) : "—"}
           </TableCell>
         )
       case "actions":
@@ -772,6 +813,7 @@ function formToApiPayload(form, isSupply) {
       quantityOnHand: parseInt(form.quantityOnHand, 10) || 0,
       reorderLevel: parseInt(form.reorderLevel, 10) || 0,
       serialNumber: (form.serialNumber || "").trim() || null,
+      expirationDate: form.expirationDate ? new Date(form.expirationDate).toISOString() : null,
     }
   }
   return {
@@ -805,6 +847,7 @@ function formToUpdatePayload(form, isSupply) {
       quantityOnHand: parseInt(form.quantityOnHand, 10) || 0,
       reorderLevel: parseInt(form.reorderLevel, 10) || 0,
       serialNumber: (form.serialNumber || "").trim() || null,
+      expirationDate: form.expirationDate ? new Date(form.expirationDate).toISOString() : null,
       status: form.status || "IN_STOCK",
       condition: form.condition || "GOOD",
     }
@@ -862,6 +905,7 @@ export default function CategoryItemsPage() {
   const [tableSearch, setTableSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("")
   const [archiveFilter, setArchiveFilter] = useState("active") // "active" | "archived"
+  const [expirationFilter, setExpirationFilter] = useState("") // "" | "expired" | "expiring"
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [itemToDelete, setItemToDelete] = useState(null)
   const [moveOpen, setMoveOpen] = useState(false)
@@ -964,8 +1008,16 @@ export default function CategoryItemsPage() {
     } else if (statusFilter) {
       list = list.filter((i) => i.status === statusFilter)
     }
+    if (expirationFilter === "expired") {
+      const now = new Date()
+      list = list.filter((i) => i.expirationDate && new Date(i.expirationDate) < now)
+    } else if (expirationFilter === "expiring") {
+      const now = new Date()
+      const thirtyDays = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+      list = list.filter((i) => i.expirationDate && new Date(i.expirationDate) >= now && new Date(i.expirationDate) <= thirtyDays)
+    }
     return list
-  }, [items, tableSearch, statusFilter])
+  }, [items, tableSearch, statusFilter, expirationFilter])
 
   const totalFiltered = filteredItems.length
   const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize))
@@ -1072,6 +1124,7 @@ export default function CategoryItemsPage() {
         quantityOnHand: parseInt(form.quantityOnHand, 10) || 0,
         reorderLevel: parseInt(form.reorderLevel, 10) || 0,
         serialNumber: (form.serialNumber || "").trim() || null,
+        expirationDate: form.expirationDate ? new Date(form.expirationDate).toISOString() : null,
         status: form.status || "IN_STOCK",
         condition: form.condition || "GOOD",
       }
@@ -1435,6 +1488,18 @@ export default function CategoryItemsPage() {
                 <SelectItem value="archived">Archived items</SelectItem>
               </SelectContent>
             </Select>
+            {isSupply && (
+              <Select value={expirationFilter || "_"} onValueChange={(v) => setExpirationFilter(v === "_" ? "" : v)}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="Expiration" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_">All expiration</SelectItem>
+                  <SelectItem value="expired">Expired</SelectItem>
+                  <SelectItem value="expiring">Expiring within 30 days</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1788,20 +1853,29 @@ export default function CategoryItemsPage() {
                           placeholder="0"
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="add-reorder">Reorder level</Label>
-                        <Input
-                          id="add-reorder"
-                          type="number"
-                          min={0}
-                          value={form.reorderLevel}
-                          onChange={(e) => setForm((f) => ({ ...f, reorderLevel: e.target.value }))}
-                          placeholder="0"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="add-status">Status</Label>
-                        <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}>
+                  <div className="space-y-2">
+                    <Label htmlFor="add-reorder">Reorder level</Label>
+                    <Input
+                      id="add-reorder"
+                      type="number"
+                      min={0}
+                      value={form.reorderLevel}
+                      onChange={(e) => setForm((f) => ({ ...f, reorderLevel: e.target.value }))}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="add-expiration">Expiration Date</Label>
+                    <Input
+                      id="add-expiration"
+                      type="date"
+                      value={form.expirationDate}
+                      onChange={(e) => setForm((f) => ({ ...f, expirationDate: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="add-status">Status</Label>
+                    <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}>
                           <SelectTrigger id="add-status">
                             <SelectValue />
                           </SelectTrigger>
@@ -2061,20 +2135,29 @@ export default function CategoryItemsPage() {
                           placeholder="0"
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-reorder">Reorder level</Label>
-                        <Input
-                          id="edit-reorder"
-                          type="number"
-                          min={0}
-                          value={form.reorderLevel}
-                          onChange={(e) => setForm((f) => ({ ...f, reorderLevel: e.target.value }))}
-                          placeholder="0"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-status">Status</Label>
-                        <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-reorder">Reorder level</Label>
+                    <Input
+                      id="edit-reorder"
+                      type="number"
+                      min={0}
+                      value={form.reorderLevel}
+                      onChange={(e) => setForm((f) => ({ ...f, reorderLevel: e.target.value }))}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-expiration">Expiration Date</Label>
+                    <Input
+                      id="edit-expiration"
+                      type="date"
+                      value={form.expirationDate}
+                      onChange={(e) => setForm((f) => ({ ...f, expirationDate: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-status">Status</Label>
+                    <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}>
                           <SelectTrigger id="edit-status">
                             <SelectValue />
                           </SelectTrigger>
@@ -2294,6 +2377,12 @@ export default function CategoryItemsPage() {
                       <div className="space-y-2">
                         <Label className="text-muted-foreground font-medium">Date Acquired</Label>
                         <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm">{drawerItem.dateAcquired ? new Date(drawerItem.dateAcquired).toLocaleDateString() : "N/A"}</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-muted-foreground font-medium">Expiration Date</Label>
+                        <div className="rounded-md border bg-muted/30 px-3 py-2">
+                          {drawerItem.expirationDate ? <ExpirationBadge date={drawerItem.expirationDate} /> : <span className="text-sm">N/A</span>}
+                        </div>
                       </div>
                     </>
                   ) : (
@@ -2577,6 +2666,12 @@ export default function CategoryItemsPage() {
                             value={copyForm.reorderLevel}
                             onChange={(e) => setCopyForm((f) => ({ ...f, reorderLevel: e.target.value }))}
                             placeholder="0" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="copy-expiration">Expiration Date</Label>
+                          <Input id="copy-expiration" type="date"
+                            value={copyForm.expirationDate}
+                            onChange={(e) => setCopyForm((f) => ({ ...f, expirationDate: e.target.value }))} />
                         </div>
                       </>
                     ) : (
